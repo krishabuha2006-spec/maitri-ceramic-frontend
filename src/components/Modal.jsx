@@ -1,0 +1,33 @@
+import React from 'react';
+import { X } from 'lucide-react';
+
+export const Modal = ({ isOpen, onClose, title, children, footer, maxWidth }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-container" style={maxWidth ? { maxWidth } : undefined} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3 className="modal-title">{title}</h3>
+          <button 
+            type="button" 
+            onClick={onClose} 
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <div className="modal-body">
+          {children}
+        </div>
+        {footer && (
+          <div className="modal-footer">
+            {footer}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Modal;
