@@ -10,10 +10,13 @@ import { hasMenuPermission } from '../utils/permissions';
 export const Sidebar = ({ isOpen, onClose }) => {
   const { currentUser } = useAuth();
   const role = currentUser?.role;
+  const userPermissions = currentUser?.permissions;
 
   const navItems = [
     { id: 'dashboard', path: '/', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'products', path: '/products', label: 'Products', icon: Package },
+    { id: 'product-groups', path: '/product-groups', label: 'Product Groups', icon: FolderTree },
+    { id: 'companies', path: '/companies', label: 'Companies', icon: Building2 },
     { id: 'customers', path: '/customers', label: 'Customers', icon: Users },
     { id: 'quotations', path: '/quotations', label: 'Quotations', icon: FileText },
     { id: 'follow-ups', path: '/follow-ups', label: 'Follow-Ups', icon: PhoneCall },
@@ -26,7 +29,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
     { id: 'users', path: '/users', label: 'Users & Settings', icon: Settings }
   ];
 
-  const visibleItems = navItems.filter(item => hasMenuPermission(role, item.id));
+  const visibleItems = navItems.filter(item => hasMenuPermission(role, item.id, userPermissions));
 
   return (
     <aside className={`sidebar ${isOpen ? 'mobile-open' : ''}`}>

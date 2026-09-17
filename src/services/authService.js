@@ -1,14 +1,8 @@
 import api from './api';
 
-/**
- * Service for Module 1: Authentication & Sessions
- * Handles Login, Token Refresh, Logout, and User Profile (Me).
- */
+
 export const authService = {
-  /**
-   * POST /auth/login
-   * User login (Issues Access Token & Rotating Refresh Token)
-   */
+
   async login(credentials) {
     try {
       const res = await api.post('/auth/login', credentials);
@@ -38,7 +32,7 @@ export const authService = {
     try {
       const res = await api.post('/auth/logout', { refreshToken });
       return res.data;
-    } catch (err) {}
+    } catch (err) { }
     return { success: true };
   },
 

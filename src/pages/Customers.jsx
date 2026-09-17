@@ -15,8 +15,10 @@ import {
   Plus, Search, Eye, Edit, Trash2, ToggleLeft, ToggleRight, 
   Download, RefreshCw, CheckCircle2, Users, IndianRupee, AlertCircle, X 
 } from 'lucide-react';
+import { usePermissions } from '../utils/permissions';
 
 export const Customers = () => {
+  const { canCreate, canEdit, canDelete } = usePermissions('customers');
   const [customers, setCustomers] = useState([]);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -160,23 +162,25 @@ export const Customers = () => {
             <span>{exporting ? 'Exporting...' : 'Export Excel'}</span>
           </button>
 
-          <Link
-            to="/customers/new"
-            className="btn btn-primary"
-            style={{
-              borderRadius: '9px',
-              padding: '0.55rem 1.1rem',
-              fontWeight: 700,
-              fontSize: '0.85rem',
-              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.35rem'
-            }}
-          >
-            <Plus size={16} />
-            <span>Add Customer</span>
-          </Link>
+          {canCreate && (
+            <Link
+              to="/customers/new"
+              className="btn btn-primary"
+              style={{
+                borderRadius: '9px',
+                padding: '0.55rem 1.1rem',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem'
+              }}
+            >
+              <Plus size={16} />
+              <span>Add Customer</span>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -370,36 +374,42 @@ export const Customers = () => {
                           <Eye size={14} />
                         </Link>
 
-                        <Link 
-                          to={`/customers/edit/${c.id}`} 
-                          className="action-btn action-btn-edit" 
-                          title="Edit Customer Profile"
-                        >
-                          <Edit size={14} />
-                        </Link>
+                        {canEdit && (
+                          <Link 
+                            to={`/customers/edit/${c.id}`} 
+                            className="action-btn action-btn-edit" 
+                            title="Edit Customer Profile"
+                          >
+                            <Edit size={14} />
+                          </Link>
+                        )}
 
-                        <button
-                          type="button"
-                          className="action-btn action-btn-toggle"
-                          onClick={() => handleToggleStatus(c.id, c.name, c.isActive !== false)}
-                          title={c.isActive !== false ? 'Deactivate' : 'Activate'}
-                        >
-                          {c.isActive !== false ? (
-                            <ToggleRight size={16} style={{ color: '#16a34a' }} />
-                          ) : (
-                            <ToggleLeft size={16} style={{ color: '#94a3b8' }} />
-                          )}
-                        </button>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            className="action-btn action-btn-toggle"
+                            onClick={() => handleToggleStatus(c.id, c.name, c.isActive !== false)}
+                            title={c.isActive !== false ? 'Deactivate' : 'Activate'}
+                          >
+                            {c.isActive !== false ? (
+                              <ToggleRight size={16} style={{ color: '#16a34a' }} />
+                            ) : (
+                              <ToggleLeft size={16} style={{ color: '#94a3b8' }} />
+                            )}
+                          </button>
+                        )}
 
-                        <button
-                          type="button"
-                          className="action-btn action-btn-delete"
-                          onClick={() => handleDelete(c.id, c.name)}
-                          title="Delete Customer"
-                          style={{ color: '#dc2626' }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            className="action-btn action-btn-delete"
+                            onClick={() => handleDelete(c.id, c.name)}
+                            title="Delete Customer"
+                            style={{ color: '#dc2626' }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

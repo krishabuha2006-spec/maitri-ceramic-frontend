@@ -1,5 +1,5 @@
 import api, { extractArray } from './api';
-import { ROLES, DEFAULT_ROLE_PERMISSIONS } from '../utils/permissions';
+import { ROLES, DEFAULT_ROLE_PERMISSIONS, normalizePermissions } from '../utils/permissions';
 
 const STORAGE_KEY = 'maitri_local_users';
 
@@ -51,34 +51,66 @@ const saveStoredUsers = (usersList) => {
 };
 
 export const normalizeUser = (u) => {
-  const roleName = u.role?.roleName || u.role?.name || (typeof u.role === 'string' ? u.role : null) || ROLES.SUPER_ADMIN;
+  const roleName = u.role?.roleName || u.role?.name || (typeof u.role === 'string' ? u.role : null) || ROLES.SALES_EXECUTIVE;
+  const userId = u._id || u.id || `USR-${Math.floor(Math.random() * 10000)}`;
+
+  let savedPerms = null;
+  try {
+    const byId = localStorage.getItem(`maitri_user_perms_${userId}`);
+    const byEmail = u.email ? localStorage.getItem(`maitri_user_perms_${u.email}`) : null;
+    const byMobile = (u.mobile && u.mobile !== '-') ? localStorage.getItem(`maitri_user_perms_${u.mobile}`) : null;
+    const found = byId || byEmail || byMobile;
+    if (found) savedPerms = JSON.parse(found);
+  } catch (err) {}
+
+  const rawPerms = savedPerms || u.permissions;
+  const effectivePermissions = normalizePermissions(rawPerms, roleName, false);
+
+  const formatLastLogin = (dateVal) => {
+    if (!dateVal) return 'Never';
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return String(dateVal);
+      return d.toLocaleString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: true
+      });
+    } catch {
+      return String(dateVal);
+    }
+  };
+
   return {
-    id: u._id || u.id || `USR-${Math.floor(Math.random() * 10000)}`,
+    id: userId,
     name: u.name || u.fullName || u.username || u.staffName || 'Staff User',
     email: u.email || (u.mobile ? `${u.mobile}@maitriceramic.com` : 'user@maitriceramic.com'),
     role: roleName,
     mobile: u.mobile || u.phone || u.mobileNumber || u.contact || '-',
     status: u.status || (u.isActive === false ? 'Inactive' : 'Active'),
-    permissions: u.permissions || DEFAULT_ROLE_PERMISSIONS[roleName] || DEFAULT_ROLE_PERMISSIONS[ROLES.SALES_EXECUTIVE],
-    lastLogin: u.lastLogin || (u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never')
+    permissions: effectivePermissions,
+    lastLogin: u.lastLoginAt ? formatLastLogin(u.lastLoginAt) : (u.lastLogin ? formatLastLogin(u.lastLogin) : 'Never')
   };
 };
 
 // GET /users - Fetch all users from backend API
 export const getUsers = async (params = {}) => {
   try {
-    const queryParams = { limit: 1000, page: 1, all: true, ...params };
+    const queryParams = { limit: 100, page: 1, ...params };
     const res = await api.get('/users', { params: queryParams });
     const rawList = extractArray(res.data, ['users', 'userList', 'members', 'staff', 'data']);
-    
+
     if (Array.isArray(rawList) && rawList.length > 0) {
       const normalized = rawList.map(normalizeUser);
-      return { data: normalized, total: normalized.length, isLive: true };
+      return { data: normalized, total: res.data?.data?.pagination?.total || res.data?.total || normalized.length, isLive: true };
     }
-  } catch (err) {}
 
-  const stored = getStoredUsers();
-  return { data: stored.map(normalizeUser), total: stored.length, isLive: false };
+    // Empty list from backend is still a valid response
+    return { data: [], total: 0, isLive: true };
+  } catch (err) {
+    console.error('GET /users failed:', err?.response?.data || err.message);
+    // Return empty — do not throw so UI doesn't break
+    return { data: [], total: 0, isLive: false };
+  }
 };
 
 // GET /users/{id} - Get specific user details with permissions
@@ -93,52 +125,43 @@ export const getUserById = async (id) => {
 
 // POST /users - Create user & assign permissions
 export const createUser = async (userData) => {
-  const newUserObj = {
-    id: `USR-00${getStoredUsers().length + 1}`,
-    name: userData.name,
-    email: userData.email,
-    mobile: userData.mobile,
-    role: userData.role,
-    status: userData.status || 'Active',
-    permissions: userData.permissions,
-    lastLogin: 'Never'
-  };
-
   try {
     const payload = {
       name: userData.name,
       email: userData.email,
       mobile: userData.mobile,
       role: userData.role,
+      password: userData.password,
       status: userData.status || 'Active',
       permissions: userData.permissions
     };
     const res = await api.post('/users', payload);
     const createdUser = normalizeUser(res.data?.data || res.data);
-    
-    if (userData.permissions && createdUser.id) {
+
+    if (userData.permissions) {
       try {
-        await assignUserPermissions({ userId: createdUser.id, permissions: userData.permissions });
-      } catch (pErr) {}
+        if (createdUser?.id) localStorage.setItem(`maitri_user_perms_${createdUser.id}`, JSON.stringify(userData.permissions));
+        if (userData.email) localStorage.setItem(`maitri_user_perms_${userData.email}`, JSON.stringify(userData.permissions));
+        if (userData.mobile) localStorage.setItem(`maitri_user_perms_${userData.mobile}`, JSON.stringify(userData.permissions));
+      } catch (e) {}
     }
-
-    // Save to local storage cache
-    const currentList = getStoredUsers();
-    currentList.push(createdUser);
-    saveStoredUsers(currentList);
-
     return createdUser;
   } catch (err) {
-    const currentList = getStoredUsers();
-    currentList.push(newUserObj);
-    saveStoredUsers(currentList);
-    return normalizeUser(newUserObj);
+    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to create user.';
+    throw new Error(serverMsg);
   }
 };
 
 // PUT /users/{id} - Update user profile
 export const updateUser = async (id, userData) => {
   try {
+    if (userData.permissions) {
+      try {
+        localStorage.setItem(`maitri_user_perms_${id}`, JSON.stringify(userData.permissions));
+        if (userData.email) localStorage.setItem(`maitri_user_perms_${userData.email}`, JSON.stringify(userData.permissions));
+        if (userData.mobile) localStorage.setItem(`maitri_user_perms_${userData.mobile}`, JSON.stringify(userData.permissions));
+      } catch (e) {}
+    }
     const payload = {
       name: userData.name,
       email: userData.email,
@@ -149,30 +172,10 @@ export const updateUser = async (id, userData) => {
     };
     const res = await api.put(`/users/${id}`, payload);
     const updatedUser = normalizeUser(res.data?.data || res.data);
-
-    if (userData.permissions) {
-      try {
-        await assignUserPermissions({ userId: id, permissions: userData.permissions });
-      } catch (pErr) {}
-    }
-
-    const currentList = getStoredUsers();
-    const idx = currentList.findIndex(u => String(u.id) === String(id));
-    if (idx !== -1) {
-      currentList[idx] = { ...currentList[idx], ...updatedUser };
-      saveStoredUsers(currentList);
-    }
-
     return updatedUser;
   } catch (err) {
-    const currentList = getStoredUsers();
-    const idx = currentList.findIndex(u => String(u.id) === String(id));
-    if (idx !== -1) {
-      currentList[idx] = { ...currentList[idx], ...userData };
-      saveStoredUsers(currentList);
-      return normalizeUser(currentList[idx]);
-    }
-    throw new Error('User not found');
+    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to update user.';
+    throw new Error(serverMsg);
   }
 };
 
@@ -180,29 +183,52 @@ export const updateUser = async (id, userData) => {
 export const deleteUser = async (id) => {
   try {
     const res = await api.delete(`/users/${id}`);
-    const currentList = getStoredUsers().filter(u => String(u.id) !== String(id));
-    saveStoredUsers(currentList);
     return res.data;
   } catch (err) {
-    const currentList = getStoredUsers().filter(u => String(u.id) !== String(id));
-    saveStoredUsers(currentList);
-    return { success: true, message: 'User deleted successfully.' };
+    const status = err?.response?.status;
+    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to delete user.';
+    // 403 = permission denied — do NOT silently delete locally
+    if (status === 403) {
+      throw new Error('You do not have permission to delete this user.');
+    }
+    // For other errors, also throw so the UI can handle it
+    throw new Error(serverMsg);
   }
 };
 
-// PUT /users/{id}/deactivate - Deactivate user & immediately revoke active tokens
-export const deactivateUser = async (id) => {
-  try {
-    const res = await api.put(`/users/${id}/deactivate`);
-    return normalizeUser(res.data?.data || res.data);
-  } catch (err) {
-    const currentList = getStoredUsers();
-    const idx = currentList.findIndex(u => String(u.id) === String(id));
-    if (idx !== -1) {
-      currentList[idx].status = currentList[idx].status === 'Active' ? 'Inactive' : 'Active';
-      saveStoredUsers(currentList);
-      return normalizeUser(currentList[idx]);
+// PUT /users/{id} - Toggle user active/inactive status
+export const deactivateUser = async (id, newStatus) => {
+  const targetStatus = newStatus; // 'Active' or 'Inactive'
+
+  // Try dedicated endpoint first (/deactivate only, no /activate as it doesn't exist)
+  if (targetStatus === 'Inactive') {
+    try {
+      const res = await api.put(`/users/${id}/deactivate`);
+      const raw = res.data?.data?.user || res.data?.data || res.data;
+      return normalizeUser(raw);
+    } catch (err1) {
+      if (err1?.response?.status === 403) {
+        throw new Error('You do not have permission to deactivate this user.');
+      }
+      // 404 = endpoint not found, fall through to strategy 2
     }
+  }
+
+  // Strategy 2 (works for both activate & deactivate): PUT /users/{id} with status
+  try {
+    const res = await api.put(`/users/${id}`, {
+      status: targetStatus,
+      isActive: targetStatus === 'Active'
+    });
+    const raw = res.data?.data?.user || res.data?.data || res.data;
+    return normalizeUser(raw);
+  } catch (err2) {
+    const status2 = err2?.response?.status;
+    if (status2 === 403) {
+      throw new Error('You do not have permission to change this user\'s status.');
+    }
+    const serverMsg = err2?.response?.data?.message || err2?.response?.data?.error || err2?.message || 'Failed to update user status.';
+    throw new Error(serverMsg);
   }
 };
 
@@ -215,9 +241,12 @@ export const resetUserPassword = async (id, passwordData = {}) => {
   };
   try {
     const res = await api.put(`/users/${id}/reset-password`, payload);
-    return res.data?.data || res.data || { success: true, message: 'Password reset link issued successfully.' };
+    return res.data?.data || res.data || { success: true, message: 'Password has been reset successfully.' };
   } catch (err) {
-    return { success: true, message: 'Password reset link issued successfully.' };
+    const status = err?.response?.status;
+    if (status === 403) throw new Error('You do not have permission to reset this user\'s password.');
+    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to reset password.';
+    throw new Error(serverMsg);
   }
 };
 

@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { getCustomers } from '../services/customerService';
 import { getProducts } from '../services/productService';
 import { getQuotationById, createQuotation, updateQuotation } from '../services/quotationService';
+import { getQuotationFormats } from '../services/quotationFormatService';
 import { calculateQuotationItem, calculateQuotationTotals } from '../utils/calculations';
 import { formatCurrency } from '../utils/formatters';
 import { Plus, Trash2, ArrowLeft, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -14,6 +15,7 @@ export const CreateQuotation = () => {
 
   const [customers, setCustomers] = useState([]);
   const [availableProducts, setAvailableProducts] = useState([]);
+  const [availableFormats, setAvailableFormats] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
@@ -27,7 +29,8 @@ export const CreateQuotation = () => {
     customerContact: '',
     customerAddress: '',
     salesperson: '',
-    quotationType: 'Quotation With GST',
+    formatKey: 'STANDARD',
+    quotationType: 'Standard Quotation',
     validity: '15 Days',
     reference: '',
     remarks: '',
@@ -41,12 +44,18 @@ export const CreateQuotation = () => {
     const initData = async () => {
       setLoading(true);
       try {
-        const [cRes, pRes] = await Promise.all([getCustomers(), getProducts()]);
+        const [cRes, pRes, fRes] = await Promise.all([
+          getCustomers(), 
+          getProducts(),
+          getQuotationFormats()
+        ]);
         const cList = Array.isArray(cRes?.data) ? cRes.data : (Array.isArray(cRes) ? cRes : []);
         const pList = Array.isArray(pRes?.data) ? pRes.data : (Array.isArray(pRes) ? pRes : []);
+        const fList = Array.isArray(fRes?.data) ? fRes.data : (Array.isArray(fRes) ? fRes : []);
         
         setCustomers(cList);
         setAvailableProducts(pList);
+        setAvailableFormats(fList);
 
         if (isEdit) {
           const qtData = await getQuotationById(id);
@@ -79,11 +88,11 @@ export const CreateQuotation = () => {
       return;
     }
 
-    const selected = customers.find(c => c.id === custId || c._id === custId);
+    const selected = customers.find(c => String(c.id) === String(custId) || String(c._id) === String(custId));
     if (selected) {
       setHeaderData(prev => ({
         ...prev,
-        customerId: selected.id || selected._id,
+        customerId: selected._id || selected.id,
         customerName: selected.name || selected.customerName || '',
         customerContact: selected.mobile || selected.customerContact || '',
         customerAddress: `${selected.billingAddress || ''}${selected.city ? ', ' + selected.city : ''}`
@@ -103,8 +112,9 @@ export const CreateQuotation = () => {
 
     // Auto-populate product details when SKU is selected
     if (field === 'sku') {
-      const prd = availableProducts.find(p => p.sku === value);
+      const prd = availableProducts.find(p => p.sku === value || p.id === value || p._id === value);
       if (prd) {
+        updated[index].productId = prd._id || prd.id;
         updated[index].productName = prd.productName || '';
         updated[index].company = prd.company || 'Kajaria';
         updated[index].companySku = prd.companySku || prd.sku || '';
@@ -125,6 +135,7 @@ export const CreateQuotation = () => {
       ...items,
       {
         id: Date.now(),
+        productId: firstPrd._id || firstPrd.id || '',
         area: 'Living Room',
         sku: firstPrd.sku || '',
         productName: firstPrd.productName || 'Vitrified Tile',
@@ -203,17 +214,26 @@ export const CreateQuotation = () => {
     setSaving(true);
     const payload = {
       ...headerData,
+      formatKey: headerData.formatKey || 'STANDARD',
+      customerId: headerData.customerId,
       items: calculatedItems,
       grossTotal: totals.grossTotal,
       discountTotal: totals.discountTotal,
       taxableTotal: totals.taxableTotal,
       gstTotal: totals.gstTotal,
       quotationAmount: totals.finalTotal,
+      grandTotal: totals.finalTotal,
       confirmedAmount: headerData.confirmedAmount || totals.finalTotal
     };
 
     try {
       if (isEdit) {
+        if (String(headerData.status || '').toLowerCase().includes('confirm')) {
+          setFormError("Quotation is already in 'CONFIRMED' status and cannot be modified directly. Adjustments must be made in Quotation Confirmation.");
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          setSaving(false);
+          return;
+        }
         await updateQuotation(id, payload);
         setSuccessToast('Quotation updated successfully!');
       } else {
@@ -316,6 +336,26 @@ export const CreateQuotation = () => {
         }}>
           <AlertCircle size={20} style={{ flexShrink: 0, color: '#dc2626' }} />
           <div>{formError}</div>
+        </div>
+      )}
+
+      {isEdit && String(headerData.status || '').toLowerCase().includes('confirm') && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          padding: '0.9rem 1.25rem',
+          backgroundColor: '#f0fdf4',
+          border: '1px solid #86efac',
+          borderRadius: '12px',
+          color: '#166534',
+          fontSize: '0.875rem',
+          marginBottom: '1.5rem'
+        }}>
+          <CheckCircle2 size={20} style={{ color: '#16a34a', flexShrink: 0 }} />
+          <div>
+            <strong>Notice:</strong> This quotation is in <strong>CONFIRMED</strong> status. Direct edits to header or items are locked by the backend engine. Please make adjustments through the Quotation Confirmation module.
+          </div>
         </div>
       )}
 
@@ -431,26 +471,44 @@ export const CreateQuotation = () => {
               />
             </div>
 
-            {/* Quotation Type (Format Output) */}
+            {/* Quotation Format */}
             <div style={{ gridColumn: 'span 3' }}>
               <label style={{ fontWeight: 600, fontSize: '0.825rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
                 Quotation Format
               </label>
               <select
-                name="quotationType"
+                name="formatKey"
                 className="form-control"
-                value={headerData.quotationType}
-                onChange={handleHeaderChange}
+                value={headerData.formatKey || 'STANDARD'}
+                onChange={(e) => {
+                  const key = e.target.value;
+                  const matched = availableFormats.find(f => f.formatKey === key || f.name === key);
+                  setHeaderData(prev => ({
+                    ...prev,
+                    formatKey: key,
+                    quotationType: matched?.name || key
+                  }));
+                }}
                 style={{ height: '42px', borderRadius: '8px' }}
               >
-                <option value="Quotation">Quotation</option>
-                <option value="MRP">MRP</option>
-                <option value="Discount">Discount</option>
-                <option value="Plumber">Plumber</option>
-                <option value="Quotation Details">Quotation Details</option>
-                <option value="Quotation Pending">Quotation Pending</option>
-                <option value="Quotation Without SKU Code">Quotation Without SKU Code</option>
-                <option value="Quotation With GST">Quotation With GST</option>
+                {availableFormats.length > 0 ? (
+                  availableFormats.map((fmt) => (
+                    <option key={fmt.id || fmt.formatKey} value={fmt.formatKey}>
+                      {fmt.name} ({fmt.formatKey})
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="STANDARD">Standard Quotation (STANDARD)</option>
+                    <option value="WITH_GST">Quotation With GST Breakdown (WITH_GST)</option>
+                    <option value="DISCOUNT">Discounted Quotation (DISCOUNT)</option>
+                    <option value="MRP">MRP Quotation (MRP)</option>
+                    <option value="PLUMBER">Plumber Quotation (PLUMBER)</option>
+                    <option value="DETAILED">Detailed Breakdown Quotation (DETAILED)</option>
+                    <option value="PENDING">Pending Items Quotation (PENDING)</option>
+                    <option value="WITHOUT_SKU">Quotation Without SKU Code (WITHOUT_SKU)</option>
+                  </>
+                )}
               </select>
             </div>
 

@@ -74,7 +74,7 @@ export const deleteImportMapping = async (id) => {
 // Import History: GET /imports
 export const getImportBatches = async (params = {}) => {
   try {
-    const queryParams = { limit: 1000, page: 1, all: true, ...params };
+    const queryParams = { limit: 1000, page: 1, ...params };
     const res = await api.get('/imports', { params: queryParams });
     const batches = extractArray(res.data, ['batches', 'imports', 'history']);
     return { data: { batches }, total: res.data?.data?.pagination?.total || batches.length };

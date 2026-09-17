@@ -69,7 +69,14 @@ export const ProductDetails = () => {
     }
   };
 
-  if (loading) return <div style={{ padding: '2rem' }}>Loading product details...</div>;
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
+        <div className="spinner-circle" />
+        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#64748b' }}>Loading product details...</div>
+      </div>
+    );
+  }
   if (!product) return <div style={{ padding: '2rem', color: '#dc2626' }}>Product not found.</div>;
 
   return (

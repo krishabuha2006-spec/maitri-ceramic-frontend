@@ -13,10 +13,12 @@ import Pagination from '../components/Pagination';
 import ConfirmModal from '../components/ConfirmModal';
 import {
   Plus, Search, Eye, Edit, ToggleLeft, ToggleRight,
-  RefreshCw, X, Trash2, CheckCircle2, FolderTree, Building2, UploadCloud
+  RefreshCw, X, Trash2, CheckCircle2, UploadCloud
 } from 'lucide-react';
+import { usePermissions } from '../utils/permissions';
 
 export const Products = () => {
+  const { canCreate, canEdit, canDelete } = usePermissions('products');
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [successToast, setSuccessToast] = useState('');
@@ -142,74 +144,44 @@ export const Products = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <Link
-            to="/product-groups"
-            className="btn btn-secondary"
-            style={{
-              borderRadius: '9px',
-              padding: '0.5rem 0.85rem',
-              fontWeight: 600,
-              fontSize: '0.825rem',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.35rem'
-            }}
-          >
-            <FolderTree size={16} />
-            <span>Manage Groups</span>
-          </Link>
+          {canCreate && (
+            <Link
+              to="/imports"
+              className="btn btn-secondary"
+              style={{
+                borderRadius: '9px',
+                padding: '0.5rem 0.85rem',
+                fontWeight: 600,
+                fontSize: '0.825rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem'
+              }}
+            >
+              <UploadCloud size={16} />
+              <span>Product Import</span>
+            </Link>
+          )}
 
-          <Link
-            to="/companies"
-            className="btn btn-secondary"
-            style={{
-              borderRadius: '9px',
-              padding: '0.5rem 0.85rem',
-              fontWeight: 600,
-              fontSize: '0.825rem',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.35rem'
-            }}
-          >
-            <Building2 size={16} />
-            <span>Companies / Brands</span>
-          </Link>
-
-          <Link
-            to="/imports"
-            className="btn btn-secondary"
-            style={{
-              borderRadius: '9px',
-              padding: '0.5rem 0.85rem',
-              fontWeight: 600,
-              fontSize: '0.825rem',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.35rem'
-            }}
-          >
-            <UploadCloud size={16} />
-            <span>Product Import</span>
-          </Link>
-
-          <Link
-            to="/products/new"
-            className="btn btn-primary"
-            style={{
-              borderRadius: '9px',
-              padding: '0.5rem 1rem',
-              fontWeight: 700,
-              fontSize: '0.85rem',
-              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.35rem'
-            }}
-          >
-            <Plus size={16} />
-            <span>Add Product</span>
-          </Link>
+          {canCreate && (
+            <Link
+              to="/products/new"
+              className="btn btn-primary"
+              style={{
+                borderRadius: '9px',
+                padding: '0.5rem 1rem',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem'
+              }}
+            >
+              <Plus size={16} />
+              <span>Add Product</span>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -459,36 +431,42 @@ export const Products = () => {
                             <Eye size={14} />
                           </Link>
 
-                          <Link
-                            to={`/products/edit/${p.id}`}
-                            className="action-btn action-btn-edit"
-                            title="Edit Product"
-                          >
-                            <Edit size={14} />
-                          </Link>
+                          {canEdit && (
+                            <Link
+                              to={`/products/edit/${p.id}`}
+                              className="action-btn action-btn-edit"
+                              title="Edit Product"
+                            >
+                              <Edit size={14} />
+                            </Link>
+                          )}
 
-                          <button
-                            type="button"
-                            className="action-btn action-btn-toggle"
-                            onClick={() => handleToggleStatus(p.id, p.productName, p.status)}
-                            title={p.status === 'Active' ? 'Deactivate' : 'Activate'}
-                          >
-                            {p.status === 'Active' ? (
-                              <ToggleRight size={16} style={{ color: '#16a34a' }} />
-                            ) : (
-                              <ToggleLeft size={16} style={{ color: '#94a3b8' }} />
-                            )}
-                          </button>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="action-btn action-btn-toggle"
+                              onClick={() => handleToggleStatus(p.id, p.productName, p.status)}
+                              title={p.status === 'Active' ? 'Deactivate' : 'Activate'}
+                            >
+                              {p.status === 'Active' ? (
+                                <ToggleRight size={16} style={{ color: '#16a34a' }} />
+                              ) : (
+                                <ToggleLeft size={16} style={{ color: '#94a3b8' }} />
+                              )}
+                            </button>
+                          )}
 
-                          <button
-                            type="button"
-                            className="action-btn action-btn-delete"
-                            onClick={() => handleDeleteProduct(p.id, p.productName)}
-                            title="Delete Product"
-                            style={{ color: '#dc2626' }}
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {canDelete && (
+                            <button
+                              type="button"
+                              className="action-btn action-btn-delete"
+                              onClick={() => handleDeleteProduct(p.id, p.productName)}
+                              title="Delete Product"
+                              style={{ color: '#dc2626' }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

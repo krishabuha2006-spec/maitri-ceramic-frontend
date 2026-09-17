@@ -48,7 +48,14 @@ export const CustomerDetails = () => {
     fetch360History();
   }, [id]);
 
-  if (loading) return <div style={{ padding: '2rem' }}>Loading 360° customer history...</div>;
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
+        <div className="spinner-circle" />
+        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#64748b' }}>Loading 360° customer history...</div>
+      </div>
+    );
+  }
   if (!customer) return <div style={{ padding: '2rem', color: '#dc2626' }}>Customer not found.</div>;
 
   // Build Ledger Entries

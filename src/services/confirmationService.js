@@ -2,7 +2,7 @@ import api, { extractArray } from './api';
 
 export const getConfirmations = async (params = {}) => {
   try {
-    const queryParams = { limit: 1000, page: 1, all: true, ...params };
+    const queryParams = { limit: 1000, page: 1, ...params };
     const res = await api.get('/confirmations', { params: queryParams });
     const list = extractArray(res.data, ['confirmations', 'orders']);
     return { data: list, total: res.data?.data?.pagination?.total || list.length };

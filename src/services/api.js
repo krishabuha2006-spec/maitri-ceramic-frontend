@@ -40,12 +40,15 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
-// Attach Authorization Bearer token to outgoing requests if real JWT exists
+// Attach Authorization Bearer token only if it is a valid real JWT
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('maitri_auth_token');
-    if (token && token !== 'null' && token !== 'undefined') {
+    if (hasRealJwtToken()) {
+      const token = localStorage.getItem('maitri_auth_token');
       config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      // Remove any leftover stale/fake Authorization header
+      delete config.headers.Authorization;
     }
     return config;
   },

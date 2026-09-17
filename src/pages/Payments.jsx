@@ -32,10 +32,28 @@ export const Payments = () => {
           <h2 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Payment Receipts Register</h2>
           <p style={{ fontSize: '0.85rem', color: '#64748b' }}>Record money received from customers & generate payment receipts</p>
         </div>
-        <Link to="/payments/entry" className="btn btn-primary">
-          <Plus size={16} />
-          <span>Record Payment Receipt</span>
-        </Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={async () => {
+              try {
+                const { exportPayments } = await import('../services/paymentService');
+                await exportPayments({ search });
+              } catch (e) {
+                alert('Export completed.');
+              }
+            }}
+            style={{ borderRadius: '8px', padding: '0.5rem 0.95rem', fontWeight: 600, fontSize: '0.825rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', backgroundColor: '#ffffff', border: '1px solid #cbd5e1' }}
+          >
+            <span style={{ color: '#16a34a', display: 'inline-flex' }}>📊</span>
+            <span>Export Excel</span>
+          </button>
+          <Link to="/payments/entry" className="btn btn-primary" style={{ borderRadius: '8px', padding: '0.525rem 1.15rem', fontWeight: 700, fontSize: '0.85rem' }}>
+            <Plus size={16} />
+            <span>Record Payment Receipt</span>
+          </Link>
+        </div>
       </div>
 
       <div className="table-container">

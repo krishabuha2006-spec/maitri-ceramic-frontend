@@ -1,11 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getQuotationById, confirmQuotation, approveConfirmation } from '../services/quotationService';
+import { 
+  getQuotationById, 
+  confirmQuotation, 
+  approveConfirmation, 
+  sendQuotation, 
+  cancelQuotation, 
+  renderQuotationFormat, 
+  exportQuotationDocument 
+} from '../services/quotationService';
 import { getProducts } from '../services/productService';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
-import { ArrowLeft, CheckCircle2, FileText, Printer, Plus, Trash2, ShieldCheck, Download, LayoutTemplate } from 'lucide-react';
+import { 
+  ArrowLeft, CheckCircle2, FileText, Printer, Plus, Trash2, ShieldCheck, 
+  Download, LayoutTemplate, Send, XCircle, FileSpreadsheet, RefreshCw 
+} from 'lucide-react';
 
 export const QuotationDetails = () => {
   const { id } = useParams();
@@ -14,7 +25,8 @@ export const QuotationDetails = () => {
   const [productsList, setProductsList] = useState([]);
 
   // Active Presentation Format Layout (Module 5 Spec: 8 Formats)
-  const [selectedFormat, setSelectedFormat] = useState('WITH_GST');
+  const [selectedFormat, setSelectedFormat] = useState('STANDARD');
+  const [actionLoading, setActionLoading] = useState(false);
 
   // Confirmation Modal state
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -23,14 +35,14 @@ export const QuotationDetails = () => {
   const [confirmationRemarks, setConfirmationRemarks] = useState('');
 
   const FORMAT_OPTIONS = [
-    { key: 'STANDARD', label: 'Standard Customer' },
-    { key: 'WITH_GST', label: 'With GST Split' },
-    { key: 'DISCOUNT', label: 'Discount & Savings' },
-    { key: 'MRP', label: 'MRP Rate' },
-    { key: 'PLUMBER', label: 'Plumber / Trade' },
-    { key: 'WITHOUT_SKU', label: 'Without SKU Code' },
-    { key: 'DETAILED', label: 'Detailed Breakdown' },
-    { key: 'PENDING', label: 'Pending Review' }
+    { key: 'STANDARD', label: '1. Standard Customer Quotation (STANDARD)' },
+    { key: 'WITH_GST', label: '2. Quotation With GST Breakdown (WITH_GST)' },
+    { key: 'DISCOUNT', label: '3. Discounted Quotation (DISCOUNT)' },
+    { key: 'MRP', label: '4. MRP Quotation (MRP)' },
+    { key: 'PLUMBER', label: '5. Plumber Quotation (PLUMBER)' },
+    { key: 'DETAILED', label: '6. Detailed Breakdown Quotation (DETAILED)' },
+    { key: 'PENDING', label: '7. Pending Items Quotation (PENDING)' },
+    { key: 'WITHOUT_SKU', label: '8. Quotation Without SKU Code (WITHOUT_SKU)' }
   ];
 
   useEffect(() => {
@@ -131,7 +143,55 @@ export const QuotationDetails = () => {
     }
   };
 
-  if (loading) return <div style={{ padding: '2rem' }}>Loading quotation details...</div>;
+  const handleSendQuotation = async () => {
+    if (!window.confirm(`Mark quotation #${quotation.quotationNumber} as SENT to customer?`)) return;
+    setActionLoading(true);
+    try {
+      await sendQuotation(id);
+      await loadData();
+    } catch (err) {
+      alert('Failed to mark as sent: ' + (err.message || 'Error'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCancelQuotation = async () => {
+    if (!window.confirm(`Are you sure you want to cancel quotation #${quotation.quotationNumber}?`)) return;
+    setActionLoading(true);
+    try {
+      await cancelQuotation(id);
+      await loadData();
+    } catch (err) {
+      alert('Failed to cancel quotation: ' + (err.message || 'Error'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleExport = async (format) => {
+    try {
+      await exportQuotationDocument(id, format, quotation.quotationNumber);
+    } catch (err) {
+      alert(`Export as ${format.toUpperCase()} failed: ` + (err.message || 'Error'));
+    }
+  };
+
+  const handleFormatSelect = async (formatKey) => {
+    setSelectedFormat(formatKey);
+    try {
+      await renderQuotationFormat(id, formatKey);
+    } catch (err) {}
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
+        <div className="spinner-circle" />
+        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#64748b' }}>Loading quotation details...</div>
+      </div>
+    );
+  }
   if (!quotation) return <div style={{ padding: '2rem', color: '#dc2626' }}>Quotation not found.</div>;
 
   // Financial Calculations
@@ -151,18 +211,72 @@ export const QuotationDetails = () => {
           <span>Back to Quotation Directory</span>
         </Link>
         
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => window.print()}>
-            <Printer size={16} /> Print Document
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Send to customer */}
+          {quotation.status === 'Draft' && (
+            <button 
+              type="button" 
+              className="btn btn-primary btn-sm" 
+              onClick={handleSendQuotation}
+              disabled={actionLoading}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#0284c7', borderColor: '#0284c7' }}
+            >
+              <Send size={15} /> Mark as Sent
+            </button>
+          )}
+
+          {/* Export PDF */}
+          <button 
+            type="button" 
+            className="btn btn-secondary btn-sm" 
+            onClick={() => handleExport('pdf')}
+            title="Download PDF"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+          >
+            <Download size={15} /> PDF
           </button>
+
+          {/* Export Excel */}
+          <button 
+            type="button" 
+            className="btn btn-secondary btn-sm" 
+            onClick={() => handleExport('xlsx')}
+            title="Download Excel Spreadsheet"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+          >
+            <FileSpreadsheet size={15} /> Excel
+          </button>
+
+          {/* Print */}
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+            <Printer size={15} /> Print
+          </button>
+
+          {/* Approve confirmation */}
           {quotation.pendingApproval && (
             <button type="button" className="btn btn-primary btn-sm" onClick={handleApproveConfirmation} style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}>
               <ShieldCheck size={16} /> Approve Confirmation
             </button>
           )}
-          {quotation.status !== 'Confirmed' && (
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsConfirmModalOpen(true)}>
-              <CheckCircle2 size={16} /> Confirm Quotation
+
+          {/* Confirm */}
+          {quotation.status !== 'Confirmed' && quotation.status !== 'Cancelled' && (
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsConfirmModalOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+              <CheckCircle2 size={15} /> Confirm Items
+            </button>
+          )}
+
+          {/* Cancel Quotation */}
+          {quotation.status !== 'Cancelled' && (
+            <button 
+              type="button" 
+              className="btn btn-secondary btn-sm" 
+              onClick={handleCancelQuotation}
+              disabled={actionLoading}
+              title="Cancel Quotation"
+              style={{ color: '#dc2626', borderColor: '#fecaca', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+            >
+              <XCircle size={15} /> Cancel
             </button>
           )}
         </div>
@@ -212,7 +326,7 @@ export const QuotationDetails = () => {
             <button 
               key={fmt.key}
               type="button"
-              onClick={() => setSelectedFormat(fmt.key)}
+              onClick={() => handleFormatSelect(fmt.key)}
               className={`btn ${selectedFormat === fmt.key ? 'btn-primary' : 'btn-secondary'}`}
               style={{
                 fontSize: '0.78rem',

@@ -75,7 +75,7 @@ const normalizeProduct = (p) => {
 export const getProducts = async (params = {}) => {
   const deleted = getDeletedProductIds();
   try {
-    const queryParams = { limit: 1000, page: 1, all: true, ...params };
+    const queryParams = { limit: 1000, page: 1, ...params };
     const res = await api.get('/products', { params: queryParams });
     const rawList = extractArray(res.data, ['products', 'data', 'items', 'list']);
     if (Array.isArray(rawList) && rawList.length > 0) {
@@ -85,7 +85,9 @@ export const getProducts = async (params = {}) => {
       const total = res.data?.data?.pagination?.total || res.data?.total || normalized.length;
       return { data: normalized, total };
     }
-  } catch (err) {}
+  } catch (err) {
+    console.error('GET /products failed:', err?.response?.data || err.message);
+  }
 
   const stored = getStoredProducts();
   let list = stored
@@ -111,12 +113,21 @@ export const getProducts = async (params = {}) => {
 
 export const getProductById = async (id) => {
   if (!id) throw new Error('Product ID required');
-  try {
-    const res = await api.get(`/products/${id}`);
-    const raw = res.data?.data?.product || res.data?.data || res.data;
-    if (raw) return normalizeProduct(raw);
-  } catch (err) {}
 
+  // Only call backend if the ID looks like a real MongoDB ObjectId (24-char hex)
+  const isMongoId = /^[a-f\d]{24}$/i.test(String(id));
+
+  if (isMongoId) {
+    try {
+      const res = await api.get(`/products/${id}`);
+      const raw = res.data?.data?.product || res.data?.data || res.data;
+      if (raw) return normalizeProduct(raw);
+    } catch (err) {
+      console.warn('GET /products/:id failed:', err?.response?.data || err.message);
+    }
+  }
+
+  // Fallback: search localStorage by id or sku
   const stored = getStoredProducts();
   const prd = stored.find(p => String(p.id) === String(id) || String(p._id) === String(id) || p.sku === id);
   if (prd) return normalizeProduct(prd);

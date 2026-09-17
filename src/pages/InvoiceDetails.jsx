@@ -17,7 +17,14 @@ export const InvoiceDetails = () => {
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <div style={{ padding: '2rem' }}>Loading invoice...</div>;
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
+        <div className="spinner-circle" />
+        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#64748b' }}>Loading invoice...</div>
+      </div>
+    );
+  }
   if (!invoice) return <div style={{ padding: '2rem', color: '#dc2626' }}>Invoice not found.</div>;
 
   return (

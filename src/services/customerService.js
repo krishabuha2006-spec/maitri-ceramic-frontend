@@ -29,9 +29,12 @@ export const saveStoredCustomers = (customersList) => {
 export const normalizeCustomer = (c) => {
   if (!c) return null;
   const isAct = c.isActive !== undefined ? Boolean(c.isActive) : (c.status !== 'Inactive');
+  const custId = c._id || c.id || `CUST-${Math.floor(Math.random() * 10000)}`;
   return {
-    id: c._id || c.id || `CUST-${Math.floor(Math.random() * 10000)}`,
+    id: custId,
+    _id: c._id || custId,
     name: c.customerName || c.name || 'Unnamed Customer',
+    customerName: c.customerName || c.name || 'Unnamed Customer',
     mobile: c.mobile || '-',
     altMobile: c.alternateNumber || c.altMobile || '',
     email: c.email || '',
@@ -57,7 +60,7 @@ export const normalizeCustomer = (c) => {
 // GET /customers - Get list of customers with search, filters & local storage persistence fallback
 export const getCustomers = async (params = {}) => {
   try {
-    const queryParams = { limit: 1000, page: 1, all: true, ...params };
+    const queryParams = { limit: 1000, page: 1, ...params };
     const res = await api.get('/customers', { params: queryParams });
     const rawList = extractArray(res.data, ['customers', 'customerList', 'records', 'data']);
     

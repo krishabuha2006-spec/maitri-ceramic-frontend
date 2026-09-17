@@ -10,6 +10,7 @@ import {
   getCompanies, createCompany, 
   getProductGroups, createProductGroup 
 } from '../services/productService';
+import { getUnits } from '../services/masterService';
 
 export const ProductForm = () => {
   const navigate = useNavigate();
@@ -84,6 +85,7 @@ export const ProductForm = () => {
     { id: 'PG-005', groupName: 'CP Fittings' },
     { id: 'PG-006', groupName: 'Adhesives & Chemicals' }
   ]);
+  const [availableUnits, setAvailableUnits] = useState([]);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [savingGroup, setSavingGroup] = useState(false);
   const [groupFormError, setGroupFormError] = useState('');
@@ -108,6 +110,14 @@ export const ProductForm = () => {
       .then(list => {
         if (Array.isArray(list) && list.length > 0) {
           setProductGroups(list);
+        }
+      })
+      .catch(err => console.error(err));
+
+    getUnits()
+      .then(list => {
+        if (Array.isArray(list) && list.length > 0) {
+          setAvailableUnits(list);
         }
       })
       .catch(err => console.error(err));
@@ -917,13 +927,23 @@ export const ProductForm = () => {
                 onChange={handleChange}
                 style={{ height: '46px', borderRadius: '10px' }}
               >
-                <option value="Sq.Ft">Sq.Ft</option>
-                <option value="Sq.Mtr">Sq.Mtr</option>
-                <option value="Pcs">Pcs</option>
-                <option value="Box">Box</option>
-                <option value="Set">Set</option>
-                <option value="Kg">Kg</option>
-                <option value="Bags">Bags</option>
+                {availableUnits.length > 0 ? (
+                  availableUnits.map(u => (
+                    <option key={u.id || u.unitCode} value={u.unitCode}>
+                      {u.unitCode} ({u.unitName})
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="Sq.Ft">Sq.Ft (Square Feet)</option>
+                    <option value="Sq.Mt">Sq.Mt (Square Meter)</option>
+                    <option value="Box">Box (Box / Carton)</option>
+                    <option value="Pcs">Pcs (Pieces)</option>
+                    <option value="Set">Set (Set)</option>
+                    <option value="Kg">Kg (Kilogram)</option>
+                    <option value="Bag">Bag (Bag)</option>
+                  </>
+                )}
               </select>
             </div>
 

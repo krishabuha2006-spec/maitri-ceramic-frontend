@@ -1,16 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { REPORT_CATEGORIES, REPORT_TYPES, getReportData } from '../services/reportService';
-import { BarChart3, FileSpreadsheet, Printer, Download, Search, CheckCircle2 } from 'lucide-react';
+import { getCustomers } from '../services/customerService';
+import * as XLSX from 'xlsx';
+import { 
+  BarChart3, 
+  FileSpreadsheet, 
+  Printer, 
+  Download, 
+  Search, 
+  CheckCircle2, 
+  RefreshCw,
+  FileText,
+  User
+} from 'lucide-react';
 
 export const Reports = () => {
   const [selectedCategory, setSelectedCategory] = useState(REPORT_CATEGORIES.CUSTOMER);
   const [selectedReport, setSelectedReport] = useState(REPORT_TYPES[0]);
   const [reportResult, setReportResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [exportToast, setExportToast] = useState('');
+  const [searchFilter, setSearchFilter] = useState('');
+  const [toastMessage, setToastMessage] = useState('');
+  const [customers, setCustomers] = useState([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 3500);
+  };
 
   useEffect(() => {
-    // Select first report in current category
+    getCustomers().then(res => {
+      setCustomers(Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []));
+    });
+  }, []);
+
+  useEffect(() => {
     const firstInCat = REPORT_TYPES.find(r => r.category === selectedCategory);
     if (firstInCat) {
       setSelectedReport(firstInCat);
@@ -19,14 +44,19 @@ export const Reports = () => {
 
   useEffect(() => {
     if (selectedReport) {
-      loadReportData(selectedReport.id);
+      loadReportData(selectedReport.id, selectedCustomerId);
     }
-  }, [selectedReport]);
+  }, [selectedReport, selectedCustomerId]);
 
-  const loadReportData = async (reportId) => {
+  const loadReportData = async (reportId, customerId = '') => {
     setLoading(true);
     try {
-      const data = await getReportData(reportId);
+      const params = {};
+      if (customerId) {
+        params.id = customerId;
+        params.customerId = customerId;
+      }
+      const data = await getReportData(reportId, params);
       setReportResult(data);
     } catch (err) {
       console.error(err);
@@ -35,18 +65,60 @@ export const Reports = () => {
     }
   };
 
+  const filteredRows = useMemo(() => {
+    if (!reportResult?.rows) return [];
+    if (!searchFilter.trim()) return reportResult.rows;
+    const q = searchFilter.toLowerCase();
+    return reportResult.rows.filter(r => 
+      String(r.c1 || '').toLowerCase().includes(q) ||
+      String(r.c2 || '').toLowerCase().includes(q) ||
+      String(r.c3 || '').toLowerCase().includes(q) ||
+      String(r.c4 || '').toLowerCase().includes(q) ||
+      String(r.c5 || '').toLowerCase().includes(q) ||
+      String(r.c6 || '').toLowerCase().includes(q)
+    );
+  }, [reportResult, searchFilter]);
+
   const handlePrintReport = () => {
     window.print();
   };
 
+  const handleExportExcel = () => {
+    if (!reportResult || !reportResult.rows || reportResult.rows.length === 0) {
+      showToast('No report data available to export.');
+      return;
+    }
+
+    const cols = reportResult.columns || ['Col 1', 'Col 2', 'Col 3', 'Col 4', 'Col 5', 'Col 6'];
+    const exportData = filteredRows.map(r => {
+      const obj = {};
+      obj[cols[0] || 'Column 1'] = r.c1;
+      obj[cols[1] || 'Column 2'] = r.c2;
+      obj[cols[2] || 'Column 3'] = r.c3;
+      obj[cols[3] || 'Column 4'] = r.c4;
+      obj[cols[4] || 'Column 5'] = r.c5;
+      obj[cols[5] || 'Column 6'] = r.c6;
+      return obj;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    const cleanTitle = (selectedReport?.title || 'Report').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 31);
+    XLSX.utils.book_append_sheet(wb, ws, cleanTitle);
+    const filename = `${cleanTitle}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, filename);
+
+    showToast(`Exported ${filename} successfully!`);
+  };
+
   const handleExportCSV = () => {
     if (!reportResult || !reportResult.rows || reportResult.rows.length === 0) {
-      alert('No report data available to export.');
+      showToast('No report data available to export.');
       return;
     }
 
     const headers = reportResult.columns ? reportResult.columns.map(c => `"${c.replace(/"/g, '""')}"`).join(',') : '';
-    const rowStrings = reportResult.rows.map(r => {
+    const rowStrings = filteredRows.map(r => {
       const vals = [r.c1, r.c2, r.c3, r.c4, r.c5, r.c6];
       return vals
         .map(val => `"${String(val ?? '').replace(/"/g, '""')}"`)
@@ -66,8 +138,7 @@ export const Reports = () => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    setExportToast(`Exported ${filename} successfully!`);
-    setTimeout(() => setExportToast(''), 3000);
+    showToast(`Exported ${filename} successfully!`);
   };
 
   const currentCategoryReports = REPORT_TYPES.filter(r => r.category === selectedCategory);
@@ -75,7 +146,7 @@ export const Reports = () => {
   return (
     <div>
       {/* Toast Notification */}
-      {exportToast && (
+      {toastMessage && (
         <div className="no-print" style={{
           position: 'fixed',
           top: '20px',
@@ -92,15 +163,15 @@ export const Reports = () => {
           fontWeight: 600
         }}>
           <CheckCircle2 size={22} />
-          <span>{exportToast}</span>
+          <span>{toastMessage}</span>
         </div>
       )}
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>Business Reports & Analytics Hub</h2>
-          <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0.15rem 0 0 0' }}>Clean tabular reports with instant CSV export and print capabilities</p>
+          <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>Business Reports & Analytics</h2>
+          <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0.15rem 0 0 0' }}>Comprehensive reporting with Excel, CSV export, and print capabilities</p>
         </div>
         <div className="no-print" style={{ display: 'flex', gap: '0.5rem' }}>
           <button 
@@ -109,7 +180,7 @@ export const Reports = () => {
             onClick={handleExportCSV}
             style={{
               height: '38px',
-              padding: '0 1rem',
+              padding: '0 0.85rem',
               fontSize: '0.825rem',
               fontWeight: 600,
               borderRadius: '8px',
@@ -119,8 +190,27 @@ export const Reports = () => {
               borderColor: '#cbd5e1'
             }}
           >
-            <Download size={15} />
-            <span>Export CSV</span>
+            <Download size={14} />
+            <span>CSV</span>
+          </button>
+          <button 
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleExportExcel}
+            style={{
+              height: '38px',
+              padding: '0 0.95rem',
+              fontSize: '0.825rem',
+              fontWeight: 600,
+              borderRadius: '8px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              borderColor: '#cbd5e1'
+            }}
+          >
+            <FileSpreadsheet size={15} />
+            <span>Excel (.xlsx)</span>
           </button>
           <button 
             type="button"
@@ -157,28 +247,32 @@ export const Reports = () => {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '270px 1fr', gap: '1.25rem' }}>
         
-        {/* Report Selection List */}
-        <div className="card no-print" style={{ padding: '0.75rem' }}>
-          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', padding: '0.5rem 0.75rem', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-            Select Report
+        {/* Report Selection Sidebar */}
+        <div className="card no-print" style={{ padding: '0.75rem', alignSelf: 'start' }}>
+          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', padding: '0.4rem 0.6rem', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+            Available Reports
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.25rem' }}>
             {currentCategoryReports.map(rpt => (
               <button
                 key={rpt.id}
-                onClick={() => setSelectedReport(rpt)}
+                onClick={() => {
+                  setSelectedReport(rpt);
+                  setSearchFilter('');
+                }}
                 style={{
                   textAlign: 'left',
-                  padding: '0.65rem 0.85rem',
+                  padding: '0.6rem 0.75rem',
                   borderRadius: '6px',
                   border: 'none',
                   background: selectedReport?.id === rpt.id ? '#eff6ff' : 'transparent',
                   color: selectedReport?.id === rpt.id ? '#2563eb' : '#334155',
-                  fontWeight: selectedReport?.id === rpt.id ? 600 : 400,
+                  fontWeight: selectedReport?.id === rpt.id ? 700 : 500,
                   cursor: 'pointer',
-                  fontSize: '0.85rem'
+                  fontSize: '0.825rem',
+                  transition: 'all 0.15s ease'
                 }}
               >
                 {rpt.title}
@@ -189,24 +283,65 @@ export const Reports = () => {
 
         {/* Report Output Container */}
         <div className="table-container printable-document" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflow: 'hidden', backgroundColor: '#ffffff' }}>
-          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
             <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>{selectedReport?.title}</h3>
-              <p style={{ fontSize: '0.825rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>{selectedReport?.description}</p>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>{selectedReport?.title}</h3>
+              <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>{selectedReport?.description}</p>
             </div>
-            {reportResult?.summary && (
-              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#2563eb', background: '#eff6ff', padding: '0.4rem 0.85rem', borderRadius: '8px', border: '1px solid #dbeafe' }}>
-                Grand Total: ₹{reportResult.summary.grandTotal?.toLocaleString('en-IN')}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {selectedReport?.requiresCustomer && (
+                <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <User size={14} style={{ color: '#64748b' }} />
+                  <select
+                    className="form-control"
+                    value={selectedCustomerId}
+                    onChange={(e) => setSelectedCustomerId(e.target.value)}
+                    style={{ height: '34px', fontSize: '0.8rem', borderRadius: '6px', paddingRight: '1.5rem' }}
+                  >
+                    <option value="">All Customers</option>
+                    {customers.map(c => (
+                      <option key={c._id || c.id} value={c._id || c.id}>
+                        {c.customerName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="no-print" style={{ position: 'relative', width: '200px' }}>
+                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                  type="text"
+                  placeholder="Filter rows..."
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  style={{
+                    width: '100%',
+                    height: '34px',
+                    paddingLeft: '2rem',
+                    paddingRight: '0.5rem',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.8rem',
+                    outline: 'none'
+                  }}
+                />
               </div>
-            )}
+
+              {reportResult?.summary?.grandTotal !== undefined && (
+                <div style={{ fontSize: '0.825rem', fontWeight: 700, color: '#2563eb', background: '#eff6ff', padding: '0.35rem 0.75rem', borderRadius: '6px', border: '1px solid #dbeafe', whiteSpace: 'nowrap' }}>
+                  Total: ₹{Number(reportResult.summary.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </div>
+              )}
+            </div>
           </div>
 
-          <div style={{ overflowX: 'hidden' }}>
-            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'auto' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.785rem' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                   {reportResult?.columns?.map((col, i) => (
-                    <th key={i} style={{ padding: '0.6rem 0.75rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                    <th key={i} style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
                       {col}
                     </th>
                   ))}
@@ -214,18 +349,18 @@ export const Reports = () => {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Generating report data...</td></tr>
-                ) : !reportResult?.rows || reportResult.rows.length === 0 ? (
-                  <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No data records for this report.</td></tr>
+                  <tr><td colSpan={reportResult?.columns?.length || 6} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Generating live report data...</td></tr>
+                ) : filteredRows.length === 0 ? (
+                  <tr><td colSpan={reportResult?.columns?.length || 6} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No records found for this report filter.</td></tr>
                 ) : (
-                  reportResult.rows.map((row, idx) => (
+                  filteredRows.map((row, idx) => (
                     <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>{row.c1}</td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', color: '#1e293b' }}>{row.c2}</td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569' }}>{row.c3}</td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569' }}>{row.c4}</td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: '#2563eb' }}>{row.c5}</td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#64748b' }}>{row.c6}</td>
+                      <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>{row.c1}</td>
+                      <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.8rem', color: '#1e293b', whiteSpace: 'nowrap' }}>{row.c2}</td>
+                      <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', color: '#475569', whiteSpace: 'nowrap' }}>{row.c3}</td>
+                      <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', color: '#475569', whiteSpace: 'nowrap' }}>{row.c4}</td>
+                      <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: '#2563eb', whiteSpace: 'nowrap' }}>{row.c5}</td>
+                      <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', color: '#64748b', whiteSpace: 'nowrap' }}>{row.c6}</td>
                     </tr>
                   ))
                 )}

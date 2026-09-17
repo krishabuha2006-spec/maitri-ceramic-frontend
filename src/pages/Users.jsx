@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { getUsers, createUser, updateUser, deleteUser, deactivateUser, resetUserPassword } from '../services/userService';
-import { ROLES, MODULE_LIST, DEFAULT_ROLE_PERMISSIONS } from '../utils/permissions';
+import { ROLES, MODULE_LIST, DEFAULT_ROLE_PERMISSIONS, normalizePermissions, getEmptyPermissions } from '../utils/permissions';
+import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
-import { 
-  Plus, ArrowLeft, ShieldCheck, CheckCircle2, AlertCircle, Save, 
-  UserCheck, Shield, Lock, CheckSquare, Square, Check, RefreshCcw, User, Mail, Phone, Edit3, Trash2
+import {
+  Plus, ArrowLeft, ShieldCheck, CheckCircle2, AlertCircle, Save,
+  UserCheck, Shield, Lock, CheckSquare, RefreshCcw, User, Edit3, Trash2, Eye, EyeOff, X
 } from 'lucide-react';
 
 export const Users = () => {
+  const { currentUser, updateCurrentUserPermissions } = useAuth();
+  const userRole = currentUser?.role;
+  const userPerms = currentUser?.permissions;
+  const isSuperAdmin = !userRole || userRole === ROLES.SUPER_ADMIN;
+  const canCreateUser = isSuperAdmin || (userPerms?.users?.create ?? false);
+  const canEditUser = isSuperAdmin || (userPerms?.users?.edit ?? false);
+  const canDeleteUser = isSuperAdmin || (userPerms?.users?.delete ?? false);
+
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -19,22 +28,38 @@ export const Users = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingUserId, setEditingUserId] = useState(null);
 
-  // Form State
+  // Reset Password Modal state
+  const [resetModal, setResetModal] = useState({ open: false, userId: null, userName: '' });
+  const [resetPwd, setResetPwd] = useState({ newPassword: '', confirmPassword: '' });
+  const [resetPwdError, setResetPwdError] = useState('');
+  const [showPwd, setShowPwd] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  // Form State - Starts completely empty (no prefill)
+  const [showNewUserPwd, setShowNewUserPwd] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     mobile: '',
+    password: '',
     role: ROLES.SALES_EXECUTIVE,
     status: 'Active',
-    permissions: DEFAULT_ROLE_PERMISSIONS[ROLES.SALES_EXECUTIVE]
+    permissions: getEmptyPermissions()
   });
 
   const loadUsers = async () => {
     setLoading(true);
     try {
       const res = await getUsers();
-      setUsers(res.data || []);
-      setIsLiveApi(!!res.isLive);
+      if (res.data && res.data.length > 0) {
+        setUsers(res.data);
+        setIsLiveApi(!!res.isLive);
+      } else if (res.isLive) {
+        // Backend returned empty — clear list
+        setUsers([]);
+        setIsLiveApi(true);
+      }
+      // If isLive=false (backend failed), keep existing users in state
     } catch (err) {
       console.error('Error loading users:', err);
     } finally {
@@ -46,17 +71,19 @@ export const Users = () => {
     loadUsers();
   }, []);
 
-  // Open Form for Adding New User
+  // Open Form for Adding New User - Start completely empty
   const handleAddNew = () => {
     setEditingUserId(null);
     setFormError('');
+    setShowNewUserPwd(false);
     setFormData({
       name: '',
       email: '',
       mobile: '',
+      password: '',
       role: ROLES.SALES_EXECUTIVE,
       status: 'Active',
-      permissions: JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS[ROLES.SALES_EXECUTIVE]))
+      permissions: getEmptyPermissions()
     });
     setShowForm(true);
   };
@@ -66,10 +93,20 @@ export const Users = () => {
     setEditingUserId(user.id);
     setFormError('');
     
-    // Default fallback permissions if missing
     const userRole = user.role || ROLES.SALES_EXECUTIVE;
-    const basePerms = JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS[userRole] || DEFAULT_ROLE_PERMISSIONS[ROLES.SALES_EXECUTIVE]));
-    const currentPerms = user.permissions ? { ...basePerms, ...user.permissions } : basePerms;
+    let customPerms = null;
+    try {
+      const byId = localStorage.getItem(`maitri_user_perms_${user.id}`);
+      const byEmail = user.email ? localStorage.getItem(`maitri_user_perms_${user.email}`) : null;
+      const byMobile = (user.mobile && user.mobile !== '-') ? localStorage.getItem(`maitri_user_perms_${user.mobile}`) : null;
+      const found = byId || byEmail || byMobile;
+      if (found) customPerms = JSON.parse(found);
+    } catch (e) {}
+
+    const rawPerms = customPerms || user.permissions;
+    const currentPerms = rawPerms && Object.keys(rawPerms).length > 0
+      ? normalizePermissions(rawPerms, userRole, false)
+      : getEmptyPermissions();
 
     setFormData({
       name: user.name || '',
@@ -83,48 +120,75 @@ export const Users = () => {
   };
 
   const handleDeleteUser = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to permanently delete "${name}"? This action cannot be undone.`)) return;
     try {
       await deleteUser(id);
-      setSuccessToast(`User "${name}" deleted.`);
+      setSuccessToast(`User "${name}" deleted successfully.`);
       setTimeout(() => setSuccessToast(''), 2000);
       loadUsers();
     } catch (err) {
-      alert('Failed to delete user.');
+      const errMsg = err?.message || 'Failed to delete user.';
+      setFormError(errMsg);
+      setTimeout(() => setFormError(''), 4000);
     }
   };
 
-  const handleDeactivateUser = async (id, name) => {
+  const handleDeactivateUser = async (id, name, currentStatus) => {
+    const newStatus = currentStatus === 'Active' ? 'Inactive' : 'Active';
     try {
-      await deactivateUser(id);
-      setSuccessToast(`User "${name}" status toggled.`);
-      setTimeout(() => setSuccessToast(''), 2000);
-      loadUsers();
-    } catch (err) {
-      alert('Failed to toggle user status.');
-    }
-  };
-
-  const handleResetPassword = async (id, name) => {
-    try {
-      const res = await resetUserPassword(id, {});
-      setSuccessToast(res.message || `Password reset link issued for ${name}.`);
+      await deactivateUser(id, newStatus);
+      // Optimistically update local state immediately
+      setUsers(prev => prev.map(u =>
+        String(u.id) === String(id) ? { ...u, status: newStatus } : u
+      ));
+      setSuccessToast(`User "${name}" is now ${newStatus}.`);
       setTimeout(() => setSuccessToast(''), 2500);
     } catch (err) {
-      alert('Failed to reset password.');
+      const errMsg = err?.message || 'Failed to update user status.';
+      setFormError(errMsg);
+      setTimeout(() => setFormError(''), 4000);
     }
   };
 
-  // Change Role Preset -> Auto-fill default permissions for that role
+  const handleResetPassword = (id, name) => {
+    setResetModal({ open: true, userId: id, userName: name });
+    setResetPwd({ newPassword: '', confirmPassword: '' });
+    setResetPwdError('');
+    setShowPwd(false);
+  };
+
+  const handleResetPasswordSubmit = async () => {
+    if (!resetPwd.newPassword || resetPwd.newPassword.length < 6) {
+      setResetPwdError('Password must be at least 6 characters.');
+      return;
+    }
+    if (resetPwd.newPassword !== resetPwd.confirmPassword) {
+      setResetPwdError('Passwords do not match.');
+      return;
+    }
+    setResetting(true);
+    setResetPwdError('');
+    try {
+      const res = await resetUserPassword(resetModal.userId, {
+        newPassword: resetPwd.newPassword,
+        confirmPassword: resetPwd.confirmPassword
+      });
+      setResetModal({ open: false, userId: null, userName: '' });
+      setSuccessToast(res?.message || `Password reset successfully for ${resetModal.userName}.`);
+      setTimeout(() => setSuccessToast(''), 3000);
+    } catch (err) {
+      setResetPwdError(err?.message || 'Failed to reset password.');
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  // Change Role Preset -> Updates role label without overwriting user-selected checkboxes
   const handleRoleChange = (e) => {
     const selectedRole = e.target.value;
-    const defaultPerms = DEFAULT_ROLE_PERMISSIONS[selectedRole] 
-      ? JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS[selectedRole]))
-      : JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS[ROLES.SALES_EXECUTIVE]));
-
     setFormData(prev => ({
       ...prev,
-      role: selectedRole,
-      permissions: defaultPerms
+      role: selectedRole
     }));
   };
 
@@ -215,14 +279,26 @@ export const Users = () => {
       setFormError('Please enter mobile contact number.');
       return;
     }
+    if (!editingUserId) {
+      if (!formData.password || formData.password.trim().length < 6) {
+        setFormError('Password is required for new user (minimum 6 characters).');
+        return;
+      }
+    }
 
     setSaving(true);
     try {
       if (editingUserId) {
         await updateUser(editingUserId, formData);
+        if (updateCurrentUserPermissions) {
+          updateCurrentUserPermissions(editingUserId, formData.permissions);
+        }
         setSuccessToast(`User profile and permissions updated for ${formData.name}!`);
       } else {
-        await createUser(formData);
+        const created = await createUser(formData);
+        if (created?.id && updateCurrentUserPermissions) {
+          updateCurrentUserPermissions(created.id, formData.permissions);
+        }
         setSuccessToast(`New staff user ${formData.name} created with assigned permissions!`);
       }
       
@@ -397,8 +473,38 @@ export const Users = () => {
                 />
               </div>
 
+              {/* Password (Required for New User) */}
+              {!editingUserId && (
+                <div style={{ gridColumn: 'span 6' }}>
+                  <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                    Login Password <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showNewUserPwd ? 'text' : 'password'}
+                      className="form-control"
+                      placeholder="Enter at least 6 characters"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      required
+                      style={{ height: '44px', borderRadius: '8px', paddingRight: '2.5rem' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewUserPwd(v => !v)}
+                      style={{
+                        position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
+                        background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8'
+                      }}
+                    >
+                      {showNewUserPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* System Access Role */}
-              <div style={{ gridColumn: 'span 3' }}>
+              <div style={{ gridColumn: !editingUserId ? 'span 6' : 'span 3' }}>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
                   Assigned Role Preset <span style={{ color: '#dc2626' }}>*</span>
                 </label>
@@ -415,7 +521,7 @@ export const Users = () => {
               </div>
 
               {/* Account Status */}
-              <div style={{ gridColumn: 'span 3' }}>
+              <div style={{ gridColumn: !editingUserId ? 'span 6' : 'span 3' }}>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
                   Account Status
                 </label>
@@ -469,7 +575,7 @@ export const Users = () => {
                     User-Wise Module Access Permissions
                   </h3>
                   <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
-                    Customize exact permissions for each module. Changing role preset above updates default checkboxes.
+                    Select only the modules and actions this staff member should have access to. Unselected modules will not appear in their sidebar.
                   </p>
                 </div>
               </div>
@@ -657,6 +763,101 @@ export const Users = () => {
   // Render Main User Directory Table View
   return (
     <div>
+      {/* ── Reset Password Modal ─────────────────────────── */}
+      {resetModal.open && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: '1rem'
+        }}>
+          <div style={{
+            backgroundColor: '#fff', borderRadius: '16px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+            width: '100%', maxWidth: '420px', padding: '2rem'
+          }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Lock size={20} style={{ color: '#2563eb' }} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>Reset Password</h3>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>{resetModal.userName}</p>
+                </div>
+              </div>
+              <button onClick={() => setResetModal({ open: false, userId: null, userName: '' })}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '4px' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Error */}
+            {resetPwdError && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                <AlertCircle size={16} /> {resetPwdError}
+              </div>
+            )}
+
+            {/* New Password */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                New Password <span style={{ color: '#dc2626' }}>*</span>
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPwd ? 'text' : 'password'}
+                  className="form-control"
+                  placeholder="Enter new password"
+                  value={resetPwd.newPassword}
+                  onChange={e => setResetPwd(p => ({ ...p, newPassword: e.target.value }))}
+                  style={{ height: '44px', borderRadius: '8px', paddingRight: '2.5rem' }}
+                />
+                <button type="button" onClick={() => setShowPwd(v => !v)}
+                  style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                  {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Confirm Password */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                Confirm Password <span style={{ color: '#dc2626' }}>*</span>
+              </label>
+              <input
+                type={showPwd ? 'text' : 'password'}
+                className="form-control"
+                placeholder="Confirm new password"
+                value={resetPwd.confirmPassword}
+                onChange={e => setResetPwd(p => ({ ...p, confirmPassword: e.target.value }))}
+                style={{ height: '44px', borderRadius: '8px' }}
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setResetModal({ open: false, userId: null, userName: '' })}
+                className="btn btn-secondary"
+                style={{ padding: '0.6rem 1.25rem', borderRadius: '8px', fontWeight: 600 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleResetPasswordSubmit}
+                disabled={resetting}
+                className="btn btn-primary"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.5rem', borderRadius: '8px', fontWeight: 700 }}
+              >
+                <Lock size={16} />
+                {resetting ? 'Resetting...' : 'Reset Password'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast Notification */}
       {successToast && (
         <div className="app-toast">
@@ -665,6 +866,24 @@ export const Users = () => {
         </div>
       )}
 
+      {/* Error Banner */}
+      {formError && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          padding: '0.9rem 1.25rem',
+          backgroundColor: '#fef2f2',
+          border: '1px solid #fecaca',
+          borderRadius: '12px',
+          color: '#991b1b',
+          fontSize: '0.875rem',
+          marginBottom: '1rem'
+        }}>
+          <AlertCircle size={18} style={{ flexShrink: 0, color: '#dc2626' }} />
+          <span>{formError}</span>
+        </div>
+      )}
       {/* Page Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
@@ -679,10 +898,12 @@ export const Users = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <button className="btn btn-primary" onClick={handleAddNew} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderRadius: '8px' }}>
-            <Plus size={18} />
-            <span>Add New Staff User</span>
-          </button>
+          {canCreateUser && (
+            <button className="btn btn-primary" onClick={handleAddNew} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderRadius: '8px' }}>
+              <Plus size={18} />
+              <span>Add New Staff User</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -695,7 +916,6 @@ export const Users = () => {
               <th>Email</th>
               <th>Mobile</th>
               <th>Assigned Role</th>
-              <th>Module Access</th>
               <th>Account Status</th>
               <th>Last Login</th>
               <th style={{ textAlign: 'center' }}>Actions</th>
@@ -704,7 +924,7 @@ export const Users = () => {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="8" style={{ textAlign: 'center', padding: '2.5rem' }}>
+                <td colSpan="7" style={{ textAlign: 'center', padding: '2.5rem' }}>
                   <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
                     <RefreshCcw size={22} style={{ animation: 'spin 1s linear infinite', color: '#2563eb' }} />
                     <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#475569' }}>Fetching live users from backend API...</span>
@@ -712,7 +932,7 @@ export const Users = () => {
                 </td>
               </tr>
             ) : users.length === 0 ? (
-              <tr><td colSpan="8" style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b' }}>No staff users found in backend directory.</td></tr>
+              <tr><td colSpan="7" style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b' }}>No staff users found in backend directory.</td></tr>
             ) : (
               users.map(u => (
                 <tr key={u.id}>
@@ -722,52 +942,87 @@ export const Users = () => {
                   <td>
                     <span className="badge badge-info" style={{ fontWeight: 600 }}>{u.role}</span>
                   </td>
-                  <td>
-                    <span style={{
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
-                      backgroundColor: '#f1f5f9',
-                      color: '#475569',
-                      padding: '0.25rem 0.6rem',
-                      borderRadius: '6px'
-                    }}>
-                      {getPermissionSummary(u)}
-                    </span>
-                  </td>
                   <td><StatusBadge status={u.status} /></td>
-                  <td style={{ fontSize: '0.825rem', color: '#64748b' }}>{u.lastLogin}</td>
+                  <td style={{ fontSize: '0.825rem', color: '#64748b', whiteSpace: 'nowrap' }}>{u.lastLogin}</td>
                   <td>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
-                      <button 
-                        onClick={() => handleEditUser(u)} 
-                        className="action-btn action-btn-edit"
-                        title="Edit User Profile & Permissions"
-                      >
-                        <Edit3 size={15} />
-                      </button>
-                      <button 
-                        onClick={() => handleDeactivateUser(u.id, u.name)} 
-                        className="action-btn action-btn-toggle"
-                        title={u.status === 'Active' ? 'Deactivate User' : 'Activate User'}
-                      >
-                        <UserCheck size={15} />
-                      </button>
-                      <button 
-                        onClick={() => handleResetPassword(u.id, u.name)} 
-                        className="action-btn action-btn-view"
-                        title="Reset User Password"
-                      >
-                        <Lock size={15} />
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteUser(u.id, u.name)} 
-                        className="action-btn action-btn-delete"
-                        title="Delete User Permanently"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                      {canEditUser && (
+                        <button
+                          onClick={() => handleEditUser(u)}
+                          title="Edit Permissions & Profile"
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                            padding: '0.3rem 0.65rem', borderRadius: '6px', border: '1px solid #bfdbfe',
+                            backgroundColor: '#eff6ff', color: '#2563eb',
+                            fontSize: '0.775rem', fontWeight: 600, cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#dbeafe'; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#eff6ff'; }}
+                        >
+                          <Edit3 size={13} /> Edit
+                        </button>
+                      )}
+
+                      {canEditUser && (
+                        <button
+                          onClick={() => handleDeactivateUser(u.id, u.name, u.status)}
+                          title={u.status === 'Active' ? 'Deactivate User' : 'Activate User'}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                            padding: '0.3rem 0.65rem', borderRadius: '6px',
+                            border: u.status === 'Active' ? '1px solid #bbf7d0' : '1px solid #fed7aa',
+                            backgroundColor: u.status === 'Active' ? '#f0fdf4' : '#fff7ed',
+                            color: u.status === 'Active' ? '#16a34a' : '#ea580c',
+                            fontSize: '0.775rem', fontWeight: 600, cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.opacity = '0.8'; }}
+                          onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+                        >
+                          <UserCheck size={13} />
+                          {u.status === 'Active' ? 'Deactivate' : 'Activate'}
+                        </button>
+                      )}
+
+                      {canEditUser && (
+                        <button
+                          onClick={() => handleResetPassword(u.id, u.name)}
+                          title="Reset User Password"
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                            padding: '0.3rem 0.65rem', borderRadius: '6px', border: '1px solid #e2e8f0',
+                            backgroundColor: '#f8fafc', color: '#475569',
+                            fontSize: '0.775rem', fontWeight: 600, cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+                        >
+                          <Lock size={13} /> Reset pwd
+                        </button>
+                      )}
+
+                      {canDeleteUser && (
+                        <button
+                          onClick={() => handleDeleteUser(u.id, u.name)}
+                          title="Delete User Permanently"
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                            padding: '0.3rem 0.65rem', borderRadius: '6px', border: '1px solid #fecaca',
+                            backgroundColor: '#fef2f2', color: '#dc2626',
+                            fontSize: '0.775rem', fontWeight: 600, cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fee2e2'; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fef2f2'; }}
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      )}
                     </div>
                   </td>
+
                 </tr>
               ))
             )}

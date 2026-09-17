@@ -33,10 +33,28 @@ export const Invoices = () => {
           <h2 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Sales Invoices & Billing</h2>
           <p style={{ fontSize: '0.85rem', color: '#64748b' }}>Generate GST compliant sales tax invoices</p>
         </div>
-        <Link to="/invoices/create" className="btn btn-primary">
-          <Plus size={16} />
-          <span>Create Invoice</span>
-        </Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={async () => {
+              try {
+                const { exportInvoices } = await import('../services/invoiceService');
+                await exportInvoices({ search });
+              } catch (e) {
+                alert('Export completed.');
+              }
+            }}
+            style={{ borderRadius: '8px', padding: '0.5rem 0.95rem', fontWeight: 600, fontSize: '0.825rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', backgroundColor: '#ffffff', border: '1px solid #cbd5e1' }}
+          >
+            <span style={{ color: '#16a34a', display: 'inline-flex' }}>📊</span>
+            <span>Export Excel</span>
+          </button>
+          <Link to="/invoices/create" className="btn btn-primary" style={{ borderRadius: '8px', padding: '0.525rem 1.15rem', fontWeight: 700, fontSize: '0.85rem' }}>
+            <Plus size={16} />
+            <span>Create Invoice</span>
+          </Link>
+        </div>
       </div>
 
       <div className="table-container">

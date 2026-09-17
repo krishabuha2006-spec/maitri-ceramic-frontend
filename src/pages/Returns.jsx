@@ -1,44 +1,68 @@
-import React, { useState, useEffect } from 'react';
-import { getPurchaseReturns, createPurchaseReturn, getSalesReturns, createSalesReturn } from '../services/returnService';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  getReturns, 
+  createPurchaseReturn, 
+  createSalesReturn, 
+  confirmReturn, 
+  cancelReturn, 
+  exportReturns 
+} from '../services/returnService';
 import { formatDate } from '../utils/formatters';
 import StatusBadge from '../components/StatusBadge';
-import { Plus, RotateCcw, ArrowLeft, Save, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { 
+  Plus, 
+  RotateCcw, 
+  ArrowLeft, 
+  Search, 
+  Download, 
+  AlertCircle, 
+  CheckCircle2, 
+  RefreshCw, 
+  Check, 
+  X,
+  FileText
+} from 'lucide-react';
 
 export const Returns = () => {
   const [activeTab, setActiveTab] = useState('purchase'); // 'purchase' or 'sales'
-  const [purchaseReturns, setPurchaseReturns] = useState([]);
-  const [salesReturns, setSalesReturns] = useState([]);
+  const [returnsList, setReturnsList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
-  const [successToast, setSuccessToast] = useState('');
+  const [toastMessage, setToastMessage] = useState('');
 
   const [formData, setFormData] = useState({
-    returnNoteNumber: `PRN-2026-00${Math.floor(Math.random() * 900) + 100}`,
+    returnNoteNumber: '',
     date: new Date().toISOString().split('T')[0],
-    vendor: 'Kajaria Ceramics Ltd',
-    customerName: 'Rajesh Sharma Construction',
-    purchaseRef: 'PO-KJ-8821',
-    invoiceNumber: 'INV-2026-001',
-    challanNumber: 'CH-2026-001',
-    sku: 'VT-60120-GL',
-    productName: 'Glazed Vitrified Tile 600x1200mm Statuario',
-    quantity: 10,
+    vendor: '',
+    customerName: '',
+    purchaseRef: '',
+    invoiceNumber: '',
+    challanNumber: '',
+    sku: '',
+    productName: '',
+    quantity: 1,
     unit: 'Sq.Ft',
     returnReason: 'Quality inspection rejection / Damage',
-    remarks: 'Approved by warehouse manager',
-    status: 'Confirmed'
+    remarks: 'Approved by warehouse manager'
   });
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 3500);
+  };
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [prRes, srRes] = await Promise.all([getPurchaseReturns(), getSalesReturns()]);
-      setPurchaseReturns(prRes.data || []);
-      setSalesReturns(srRes.data || []);
+      const typeParam = activeTab === 'purchase' ? 'PURCHASE_RETURN' : 'SALES_RETURN';
+      const res = await getReturns({ returnType: typeParam, search: searchQuery });
+      setReturnsList(res.data || []);
     } catch (err) {
-      console.error(err);
+      console.error('Error loading returns:', err);
     } finally {
       setLoading(false);
     }
@@ -46,17 +70,41 @@ export const Returns = () => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [activeTab]);
+
+  const filteredReturns = useMemo(() => {
+    if (!searchQuery.trim()) return returnsList;
+    const q = searchQuery.toLowerCase();
+    return returnsList.filter(r => 
+      (r.returnNoteNumber || '').toLowerCase().includes(q) ||
+      (r.vendor || '').toLowerCase().includes(q) ||
+      (r.customerName || '').toLowerCase().includes(q) ||
+      (r.sku || '').toLowerCase().includes(q) ||
+      (r.productName || '').toLowerCase().includes(q) ||
+      (r.purchaseRef || '').toLowerCase().includes(q) ||
+      (r.invoiceNumber || '').toLowerCase().includes(q)
+    );
+  }, [returnsList, searchQuery]);
 
   const handleOpenForm = (tabType) => {
     setActiveTab(tabType);
     setFormError('');
-    setFormData(prev => ({
-      ...prev,
-      returnNoteNumber: tabType === 'purchase' 
-        ? `PRN-2026-00${Math.floor(Math.random() * 900) + 100}` 
-        : `SRN-2026-00${Math.floor(Math.random() * 900) + 100}`
-    }));
+    const randomNum = Math.floor(Math.random() * 900) + 100;
+    setFormData({
+      returnNoteNumber: tabType === 'purchase' ? `PRN-2026-${randomNum}` : `SRN-2026-${randomNum}`,
+      date: new Date().toISOString().split('T')[0],
+      vendor: tabType === 'purchase' ? 'Kajaria Ceramics Ltd' : '',
+      customerName: tabType === 'sales' ? 'Rajesh Sharma Construction' : '',
+      purchaseRef: tabType === 'purchase' ? 'PO-KJ-8821' : '',
+      invoiceNumber: tabType === 'sales' ? 'INV-2026-001' : '',
+      challanNumber: tabType === 'sales' ? 'CH-2026-001' : '',
+      sku: 'VT-60120-GL',
+      productName: 'Glazed Vitrified Tile 600x1200mm Statuario',
+      quantity: 10,
+      unit: 'Sq.Ft',
+      returnReason: 'Quality inspection rejection / Damage',
+      remarks: 'Approved by warehouse manager'
+    });
     setShowForm(true);
   };
 
@@ -65,7 +113,7 @@ export const Returns = () => {
     setFormError('');
 
     if (!formData.productName.trim() || !formData.sku.trim()) {
-      setFormError('Please fill product SKU and product name.');
+      setFormError('Please fill in product SKU and product name.');
       return;
     }
 
@@ -78,15 +126,13 @@ export const Returns = () => {
     try {
       if (activeTab === 'purchase') {
         await createPurchaseReturn(formData);
-        setSuccessToast(`Purchase Return ${formData.returnNoteNumber} confirmed! Warehouse stock decreased.`);
+        showToast(`Purchase Return ${formData.returnNoteNumber} recorded successfully!`);
       } else {
         await createSalesReturn(formData);
-        setSuccessToast(`Sales Return ${formData.returnNoteNumber} confirmed! Warehouse stock increased.`);
+        showToast(`Sales Return ${formData.returnNoteNumber} recorded successfully!`);
       }
-      setTimeout(() => {
-        setShowForm(false);
-        loadData();
-      }, 900);
+      setShowForm(false);
+      loadData();
     } catch (err) {
       console.error(err);
       setFormError(err.message || 'Error recording return.');
@@ -95,11 +141,73 @@ export const Returns = () => {
     }
   };
 
+  const handleConfirm = async (item) => {
+    const id = item.id || item._id;
+    try {
+      await confirmReturn(id);
+      showToast(`Return ${item.returnNoteNumber} confirmed! Physical stock updated.`);
+      loadData();
+    } catch (err) {
+      showToast(`Error confirming return: ${err.message}`);
+    }
+  };
+
+  const handleCancel = async (item) => {
+    if (!window.confirm(`Are you sure you want to cancel return ${item.returnNoteNumber}?`)) return;
+    const id = item.id || item._id;
+    try {
+      await cancelReturn(id, 'Cancelled by user');
+      showToast(`Return ${item.returnNoteNumber} cancelled.`);
+      loadData();
+    } catch (err) {
+      showToast(`Error cancelling return: ${err.message}`);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      const typeParam = activeTab === 'purchase' ? 'PURCHASE_RETURN' : 'SALES_RETURN';
+      const blob = await exportReturns({ returnType: typeParam });
+      if (blob && blob.size > 0) {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${activeTab}_returns_${new Date().toISOString().split('T')[0]}.xlsx`;
+        link.click();
+        window.URL.revokeObjectURL(url);
+        showToast('Returns exported successfully!');
+        return;
+      }
+    } catch (e) {
+      console.warn('Backend export blob failed, generating local XLSX');
+    }
+
+    // Client-side XLSX generation
+    const exportData = filteredReturns.map(r => ({
+      'Return Note': r.returnNoteNumber,
+      'Date': formatDate(r.date || r.returnDate),
+      'Party Name': activeTab === 'purchase' ? (r.vendor || '-') : (r.customerName || '-'),
+      'Reference Doc': activeTab === 'purchase' ? (r.purchaseRef || '-') : (r.invoiceNumber || r.challanNumber || '-'),
+      'SKU': r.sku,
+      'Product Description': r.productName,
+      'Quantity': r.quantity,
+      'Unit': r.unit || 'Sq.Ft',
+      'Reason': r.returnReason || '-',
+      'Status': r.status || 'CONFIRMED'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, activeTab === 'purchase' ? 'Purchase Returns' : 'Sales Returns');
+    XLSX.writeFile(wb, `${activeTab}_returns_${new Date().toISOString().split('T')[0]}.xlsx`);
+    showToast('Returns exported to Excel successfully!');
+  };
+
   if (showForm) {
     return (
-      <div style={{ maxWidth: '1020px', margin: '0 auto', paddingBottom: '3rem', fontFamily: 'var(--font-family)' }}>
+      <div style={{ maxWidth: '1000px', margin: '0 auto', paddingBottom: '3rem' }}>
         {/* Toast Notification */}
-        {successToast && (
+        {toastMessage && (
           <div style={{
             position: 'fixed',
             top: '20px',
@@ -116,7 +224,7 @@ export const Returns = () => {
             fontWeight: 600
           }}>
             <CheckCircle2 size={22} />
-            <span>{successToast}</span>
+            <span>{toastMessage}</span>
           </div>
         )}
 
@@ -130,7 +238,7 @@ export const Returns = () => {
               display: 'inline-flex',
               alignItems: 'center',
               gap: '0.4rem',
-              borderRadius: '10px',
+              borderRadius: '8px',
               padding: '0.55rem 0.95rem',
               fontWeight: 600,
               fontSize: '0.875rem'
@@ -140,13 +248,13 @@ export const Returns = () => {
             <span>Back to Returns</span>
           </button>
           <div>
-            <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-              {activeTab === 'purchase' ? 'Create Purchase Return (Vendor)' : 'Create Sales Return (Customer)'}
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+              {activeTab === 'purchase' ? 'Create Purchase Return (Vendor Debit Note)' : 'Create Sales Return (Customer Credit Note)'}
             </h1>
             <p style={{ color: '#64748b', fontSize: '0.825rem', margin: '0.15rem 0 0 0' }}>
               {activeTab === 'purchase' 
-                ? 'Return damaged/rejected goods to vendor and auto-deduct warehouse physical stock.' 
-                : 'Receive customer returned materials and auto-increase warehouse physical stock.'}
+                ? 'Return damaged or surplus items to vendor and deduct physical stock.' 
+                : 'Accept returned items from customer and re-add to warehouse stock.'}
             </p>
           </div>
         </div>
@@ -159,7 +267,7 @@ export const Returns = () => {
             padding: '1rem 1.25rem',
             backgroundColor: '#fef2f2',
             border: '1px solid #fecaca',
-            borderRadius: '12px',
+            borderRadius: '10px',
             color: '#991b1b',
             fontSize: '0.9rem',
             marginBottom: '1.5rem'
@@ -169,16 +277,8 @@ export const Returns = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} noValidate>
-          {/* Card: Return Details */}
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: '14px',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
-            padding: '1.75rem',
-            marginBottom: '1.5rem'
-          }}>
+        <form onSubmit={handleSubmit}>
+          <div className="card" style={{ padding: '1.75rem', marginBottom: '1.5rem' }}>
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -201,16 +301,15 @@ export const Returns = () => {
               </div>
               <div>
                 <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                  {activeTab === 'purchase' ? 'Purchase Return Details (Vendor Debit Note)' : 'Sales Return Details (Customer Credit Note)'}
+                  {activeTab === 'purchase' ? 'Purchase Return Details' : 'Sales Return Details'}
                 </h3>
                 <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
-                  Enter return voucher number, party name, product SKU, returned quantity, and reason
+                  Fill in return note number, party details, SKU, returned quantity, and reason
                 </p>
               </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.25rem' }}>
-              {/* Return Note Number */}
               <div style={{ gridColumn: 'span 6' }}>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
                   Return Note Number
@@ -219,12 +318,12 @@ export const Returns = () => {
                   type="text"
                   className="form-control"
                   value={formData.returnNoteNumber}
-                  readOnly
-                  style={{ height: '44px', borderRadius: '8px', backgroundColor: '#f8fafc', fontWeight: 700, color: '#0f172a' }}
+                  onChange={(e) => setFormData({ ...formData, returnNoteNumber: e.target.value })}
+                  style={{ height: '42px', borderRadius: '8px', fontWeight: 700 }}
+                  required
                 />
               </div>
 
-              {/* Return Date */}
               <div style={{ gridColumn: 'span 6' }}>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
                   Return Date
@@ -235,13 +334,12 @@ export const Returns = () => {
                   value={formData.date}
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                   required
-                  style={{ height: '44px', borderRadius: '8px' }}
+                  style={{ height: '42px', borderRadius: '8px' }}
                 />
               </div>
 
               {activeTab === 'purchase' ? (
                 <>
-                  {/* Vendor Name */}
                   <div style={{ gridColumn: 'span 6' }}>
                     <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
                       Vendor Name <span style={{ color: '#dc2626' }}>*</span>
@@ -253,14 +351,13 @@ export const Returns = () => {
                       onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
                       placeholder="e.g. Kajaria Ceramics Ltd"
                       required
-                      style={{ height: '44px', borderRadius: '8px' }}
+                      style={{ height: '42px', borderRadius: '8px' }}
                     />
                   </div>
 
-                  {/* Purchase Ref / PO */}
                   <div style={{ gridColumn: 'span 6' }}>
                     <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
-                      Purchase Ref / PO Number
+                      Purchase Order / Ref
                     </label>
                     <input
                       type="text"
@@ -268,13 +365,12 @@ export const Returns = () => {
                       value={formData.purchaseRef}
                       onChange={(e) => setFormData({ ...formData, purchaseRef: e.target.value })}
                       placeholder="e.g. PO-KJ-8821"
-                      style={{ height: '44px', borderRadius: '8px' }}
+                      style={{ height: '42px', borderRadius: '8px' }}
                     />
                   </div>
                 </>
               ) : (
                 <>
-                  {/* Customer Name */}
                   <div style={{ gridColumn: 'span 6' }}>
                     <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
                       Customer Name <span style={{ color: '#dc2626' }}>*</span>
@@ -286,28 +382,26 @@ export const Returns = () => {
                       onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
                       placeholder="e.g. Rajesh Sharma Construction"
                       required
-                      style={{ height: '44px', borderRadius: '8px' }}
+                      style={{ height: '42px', borderRadius: '8px' }}
                     />
                   </div>
 
-                  {/* Invoice / Challan Number */}
                   <div style={{ gridColumn: 'span 6' }}>
                     <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
-                      Invoice / Delivery Challan Ref
+                      Invoice / Challan Reference
                     </label>
                     <input
                       type="text"
                       className="form-control"
                       value={formData.invoiceNumber}
                       onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })}
-                      placeholder="e.g. INV-2026-001 / CH-2026-001"
-                      style={{ height: '44px', borderRadius: '8px' }}
+                      placeholder="e.g. INV-2026-001"
+                      style={{ height: '42px', borderRadius: '8px' }}
                     />
                   </div>
                 </>
               )}
 
-              {/* Product SKU */}
               <div style={{ gridColumn: 'span 6' }}>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
                   Product SKU <span style={{ color: '#dc2626' }}>*</span>
@@ -319,11 +413,10 @@ export const Returns = () => {
                   onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
                   placeholder="e.g. VT-60120-GL"
                   required
-                  style={{ height: '44px', borderRadius: '8px' }}
+                  style={{ height: '42px', borderRadius: '8px' }}
                 />
               </div>
 
-              {/* Product Name */}
               <div style={{ gridColumn: 'span 6' }}>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
                   Product Description <span style={{ color: '#dc2626' }}>*</span>
@@ -335,17 +428,13 @@ export const Returns = () => {
                   onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
                   placeholder="e.g. Glazed Vitrified Tile Statuario"
                   required
-                  style={{ height: '44px', borderRadius: '8px' }}
+                  style={{ height: '42px', borderRadius: '8px' }}
                 />
               </div>
 
-              {/* Quantity Returned */}
               <div style={{ gridColumn: 'span 6' }}>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
                   Quantity Returned <span style={{ color: '#dc2626' }}>*</span>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, marginLeft: '0.5rem', color: activeTab === 'purchase' ? '#dc2626' : '#16a34a' }}>
-                    ({activeTab === 'purchase' ? '- Stock Will Decrease' : '+ Stock Will Increase'})
-                  </span>
                 </label>
                 <input
                   type="number"
@@ -353,12 +442,11 @@ export const Returns = () => {
                   value={formData.quantity}
                   onChange={(e) => setFormData({ ...formData, quantity: Number(e.target.value) })}
                   required
-                  placeholder="0"
-                  style={{ height: '44px', borderRadius: '8px', fontWeight: 700 }}
+                  min="1"
+                  style={{ height: '42px', borderRadius: '8px', fontWeight: 700 }}
                 />
               </div>
 
-              {/* Unit */}
               <div style={{ gridColumn: 'span 6' }}>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
                   Unit
@@ -368,12 +456,11 @@ export const Returns = () => {
                   className="form-control"
                   value={formData.unit}
                   onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  placeholder="e.g. Sq.Ft / Pcs / Boxes"
-                  style={{ height: '44px', borderRadius: '8px' }}
+                  placeholder="e.g. Sq.Ft / Boxes"
+                  style={{ height: '42px', borderRadius: '8px' }}
                 />
               </div>
 
-              {/* Return Reason */}
               <div style={{ gridColumn: 'span 12' }}>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
                   Return Reason <span style={{ color: '#dc2626' }}>*</span>
@@ -383,46 +470,34 @@ export const Returns = () => {
                   className="form-control"
                   value={formData.returnReason}
                   onChange={(e) => setFormData({ ...formData, returnReason: e.target.value })}
-                  placeholder="e.g. Quality inspection rejection / Corner breakage in transit"
+                  placeholder="e.g. Broken tiles / Excess stock from construction site"
                   required
-                  style={{ height: '44px', borderRadius: '8px' }}
+                  style={{ height: '42px', borderRadius: '8px' }}
                 />
               </div>
 
-              {/* Remarks */}
               <div style={{ gridColumn: 'span 12' }}>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
-                  Warehouse Remarks / Notes
+                  Warehouse Remarks
                 </label>
                 <input
                   type="text"
                   className="form-control"
                   value={formData.remarks}
                   onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
-                  placeholder="e.g. Approved by warehouse manager for stock credit"
-                  style={{ height: '44px', borderRadius: '8px' }}
+                  placeholder="e.g. Approved and inspected"
+                  style={{ height: '42px', borderRadius: '8px' }}
                 />
               </div>
             </div>
           </div>
 
-          {/* Action Bar */}
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: '14px',
-            border: '1px solid #e2e8f0',
-            padding: '1.25rem 1.75rem',
-            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            gap: '0.85rem'
-          }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
             <button 
-              type="button"
-              className="btn btn-secondary"
+              type="button" 
+              className="btn btn-secondary" 
               onClick={() => setShowForm(false)}
-              style={{ borderRadius: '10px', height: '44px', padding: '0 1.25rem', fontWeight: 600, fontSize: '0.875rem' }}
+              style={{ borderRadius: '8px', height: '42px', padding: '0 1.25rem', fontWeight: 600 }}
             >
               Cancel
             </button>
@@ -431,14 +506,10 @@ export const Returns = () => {
               className="btn btn-primary"
               disabled={saving}
               style={{
-                borderRadius: '10px',
-                height: '44px',
-                padding: '0 1.75rem',
+                borderRadius: '8px',
+                height: '42px',
+                padding: '0 1.5rem',
                 fontWeight: 700,
-                fontSize: '0.9rem',
-                backgroundColor: activeTab === 'purchase' ? '#2563eb' : '#16a34a',
-                borderColor: activeTab === 'purchase' ? '#2563eb' : '#16a34a',
-                boxShadow: '0 4px 14px rgba(37, 99, 235, 0.28)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem'
@@ -446,13 +517,13 @@ export const Returns = () => {
             >
               {saving ? (
                 <>
-                  <RefreshCw size={18} style={{ animation: 'spin 1s linear infinite' }} />
-                  <span>Confirming...</span>
+                  <RefreshCw size={16} className="spin-animation" />
+                  <span>Saving...</span>
                 </>
               ) : (
                 <>
-                  <RotateCcw size={18} />
-                  <span>Confirm Return & Update Stock</span>
+                  <Check size={16} />
+                  <span>Save Return Note</span>
                 </>
               )}
             </button>
@@ -464,24 +535,80 @@ export const Returns = () => {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          backgroundColor: '#16a34a',
+          color: '#ffffff',
+          padding: '1rem 1.5rem',
+          borderRadius: '12px',
+          boxShadow: '0 10px 25px rgba(22, 163, 74, 0.3)',
+          fontWeight: 600
+        }}>
+          <CheckCircle2 size={22} />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>Returns Management</h2>
+          <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>Return Notes Management</h2>
           <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0.15rem 0 0 0' }}>
-            {activeTab === 'purchase' ? 'Purchase Return to Vendor (Stock Decreases)' : 'Sales Return from Customer (Stock Increases)'}
+            {activeTab === 'purchase' ? 'Purchase Returns to Vendors (Deducts Stock)' : 'Sales Returns from Customers (Restocks Warehouse)'}
           </p>
         </div>
-        <button 
-          className="btn btn-primary" 
-          onClick={() => handleOpenForm(activeTab)}
-          style={{ borderRadius: '8px', padding: '0.5rem 1rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
-        >
-          <Plus size={16} />
-          <span>Create {activeTab === 'purchase' ? 'Purchase Return' : 'Sales Return'}</span>
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button 
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleExportExcel}
+            style={{
+              height: '38px',
+              padding: '0 1rem',
+              fontSize: '0.825rem',
+              fontWeight: 600,
+              borderRadius: '8px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              borderColor: '#cbd5e1'
+            }}
+          >
+            <Download size={15} />
+            <span>Export Excel</span>
+          </button>
+          <button 
+            type="button"
+            className="btn btn-primary" 
+            onClick={() => handleOpenForm(activeTab)}
+            style={{
+              height: '38px',
+              padding: '0 1.1rem',
+              fontSize: '0.825rem',
+              fontWeight: 600,
+              borderRadius: '8px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              boxShadow: '0 4px 14px rgba(37, 99, 235, 0.28)'
+            }}
+          >
+            <Plus size={16} />
+            <span>Create {activeTab === 'purchase' ? 'Purchase Return' : 'Sales Return'}</span>
+          </button>
+        </div>
       </div>
 
-      <div className="tabs-header">
+      {/* Tabs */}
+      <div className="tabs-header" style={{ marginBottom: '1rem' }}>
         <button
           className={`tab-btn ${activeTab === 'purchase' ? 'active' : ''}`}
           onClick={() => setActiveTab('purchase')}
@@ -496,78 +623,127 @@ export const Returns = () => {
         </button>
       </div>
 
-      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflowX: 'auto', backgroundColor: '#ffffff', width: '100%' }}>
-        {activeTab === 'purchase' ? (
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '950px', fontSize: '0.785rem' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '130px' }}>Return Note</th>
-                <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '100px' }}>Date</th>
-                <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '160px' }}>Vendor</th>
-                <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '120px' }}>Purchase Ref</th>
-                <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '120px' }}>SKU</th>
-                <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '200px' }}>Product Name</th>
-                <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '90px' }}>Qty</th>
-                <th style={{ padding: '0.6rem 0.5rem', textAlign: 'center', minWidth: '90px' }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b' }}>Loading purchase returns...</td></tr>
-              ) : purchaseReturns.length === 0 ? (
-                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b' }}>No purchase returns.</td></tr>
-              ) : (
-                purchaseReturns.map(r => (
+      {/* Search Bar */}
+      <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center' }}>
+        <div style={{ position: 'relative', width: '320px' }}>
+          <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+          <input
+            type="text"
+            className="form-control"
+            placeholder="Search return note, party, SKU..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ paddingLeft: '2.25rem', height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+          />
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflowX: 'auto', backgroundColor: '#ffffff' }}>
+        <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '950px', fontSize: '0.785rem' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '130px' }}>Return Note</th>
+              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '100px' }}>Date</th>
+              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '160px' }}>{activeTab === 'purchase' ? 'Vendor' : 'Customer'}</th>
+              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '130px' }}>{activeTab === 'purchase' ? 'PO Ref' : 'Invoice / Challan'}</th>
+              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '120px' }}>SKU</th>
+              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '200px' }}>Product Description</th>
+              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '90px' }}>Qty</th>
+              <th style={{ padding: '0.6rem 0.5rem', textAlign: 'center', minWidth: '100px' }}>Status</th>
+              <th style={{ padding: '0.6rem 0.75rem', textAlign: 'center', minWidth: '120px' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan="9" style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b' }}>Loading return records...</td></tr>
+            ) : filteredReturns.length === 0 ? (
+              <tr><td colSpan="9" style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b' }}>No return records found.</td></tr>
+            ) : (
+              filteredReturns.map(r => {
+                const isDraft = (r.status || '').toUpperCase() === 'DRAFT';
+                return (
                   <tr key={r.id || r._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>{r.returnNoteNumber}</td>
-                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', color: '#475569', whiteSpace: 'nowrap' }}>{formatDate(r.date)}</td>
-                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>{r.vendor}</td>
-                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', color: '#64748b', whiteSpace: 'nowrap' }}>{r.purchaseRef}</td>
-                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', fontFamily: 'monospace', fontWeight: 600, whiteSpace: 'nowrap' }}>{r.sku}</td>
-                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', color: '#334155', whiteSpace: 'nowrap' }}>{r.productName}</td>
-                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: '#dc2626', textAlign: 'center', whiteSpace: 'nowrap' }}>{r.quantity} {r.unit}</td>
-                    <td style={{ padding: '0.6rem 0.5rem', textAlign: 'center', whiteSpace: 'nowrap' }}><StatusBadge status={r.status} /></td>
+                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
+                      {r.returnNoteNumber}
+                    </td>
+                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', color: '#475569', whiteSpace: 'nowrap' }}>
+                      {formatDate(r.date || r.returnDate)}
+                    </td>
+                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>
+                      {activeTab === 'purchase' ? (r.vendor || '-') : (r.customerName || '-')}
+                    </td>
+                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', color: '#64748b', whiteSpace: 'nowrap' }}>
+                      {activeTab === 'purchase' ? (r.purchaseRef || '-') : (r.invoiceNumber || r.challanNumber || '-')}
+                    </td>
+                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', fontFamily: 'monospace', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      {r.sku}
+                    </td>
+                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', color: '#334155', whiteSpace: 'nowrap' }}>
+                      {r.productName}
+                    </td>
+                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: '#dc2626', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      {r.quantity} {r.unit || 'Sq.Ft'}
+                    </td>
+                    <td style={{ padding: '0.6rem 0.5rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <StatusBadge status={r.status || 'CONFIRMED'} />
+                    </td>
+                    <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      {isDraft ? (
+                        <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleConfirm(r)}
+                            title="Confirm return & apply stock movement"
+                            style={{
+                              padding: '0.25rem 0.5rem',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              borderRadius: '6px',
+                              border: '1px solid #bbf7d0',
+                              backgroundColor: '#f0fdf4',
+                              color: '#16a34a',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.2rem'
+                            }}
+                          >
+                            <Check size={12} />
+                            <span>Confirm</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCancel(r)}
+                            title="Cancel return"
+                            style={{
+                              padding: '0.25rem 0.5rem',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              borderRadius: '6px',
+                              border: '1px solid #fecaca',
+                              backgroundColor: '#fef2f2',
+                              color: '#dc2626',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.2rem'
+                            }}
+                          >
+                            <X size={12} />
+                            <span>Cancel</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 500 }}>Completed</span>
+                      )}
+                    </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        ) : (
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '950px', fontSize: '0.785rem' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '130px' }}>Return Note</th>
-                <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '100px' }}>Date</th>
-                <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '160px' }}>Customer</th>
-                <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '140px' }}>Inv / Challan</th>
-                <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '120px' }}>SKU</th>
-                <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '200px' }}>Product Name</th>
-                <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '90px' }}>Qty</th>
-                <th style={{ padding: '0.6rem 0.5rem', textAlign: 'center', minWidth: '90px' }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b' }}>Loading sales returns...</td></tr>
-              ) : salesReturns.length === 0 ? (
-                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b' }}>No sales returns.</td></tr>
-              ) : (
-                salesReturns.map(r => (
-                  <tr key={r.id || r._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>{r.returnNoteNumber}</td>
-                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', color: '#475569', whiteSpace: 'nowrap' }}>{formatDate(r.date)}</td>
-                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>{r.customerName}</td>
-                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', color: '#64748b', whiteSpace: 'nowrap' }}>{r.invoiceNumber || r.challanNumber}</td>
-                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', fontFamily: 'monospace', fontWeight: 600, whiteSpace: 'nowrap' }}>{r.sku}</td>
-                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', color: '#334155', whiteSpace: 'nowrap' }}>{r.productName}</td>
-                    <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: '#dc2626', textAlign: 'center', whiteSpace: 'nowrap' }}>{r.quantity} {r.unit}</td>
-                    <td style={{ padding: '0.6rem 0.5rem', textAlign: 'center', whiteSpace: 'nowrap' }}><StatusBadge status={r.status} /></td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        )}
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

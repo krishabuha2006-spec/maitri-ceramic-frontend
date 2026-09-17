@@ -84,7 +84,23 @@ export const Dashboard = () => {
     fetchDashboardData();
   }, []);
 
-  if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading Business Overview...</div>;
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '55vh',
+        gap: '1.25rem'
+      }}>
+        <div className="spinner-circle" />
+        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#475569', letterSpacing: '0.01em' }}>
+          Loading Business Overview...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
