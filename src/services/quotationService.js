@@ -340,20 +340,8 @@ export const createQuotation = async (quotationData) => {
     saveStoredQuotations([created, ...current]);
     return created;
   } catch (err) {
-    const serverErr = err?.response?.data?.message || err?.response?.data?.error || err.message;
-    console.warn('POST /quotations server response:', serverErr);
-    
-    const fallback = normalizeQuotation({
-      ...quotationData,
-      id: `QT-${Date.now()}`,
-      quotationNumber: quotationData.quotationNumber || `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      formatKey: formatKey,
-      validity: quotationData.validity || '15 Days',
-      createdAt: new Date().toISOString()
-    });
-    const current = getStoredQuotations();
-    saveStoredQuotations([fallback, ...current]);
-    return fallback;
+    const serverErr = err?.response?.data?.message || err?.response?.data?.error || err.message || 'Failed to create quotation on live backend.';
+    throw new Error(serverErr);
   }
 };
 

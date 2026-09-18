@@ -12,15 +12,14 @@ const api = axios.create({
   timeout: 30000
 });
 
-// Utility to check if a valid 3-part JWT token (header.payload.signature) is stored
+// Utility to check if a valid auth token is stored
 export const hasRealJwtToken = () => {
   try {
     const token = localStorage.getItem('maitri_auth_token');
     if (!token || token === 'null' || token === 'undefined' || token === 'maitri_active_session_token_2026' || token === 'fallback-jwt-token') {
       return false;
     }
-    const parts = token.split('.');
-    return parts.length === 3;
+    return token.trim().length > 10;
   } catch (err) {
     return false;
   }

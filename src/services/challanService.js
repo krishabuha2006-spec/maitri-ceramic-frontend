@@ -107,7 +107,7 @@ export const getChallans = async (params = {}) => {
     const queryParams = { limit: 100, page: 1, ...params };
     const res = await api.get('/challans', { params: queryParams });
     const rawList = extractArray(res.data, ['challans', 'records', 'items', 'data']);
-    if (Array.isArray(rawList) && rawList.length > 0) {
+    if (Array.isArray(rawList)) {
       const normalized = rawList.map(normalizeChallan);
       return { data: normalized, total: res.data?.total || res.data?.data?.pagination?.total || normalized.length, isLive: true };
     }
@@ -115,36 +115,16 @@ export const getChallans = async (params = {}) => {
     console.warn('GET /challans notice:', err?.response?.data || err.message);
   }
 
-  let list = [...MOCK_CHALLANS];
-  if (params.status && params.status !== 'ALL') {
-    list = list.filter(c => (c.status || '').toUpperCase() === params.status.toUpperCase());
-  }
-  if (params.search) {
-    const q = params.search.toLowerCase();
-    list = list.filter(c => 
-      (c.challanNumber || '').toLowerCase().includes(q) ||
-      (c.customerName || '').toLowerCase().includes(q) ||
-      (c.deliveryDetails || '').toLowerCase().includes(q) ||
-      (c.refQuotationNo || '').toLowerCase().includes(q)
-    );
-  }
-
-  return { data: list.map(normalizeChallan), total: list.length, isLive: false };
+  return { data: [], total: 0, isLive: false };
 };
 
 /**
  * 2. GET /challans/{id} - Get single Challan details by ID
  */
 export const getChallanById = async (id) => {
-  try {
-    const res = await api.get(`/challans/${id}`);
-    const raw = res.data?.data?.challan || res.data?.data || res.data;
-    if (raw) return normalizeChallan(raw);
-  } catch (err) {
-    console.warn(`GET /challans/${id} notice:`, err?.response?.data || err.message);
-  }
-  const ch = MOCK_CHALLANS.find(c => c.id === id || c._id === id || c.challanNumber === id);
-  if (ch) return normalizeChallan(ch);
+  const res = await api.get(`/challans/${id}`);
+  const raw = res.data?.data?.challan || res.data?.data || res.data;
+  if (raw) return normalizeChallan(raw);
   throw new Error('Challan not found');
 };
 
@@ -153,24 +133,9 @@ export const getChallanById = async (id) => {
  * Body: { confirmationId, deliveryDetails, remarks, items: [{ confirmedItemId, quantityToIssue, remarks }] }
  */
 export const createChallan = async (challanData) => {
-  try {
-    const res = await api.post('/challans', challanData);
-    const created = normalizeChallan(res.data?.data?.challan || res.data?.data || res.data);
-    return created;
-  } catch (err) {
-    console.warn('POST /challans notice:', err?.response?.data || err.message);
-    const fallback = normalizeChallan({
-      id: `CH-2026-${Date.now().toString().slice(-4)}`,
-      _id: `6aa9${Date.now().toString().slice(-18)}`,
-      challanNumber: challanData.challanNumber || `CH-2026-${Date.now().toString().slice(-4)}`,
-      date: challanData.date || new Date().toISOString().split('T')[0],
-      status: 'DRAFT',
-      isFinalized: false,
-      ...challanData
-    });
-    MOCK_CHALLANS.unshift(fallback);
-    return fallback;
-  }
+  const res = await api.post('/challans', challanData);
+  const created = normalizeChallan(res.data?.data?.challan || res.data?.data || res.data);
+  return created;
 };
 
 /**

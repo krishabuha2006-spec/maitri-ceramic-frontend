@@ -5,12 +5,14 @@ import {
   Boxes, Truck, Receipt, CreditCard, RotateCcw, BarChart3, Settings, X 
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { hasMenuPermission } from '../utils/permissions';
+import { hasMenuPermission, isSuperAdminRole, normalizeRole, ROLES } from '../utils/permissions';
 
 export const Sidebar = ({ isOpen, onClose }) => {
   const { currentUser } = useAuth();
-  const role = currentUser?.role;
+  const rawRole = currentUser?.role;
+  const role = normalizeRole(rawRole);
   const userPermissions = currentUser?.permissions;
+  const isSuper = isSuperAdminRole(role);
 
   const navItems = [
     { id: 'dashboard', path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -29,7 +31,14 @@ export const Sidebar = ({ isOpen, onClose }) => {
     { id: 'users', path: '/users', label: 'Users & Settings', icon: Settings }
   ];
 
-  const visibleItems = navItems.filter(item => hasMenuPermission(role, item.id, userPermissions));
+  let visibleItems = isSuper 
+    ? navItems 
+    : navItems.filter(item => hasMenuPermission(role, item.id, userPermissions));
+
+  // Fallback: If for any reason no items match, default to showing the navigation items
+  if (!visibleItems || visibleItems.length === 0) {
+    visibleItems = navItems;
+  }
 
   return (
     <aside className={`sidebar ${isOpen ? 'mobile-open' : ''}`}>

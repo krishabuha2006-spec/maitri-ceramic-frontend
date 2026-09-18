@@ -9,6 +9,19 @@ import { formatCurrency, formatDate } from '../utils/formatters';
 import StatusBadge from '../components/StatusBadge';
 import { ArrowLeft, Edit, Phone, Mail, MapPin, FileCheck } from 'lucide-react';
 
+const getSafeMode = (val, fallback = 'Bank Transfer') => {
+  if (!val) return fallback;
+  if (typeof val === 'string') return val;
+  if (typeof val === 'number') return String(val);
+  if (typeof val === 'object') {
+    if (typeof val.modeName === 'string') return val.modeName;
+    if (typeof val.modeName === 'object' && val.modeName !== null) return getSafeMode(val.modeName, fallback);
+    if (typeof val.name === 'string') return val.name;
+    if (typeof val.mode === 'string') return val.mode;
+  }
+  return fallback;
+};
+
 export const CustomerDetails = () => {
   const { id } = useParams();
   const [customer, setCustomer] = useState(null);
@@ -71,7 +84,7 @@ export const CustomerDetails = () => {
   payments.forEach(pmt => {
     ledgerEntries.push({
       date: pmt.date,
-      particular: `Payment Received #${pmt.receiptNumber} (${pmt.paymentMode})`,
+      particular: `Payment Received #${pmt.receiptNumber} (${getSafeMode(pmt.paymentMode)})`,
       debit: 0,
       credit: pmt.amount
     });
@@ -346,7 +359,9 @@ export const CustomerDetails = () => {
                     <td style={{ fontWeight: 600 }}>{p.receiptNumber}</td>
                     <td>{formatDate(p.date)}</td>
                     <td>{p.invoiceNumber}</td>
-                    <td>{p.paymentMode}</td>
+                    <td>
+                      {getSafeMode(p.paymentMode)}
+                    </td>
                     <td style={{ fontWeight: 600, color: '#16a34a' }}>{formatCurrency(p.amount)}</td>
                     <td>{p.referenceNumber || '-'}</td>
                   </tr>

@@ -64,7 +64,7 @@ export const getCustomers = async (params = {}) => {
     const res = await api.get('/customers', { params: queryParams });
     const rawList = extractArray(res.data, ['customers', 'customerList', 'records', 'data']);
     
-    if (Array.isArray(rawList) && rawList.length > 0) {
+    if (Array.isArray(rawList)) {
       const normalized = rawList.map(normalizeCustomer);
       saveStoredCustomers(normalized);
       return { 
@@ -78,7 +78,7 @@ export const getCustomers = async (params = {}) => {
     console.warn('API /customers call failed, relying on local storage cache:', err.message);
   }
 
-  // Local storage fallback with client filtering
+  // Local storage fallback only if server call failed completely
   let list = getStoredCustomers().map(normalizeCustomer);
   
   if (params.search) {
@@ -142,7 +142,7 @@ export const createCustomer = async (customerData) => {
     const data = res.data?.data;
     const created = normalizeCustomer(data?.customer || data || payload);
 
-    // Save into local storage
+    // Save into local storage cache
     const current = getStoredCustomers();
     current.unshift(created);
     saveStoredCustomers(current);
@@ -152,27 +152,8 @@ export const createCustomer = async (customerData) => {
       duplicateWarning: data?.duplicateWarning || null
     };
   } catch (err) {
-    console.warn('POST /customers API error, creating locally:', err.message);
-    const newCust = normalizeCustomer({
-      id: `CUST-00${getStoredCustomers().length + 1}`,
-      name: customerData.name || customerData.customerName,
-      ...customerData,
-      totalSales: 0,
-      totalInvoiced: 0,
-      totalPaid: 0,
-      totalOutstanding: 0,
-      credit: 0,
-      debit: 0,
-      isActive: true,
-      status: 'Active',
-      createdAt: new Date().toISOString().split('T')[0]
-    });
-
-    const current = getStoredCustomers();
-    current.unshift(newCust);
-    saveStoredCustomers(current);
-
-    return { customer: newCust, duplicateWarning: null };
+    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to create customer.';
+    throw new Error(serverMsg);
   }
 };
 
@@ -205,15 +186,8 @@ export const updateCustomer = async (id, customerData) => {
 
     return updated;
   } catch (err) {
-    console.warn(`PUT /customers/${id} API error, updating locally:`, err.message);
-    const current = getStoredCustomers();
-    const idx = current.findIndex(c => String(c.id) === String(id) || String(c._id) === String(id));
-    if (idx !== -1) {
-      current[idx] = normalizeCustomer({ ...current[idx], ...customerData });
-      saveStoredCustomers(current);
-      return current[idx];
-    }
-    throw new Error('Customer not found');
+    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to update customer.';
+    throw new Error(serverMsg);
   }
 };
 
@@ -222,7 +196,8 @@ export const deleteCustomer = async (id) => {
   try {
     await api.delete(`/customers/${id}`);
   } catch (err) {
-    console.warn(`DELETE /customers/${id} API notice:`, err.message);
+    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to delete customer.';
+    throw new Error(serverMsg);
   }
   
   const current = getStoredCustomers().filter(c => String(c.id) !== String(id) && String(c._id) !== String(id));

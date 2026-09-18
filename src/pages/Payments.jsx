@@ -4,6 +4,21 @@ import { getPayments } from '../services/paymentService';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { Plus, Search, Eye, Printer, CreditCard, RefreshCw } from 'lucide-react';
 
+const renderSafeText = (val, fallback = '') => {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'string') return val;
+  if (typeof val === 'number') return String(val);
+  if (typeof val === 'object') {
+    if (typeof val.modeName === 'string') return val.modeName;
+    if (typeof val.modeName === 'object' && val.modeName !== null) return renderSafeText(val.modeName, fallback);
+    if (typeof val.name === 'string') return val.name;
+    if (typeof val.customerName === 'string') return val.customerName;
+    if (typeof val.mode === 'string') return val.mode;
+    return fallback;
+  }
+  return String(val);
+};
+
 export const Payments = () => {
   const [payments, setPayments] = useState([]);
   const [search, setSearch] = useState('');
@@ -104,7 +119,9 @@ export const Payments = () => {
                   <td>{p.customerName}</td>
                   <td>{p.invoiceNumber}</td>
                   <td>
-                    <span className="badge badge-info">{p.paymentMode}</span>
+                    <span className="badge badge-info">
+                      {renderSafeText(p.paymentMode, 'Bank Transfer')}
+                    </span>
                   </td>
                   <td style={{ fontWeight: 700, color: '#16a34a' }}>{formatCurrency(p.amount)}</td>
                   <td style={{ fontSize: '0.825rem', color: '#64748b' }}>{p.referenceNumber || '-'}</td>

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import authService from '../services/authService';
-import { ROLES, DEFAULT_ROLE_PERMISSIONS, normalizePermissions } from '../utils/permissions';
+import { ROLES, DEFAULT_ROLE_PERMISSIONS, normalizePermissions, normalizeRole, isSuperAdminRole } from '../utils/permissions';
 
 export const AuthContext = createContext(null);
 
@@ -20,12 +20,18 @@ export const AuthProvider = ({ children }) => {
       try {
         const parsed = JSON.parse(saved);
         if (parsed) {
-          let customPerms = null;
-          try {
-            const c = localStorage.getItem(`maitri_user_perms_${parsed.id}`);
-            if (c) customPerms = JSON.parse(c);
-          } catch (e) {}
-          parsed.permissions = normalizePermissions(customPerms || parsed.permissions, parsed.role);
+          const role = normalizeRole(parsed.role);
+          parsed.role = role;
+          if (isSuperAdminRole(role)) {
+            parsed.permissions = normalizePermissions(null, role, true);
+          } else {
+            let customPerms = null;
+            try {
+              const c = localStorage.getItem(`maitri_user_perms_${parsed.id}`);
+              if (c) customPerms = JSON.parse(c);
+            } catch (e) {}
+            parsed.permissions = normalizePermissions(customPerms || parsed.permissions, role, true);
+          }
         }
         return parsed;
       } catch (e) {
@@ -43,11 +49,13 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         try {
           const res = await authService.getMe();
-          if (res?.success !== false) {
-            const meData = res?.data || res;
-            const u = meData?.user || meData;
+          const meData = res?.data || res;
+          const u = meData?.user || (res?.user) || (res?.success !== false && meData?._id ? meData : null);
+
+          if (res && res.success !== false && u && (u._id || u.id || u.email || u.userName)) {
             const roleObj = u?.role;
-            const roleName = (typeof roleObj === 'object' ? (roleObj?.roleName || roleObj?.name) : roleObj) || ROLES.SUPER_ADMIN;
+            const rawRole = (typeof roleObj === 'object' ? (roleObj?.roleName || roleObj?.name) : roleObj) || ROLES.SUPER_ADMIN;
+            const roleName = normalizeRole(rawRole);
             const userId = u?._id || u?.id;
 
             let customPerms = null;
@@ -60,11 +68,11 @@ export const AuthProvider = ({ children }) => {
             } catch (e) {}
 
             const rawPerms = customPerms || meData?.permissions || u?.permissions;
-            const effectivePerms = normalizePermissions(rawPerms, roleName, !rawPerms);
+            const effectivePerms = normalizePermissions(rawPerms, roleName, true);
 
             const userObj = {
               id: userId,
-              name: u?.name || u?.userName || 'Staff User',
+              name: u?.name || u?.userName || u?.fullName || 'Super Admin',
               email: u?.email || '',
               mobile: u?.mobile || '',
               role: roleName,
@@ -153,7 +161,8 @@ export const AuthProvider = ({ children }) => {
       }
 
       const roleObj = userRaw?.role;
-      const roleName = (typeof roleObj === 'object' ? (roleObj?.roleName || roleObj?.name) : roleObj) || ROLES.SUPER_ADMIN;
+      const rawRole = (typeof roleObj === 'object' ? (roleObj?.roleName || roleObj?.name) : roleObj) || ROLES.SUPER_ADMIN;
+      const roleName = normalizeRole(rawRole);
       const userId = userRaw?._id || userRaw?.id;
 
       let customPerms = null;
@@ -166,7 +175,7 @@ export const AuthProvider = ({ children }) => {
       } catch (e) {}
 
       const rawPerms = customPerms || userRaw?.permissions || roleObj?.permissions;
-      const effectivePerms = normalizePermissions(rawPerms, roleName, !rawPerms);
+      const effectivePerms = normalizePermissions(rawPerms, roleName, true);
 
       const userObj = {
         id: userId,

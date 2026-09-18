@@ -72,7 +72,7 @@ export const getStockEntries = async (params = {}) => {
     const queryParams = { limit: 100, page: 1, ...params };
     const res = await api.get('/stock/entries', { params: queryParams });
     const rawList = extractArray(res.data, ['entries', 'records', 'items', 'data']);
-    if (Array.isArray(rawList) && rawList.length > 0) {
+    if (Array.isArray(rawList)) {
       return { 
         data: rawList.map(normalizeStockEntry), 
         total: res.data?.total || res.data?.data?.pagination?.total || rawList.length, 
@@ -83,7 +83,7 @@ export const getStockEntries = async (params = {}) => {
     console.warn('GET /stock/entries notice:', err?.response?.data || err.message);
   }
 
-  // Filter local entries
+  // Filter local entries only if server call completely failed
   let list = [...MOCK_STOCK_ENTRIES];
   if (params.direction) {
     list = list.filter(e => e.direction === params.direction || (params.direction === 'IN' && e.type === 'Stock In') || (params.direction === 'OUT' && e.type === 'Stock Out'));
@@ -115,15 +115,9 @@ export const createStockInEntry = async (entryData) => {
     remarks: entryData.remarks || entryData.notes || ''
   };
 
-  try {
-    const res = await api.post('/stock/entries/in', payload);
-    return res.data?.data || res.data;
-  } catch (err) {
-    console.warn('POST /stock/entries/in notice:', err?.response?.data || err.message);
-    const mock = normalizeStockEntry({ ...entryData, type: 'Stock In', direction: 'IN' });
-    MOCK_STOCK_ENTRIES.unshift(mock);
-    return mock;
-  }
+  const res = await api.post('/stock/entries/in', payload);
+  const created = res.data?.data || res.data;
+  return normalizeStockEntry(created);
 };
 
 /**
@@ -140,15 +134,9 @@ export const createStockOutEntry = async (entryData) => {
     allowNegative: Boolean(entryData.allowNegative || false)
   };
 
-  try {
-    const res = await api.post('/stock/entries/out', payload);
-    return res.data?.data || res.data;
-  } catch (err) {
-    console.warn('POST /stock/entries/out notice:', err?.response?.data || err.message);
-    const mock = normalizeStockEntry({ ...entryData, type: 'Stock Out', direction: 'OUT' });
-    MOCK_STOCK_ENTRIES.unshift(mock);
-    return mock;
-  }
+  const res = await api.post('/stock/entries/out', payload);
+  const created = res.data?.data || res.data;
+  return normalizeStockEntry(created);
 };
 
 /**

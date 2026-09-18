@@ -78,7 +78,7 @@ export const getProducts = async (params = {}) => {
     const queryParams = { limit: 1000, page: 1, ...params };
     const res = await api.get('/products', { params: queryParams });
     const rawList = extractArray(res.data, ['products', 'data', 'items', 'list']);
-    if (Array.isArray(rawList) && rawList.length > 0) {
+    if (Array.isArray(rawList)) {
       const normalized = rawList
         .map(normalizeProduct)
         .filter(p => !deleted.includes(String(p.id)) && !deleted.includes(String(p.sku)));
@@ -173,11 +173,8 @@ export const createProduct = async (productData) => {
 
     return normalized;
   } catch (err) {
-    const stored = getStoredProducts();
-    stored.unshift(localProduct);
-    saveStoredProducts(stored);
-
-    return localProduct;
+    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to create product.';
+    throw new Error(serverMsg);
   }
 };
 
@@ -216,19 +213,8 @@ export const updateProduct = async (id, productData) => {
 
     return normalized;
   } catch (err) {
-    const stored = getStoredProducts();
-    const fallbackPrd = normalizeProduct({ id, _id: id, ...productData, ...cleanPayload });
-
-    const idx = stored.findIndex(p => String(p.id) === String(id) || String(p._id) === String(id));
-    if (idx !== -1) {
-      stored[idx] = { ...stored[idx], ...fallbackPrd };
-      saveStoredProducts(stored);
-      return stored[idx];
-    } else {
-      stored.unshift(fallbackPrd);
-      saveStoredProducts(stored);
-      return fallbackPrd;
-    }
+    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to update product.';
+    throw new Error(serverMsg);
   }
 };
 
@@ -347,7 +333,7 @@ export const getCompanies = async () => {
   try {
     const res = await api.get('/companies');
     const rawList = extractArray(res.data, ['companies', 'companyList', 'data']);
-    if (Array.isArray(rawList) && rawList.length > 0) {
+    if (Array.isArray(rawList)) {
       return rawList
         .map(c => ({
           id: c._id || c.id,
@@ -377,8 +363,7 @@ export const getCompanyById = async (id) => {
 };
 
 export const createCompany = async (data) => {
-  const newComp = {
-    id: `CMP-${Date.now()}`,
+  const payload = {
     companyName: data.companyName || data.name,
     code: data.code || '',
     isOwnCompany: !!data.isOwnCompany,
@@ -386,20 +371,14 @@ export const createCompany = async (data) => {
   };
 
   try {
-    const payload = {
-      companyName: data.companyName || data.name,
-      code: data.code || '',
-      isOwnCompany: !!data.isOwnCompany,
-      status: data.status || 'Active'
-    };
     const res = await api.post('/companies', payload);
     const created = res.data?.data || res.data;
     const finalComp = {
-      id: created._id || created.id || newComp.id,
-      companyName: created.companyName || created.name || newComp.companyName,
-      code: created.code || newComp.code,
-      isOwnCompany: created.isOwnCompany !== undefined ? created.isOwnCompany : newComp.isOwnCompany,
-      status: created.status || newComp.status
+      id: created._id || created.id,
+      companyName: created.companyName || created.name || payload.companyName,
+      code: created.code || payload.code,
+      isOwnCompany: created.isOwnCompany !== undefined ? created.isOwnCompany : payload.isOwnCompany,
+      status: created.status || payload.status
     };
 
     const currentList = getStoredCompanies();
@@ -407,10 +386,8 @@ export const createCompany = async (data) => {
     saveStoredCompanies(currentList);
     return finalComp;
   } catch (err) {
-    const currentList = getStoredCompanies();
-    currentList.push(newComp);
-    saveStoredCompanies(currentList);
-    return newComp;
+    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to create company.';
+    throw new Error(serverMsg);
   }
 };
 
@@ -515,7 +492,7 @@ export const getProductGroups = async () => {
   try {
     const res = await api.get('/product-groups');
     const rawList = extractArray(res.data, ['productGroups', 'product_groups', 'groups', 'categories', 'data', 'items', 'list']);
-    if (Array.isArray(rawList) && rawList.length > 0) {
+    if (Array.isArray(rawList)) {
       const normalized = rawList.map(normalizeProductGroup).filter(g => !deleted.includes(String(g.id)) && !deleted.includes(String(g.groupName)));
       return normalized;
     }
@@ -526,15 +503,6 @@ export const getProductGroups = async () => {
 };
 
 export const createProductGroup = async (data) => {
-  const newGroup = normalizeProductGroup({
-    id: `PG-${Date.now()}`,
-    groupName: data.groupName || data.name,
-    groupCode: data.groupCode || data.code || '',
-    description: data.description || '',
-    parentGroup: data.parentGroup || '',
-    status: data.status || 'Active'
-  });
-
   try {
     const payload = {
       groupName: data.groupName || data.name,
@@ -559,10 +527,8 @@ export const createProductGroup = async (data) => {
     saveStoredProductGroups(currentList);
     return finalGroup;
   } catch (err) {
-    const currentList = getStoredProductGroups();
-    currentList.push(newGroup);
-    saveStoredProductGroups(currentList);
-    return newGroup;
+    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to create product group.';
+    throw new Error(serverMsg);
   }
 };
 

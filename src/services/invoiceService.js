@@ -92,7 +92,7 @@ export const getInvoices = async (params = {}) => {
     const queryParams = { limit: 200, page: 1, ...params };
     const res = await api.get('/invoices', { params: queryParams });
     const rawList = extractArray(res.data, ['invoices', 'records', 'data']);
-    if (Array.isArray(rawList) && rawList.length > 0) {
+    if (Array.isArray(rawList)) {
       const normalized = rawList.map(normalizeInvoice);
       return { data: normalized, total: res.data?.data?.pagination?.total || normalized.length, isLive: true };
     }
@@ -100,7 +100,7 @@ export const getInvoices = async (params = {}) => {
     console.warn('GET /invoices notice:', err?.response?.data || err.message);
   }
 
-  return { data: MOCK_INVOICES.map(normalizeInvoice), total: MOCK_INVOICES.length, isLive: false };
+  return { data: [], total: 0, isLive: false };
 };
 
 /**
@@ -121,20 +121,9 @@ export const getInvoiceableChallans = async () => {
  * 3. POST /invoices - Generate customer Tax Invoice from Challans
  */
 export const createInvoice = async (invoiceData) => {
-  try {
-    const res = await api.post('/invoices', invoiceData);
-    const created = normalizeInvoice(res.data?.data?.invoice || res.data?.data || res.data);
-    return created;
-  } catch (err) {
-    console.warn('POST /invoices notice:', err?.response?.data || err.message);
-    const fallback = normalizeInvoice({
-      id: `INV-2026-${Date.now().toString().slice(-4)}`,
-      date: new Date().toISOString().split('T')[0],
-      ...invoiceData
-    });
-    MOCK_INVOICES.unshift(fallback);
-    return fallback;
-  }
+  const res = await api.post('/invoices', invoiceData);
+  const created = normalizeInvoice(res.data?.data?.invoice || res.data?.data || res.data);
+  return created;
 };
 
 /**

@@ -3,7 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import AccessDenied from './components/AccessDenied';
-import { ROLES, canView, canCreate, canEdit } from './utils/permissions';
+import ErrorBoundary from './components/ErrorBoundary';
+import { ROLES, canView, canCreate, canEdit, isSuperAdminRole } from './utils/permissions';
 
 // Pages
 import Login from './pages/Login';
@@ -53,7 +54,7 @@ const PermissionRoute = ({ moduleId, action = 'view', children }) => {
   }
 
   // Super Admin has full unrestricted access
-  if (currentUser.role === ROLES.SUPER_ADMIN) {
+  if (isSuperAdminRole(currentUser.role)) {
     return children;
   }
 
@@ -76,9 +77,10 @@ const PermissionRoute = ({ moduleId, action = 'view', children }) => {
 export function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
+      <ErrorBoundary>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
           
           <Route path="/" element={
             <ProtectedRoute>
@@ -270,8 +272,9 @@ export function App() {
           </Route>
         </Routes>
       </BrowserRouter>
-    </AuthProvider>
-  );
+    </ErrorBoundary>
+  </AuthProvider>
+);
 }
 
 export default App;

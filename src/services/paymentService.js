@@ -23,25 +23,53 @@ let MOCK_PAYMENTS = [
   }
 ];
 
+const extractSafeString = (val, fallback = '') => {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'string') return val;
+  if (typeof val === 'number') return String(val);
+  if (typeof val === 'object') {
+    if (typeof val.modeName === 'string') return val.modeName;
+    if (typeof val.modeName === 'object' && val.modeName !== null) return extractSafeString(val.modeName, fallback);
+    if (typeof val.name === 'string') return val.name;
+    if (typeof val.customerName === 'string') return val.customerName;
+    if (typeof val.accountName === 'string') return val.accountName;
+    if (typeof val.bankName === 'string') return val.bankName;
+    if (typeof val.mode === 'string') return val.mode;
+    if (typeof val.invoiceNumber === 'string') return val.invoiceNumber;
+    if (typeof val.invoiceNo === 'string') return val.invoiceNo;
+    if (typeof val.receiptNumber === 'string') return val.receiptNumber;
+    if (typeof val.referenceNumber === 'string') return val.referenceNumber;
+    return fallback;
+  }
+  return String(val);
+};
+
 export const normalizePayment = (p) => {
   if (!p) return null;
   const cust = p.customer || {};
   const amt = Number(p.amountReceived || p.amount || 0);
 
+  const paymentMode = extractSafeString(p.paymentMode, 'Bank Transfer');
+  const bankAccount = extractSafeString(p.bankAccount || p.depositedAccount, 'Current Account');
+  const customerName = extractSafeString(cust) || extractSafeString(p.customerName) || 'Customer';
+  const invoiceNumber = extractSafeString(p.invoiceNumber || (p.allocations && p.allocations[0]?.invoiceNumber) || p.invoice, '-');
+  const receiptNumber = extractSafeString(p.receiptNumber || p.paymentNumber || (p._id ? `RCT-${p._id.slice(-6).toUpperCase()}` : 'RCT-2026'), 'RCT-2026');
+  const referenceNumber = extractSafeString(p.referenceNumber || p.transactionReference, '-');
+
   return {
-    id: p._id || p.id || `RCT-${Date.now()}`,
-    _id: p._id || p.id,
-    receiptNumber: p.receiptNumber || p.paymentNumber || (p._id ? `RCT-${p._id.slice(-6).toUpperCase()}` : 'RCT-2026'),
-    date: p.paymentDate ? p.paymentDate.split('T')[0] : (p.date || new Date().toISOString().split('T')[0]),
-    customerId: cust._id || cust.id || p.customerId || '',
-    customerName: cust.customerName || p.customerName || 'Customer',
-    invoiceNumber: p.invoiceNumber || (p.allocations && p.allocations[0]?.invoiceNumber) || '-',
-    paymentMode: p.paymentMode || 'Bank Transfer',
+    id: String(p._id || p.id || `RCT-${Date.now()}`),
+    _id: String(p._id || p.id || ''),
+    receiptNumber,
+    date: p.paymentDate ? String(p.paymentDate).split('T')[0] : (p.date ? String(p.date).split('T')[0] : new Date().toISOString().split('T')[0]),
+    customerId: String(cust._id || cust.id || p.customerId || ''),
+    customerName,
+    invoiceNumber,
+    paymentMode,
     amount: amt,
-    referenceNumber: p.referenceNumber || p.transactionReference || '-',
-    bankAccount: p.bankAccount || p.depositedAccount || 'Current Account',
-    remarks: p.remarks || p.notes || '',
-    status: p.status || (p.isReversed ? 'REVERSED' : 'ACTIVE'),
+    referenceNumber,
+    bankAccount,
+    remarks: typeof p.remarks === 'string' ? p.remarks : (typeof p.notes === 'string' ? p.notes : ''),
+    status: typeof p.status === 'string' ? p.status : (p.isReversed ? 'REVERSED' : 'ACTIVE'),
     amountInWords: p.amountInWords || numberToWords(amt),
     allocations: Array.isArray(p.allocations) ? p.allocations : []
   };
@@ -55,7 +83,7 @@ export const getPayments = async (params = {}) => {
     const queryParams = { limit: 200, page: 1, ...params };
     const res = await api.get('/payments', { params: queryParams });
     const rawList = extractArray(res.data, ['payments', 'records', 'data']);
-    if (Array.isArray(rawList) && rawList.length > 0) {
+    if (Array.isArray(rawList)) {
       const normalized = rawList.map(normalizePayment);
       return { data: normalized, total: res.data?.data?.pagination?.total || normalized.length, isLive: true };
     }
@@ -63,22 +91,16 @@ export const getPayments = async (params = {}) => {
     console.warn('GET /payments notice:', err?.response?.data || err.message);
   }
 
-  return { data: MOCK_PAYMENTS.map(normalizePayment), total: MOCK_PAYMENTS.length, isLive: false };
+  return { data: [], total: 0, isLive: false };
 };
 
 /**
  * 2. GET /payments/{id} - Get single payment
  */
 export const getPaymentById = async (id) => {
-  try {
-    const res = await api.get(`/payments/${id}`);
-    const raw = res.data?.data?.payment || res.data?.data || res.data;
-    if (raw) return normalizePayment(raw);
-  } catch (err) {
-    console.warn('GET /payments/:id notice:', err?.response?.data || err.message);
-  }
-  const pmt = MOCK_PAYMENTS.find(p => p.id === id || p._id === id || p.receiptNumber === id);
-  if (pmt) return normalizePayment(pmt);
+  const res = await api.get(`/payments/${id}`);
+  const raw = res.data?.data?.payment || res.data?.data || res.data;
+  if (raw) return normalizePayment(raw);
   throw new Error('Receipt not found');
 };
 
@@ -98,21 +120,9 @@ export const createPayment = async (paymentData) => {
     allocations: paymentData.allocations || []
   };
 
-  try {
-    const res = await api.post('/payments', payload);
-    const created = normalizePayment(res.data?.data?.payment || res.data?.data || res.data);
-    return created;
-  } catch (err) {
-    console.warn('POST /payments notice:', err?.response?.data || err.message);
-    const fallback = normalizePayment({
-      id: `RCT-2026-${Date.now().toString().slice(-4)}`,
-      date: new Date().toISOString().split('T')[0],
-      amount: amt,
-      ...paymentData
-    });
-    MOCK_PAYMENTS.unshift(fallback);
-    return fallback;
-  }
+  const res = await api.post('/payments', payload);
+  const created = normalizePayment(res.data?.data?.payment || res.data?.data || res.data);
+  return created;
 };
 
 /**

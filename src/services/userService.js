@@ -1,5 +1,5 @@
 import api, { extractArray } from './api';
-import { ROLES, DEFAULT_ROLE_PERMISSIONS, normalizePermissions } from '../utils/permissions';
+import { ROLES, DEFAULT_ROLE_PERMISSIONS, normalizePermissions, normalizeRole, isSuperAdminRole } from '../utils/permissions';
 
 const STORAGE_KEY = 'maitri_local_users';
 
@@ -51,7 +51,8 @@ const saveStoredUsers = (usersList) => {
 };
 
 export const normalizeUser = (u) => {
-  const roleName = u.role?.roleName || u.role?.name || (typeof u.role === 'string' ? u.role : null) || ROLES.SALES_EXECUTIVE;
+  const rawRole = u.role?.roleName || u.role?.name || (typeof u.role === 'string' ? u.role : null) || ROLES.SALES_EXECUTIVE;
+  const roleName = normalizeRole(rawRole);
   const userId = u._id || u.id || `USR-${Math.floor(Math.random() * 10000)}`;
 
   let savedPerms = null;
@@ -64,7 +65,7 @@ export const normalizeUser = (u) => {
   } catch (err) {}
 
   const rawPerms = savedPerms || u.permissions;
-  const effectivePermissions = normalizePermissions(rawPerms, roleName, false);
+  const effectivePermissions = normalizePermissions(rawPerms, roleName, true);
 
   const formatLastLogin = (dateVal) => {
     if (!dateVal) return 'Never';

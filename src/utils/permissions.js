@@ -1,6 +1,4 @@
 // Role-Based Access Control logic & User-wise Permissions for Maitri Ceramic System
-import { useContext } from 'react';
-import { AuthContext } from '../context/AuthContext';
 
 export const ROLES = {
   SUPER_ADMIN: 'Super Admin',
@@ -142,20 +140,61 @@ export const MENU_PERMISSIONS = {
   [ROLES.CUSTOM]: []
 };
 
+export const isSuperAdminRole = (role) => {
+  if (!role) return false;
+  if (typeof role === 'object') {
+    role = role.roleName || role.name || role.role || '';
+  }
+  const clean = String(role).trim().toLowerCase().replace(/[\s_-]+/g, '');
+  return clean === 'superadmin' || clean === 'admin' || clean === 'owner' || clean === 'master' || role === ROLES.SUPER_ADMIN;
+};
+
+export const normalizeRole = (role) => {
+  if (!role) return ROLES.SUPER_ADMIN;
+  if (typeof role === 'object') {
+    role = role.roleName || role.name || role.role || '';
+  }
+  const clean = String(role).trim().toLowerCase().replace(/[\s_-]+/g, '');
+  if (clean === 'superadmin' || clean === 'admin' || clean === 'owner' || clean === 'master' || clean === 'super_admin') {
+    return ROLES.SUPER_ADMIN;
+  }
+  if (clean === 'salesmanager') return ROLES.SALES_MANAGER;
+  if (clean === 'salesexecutive' || clean === 'sales') return ROLES.SALES_EXECUTIVE;
+  if (clean === 'inventoryuser' || clean === 'inventory') return ROLES.INVENTORY_USER;
+  if (clean === 'accountsuser' || clean === 'accounts' || clean === 'accountant') return ROLES.ACCOUNTS_USER;
+  if (clean === 'custom' || clean === 'custompermissions') return ROLES.CUSTOM;
+  return role;
+};
+
 /**
  * Normalizes any raw permission format into a standard object.
- * If fallbackToDefaults is false, it returns empty (all false) instead of prefilling.
+ * For Super Admin, always returns 100% full permissions.
+ * If fallbackToDefaults is true, or if rawPermissions has no active permissions,
+ * it falls back to the default permissions for the user's role.
  */
-export const normalizePermissions = (rawPermissions, role = null, fallbackToDefaults = false) => {
+export const normalizePermissions = (rawPermissions, role = null, fallbackToDefaults = true) => {
+  const normRole = normalizeRole(role);
+
+  // Super Admin ALWAYS has full unrestricted access on all modules
+  if (isSuperAdminRole(normRole)) {
+    const full = {};
+    MODULE_LIST.forEach(m => {
+      full[m.id] = { view: true, create: true, edit: true, delete: true };
+    });
+    return full;
+  }
+
   const base = getEmptyPermissions();
 
-  // 1. If rawPermissions exists, USE IT EXACTLY as configured!
+  // 1. If rawPermissions exists as an object with key-value pairs
   if (rawPermissions && typeof rawPermissions === 'object' && !Array.isArray(rawPermissions) && Object.keys(rawPermissions).length > 0) {
+    let hasAnyExplicitPermission = false;
     MODULE_LIST.forEach(m => {
       const p = rawPermissions[m.id];
       if (p !== undefined && p !== null) {
         if (typeof p === 'boolean') {
           base[m.id] = { view: p, create: p, edit: p, delete: p };
+          if (p) hasAnyExplicitPermission = true;
         } else if (typeof p === 'object') {
           base[m.id] = {
             view: !!p.view,
@@ -163,10 +202,14 @@ export const normalizePermissions = (rawPermissions, role = null, fallbackToDefa
             edit: !!p.edit,
             delete: !!p.delete
           };
+          if (p.view || p.create || p.edit || p.delete) hasAnyExplicitPermission = true;
         }
       }
     });
-    return base;
+
+    if (hasAnyExplicitPermission) {
+      return base;
+    }
   }
 
   // 2. If array format (e.g. ['dashboard', 'products'])
@@ -200,48 +243,49 @@ export const normalizePermissions = (rawPermissions, role = null, fallbackToDefa
     return base;
   }
 
-  // 3. ONLY if rawPermissions is not present AND fallbackToDefaults is explicitly true
-  if (fallbackToDefaults && role) {
-    if (role === ROLES.SUPER_ADMIN) {
-      const full = {};
-      MODULE_LIST.forEach(m => {
-        full[m.id] = { view: true, create: true, edit: true, delete: true };
-      });
-      return full;
-    }
-    if (DEFAULT_ROLE_PERMISSIONS[role]) {
-      return JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS[role]));
-    }
+  // 3. Fallback to role presets if no custom permissions exist or if raw was all-empty
+  if (DEFAULT_ROLE_PERMISSIONS[normRole]) {
+    return JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS[normRole]));
   }
 
   return base;
 };
 
 /**
- * STRICT Menu permission check:
- * If userPermissions is provided, it is the ABSOLUTE and ONLY source of truth.
- * Only checked modules return true. Everything else is false.
+ * Menu permission check:
+ * - Super Admin always returns true for all menus.
+ * - Custom permissions are respected if assigned.
+ * - Otherwise falls back to role default permissions.
  */
 export const hasMenuPermission = (role, menuId, userPermissions = null) => {
-  // 1. If userPermissions is provided, it is the ABSOLUTE and ONLY source of truth
+  // 1. Super Admin ALWAYS has full access to every menu
+  if (isSuperAdminRole(role)) return true;
+
+  // 2. If userPermissions has active entries, use it
   if (userPermissions && typeof userPermissions === 'object' && Object.keys(userPermissions).length > 0) {
-    if (userPermissions[menuId] !== undefined) {
-      return !!userPermissions[menuId]?.view;
+    const hasAnyActive = Object.values(userPermissions).some(
+      p => p && (p === true || p.view || p.create || p.edit || p.delete)
+    );
+    if (hasAnyActive) {
+      if (userPermissions[menuId] !== undefined) {
+        return !!userPermissions[menuId]?.view;
+      }
+      if (menuId === 'follow-ups' && userPermissions['quotations'] !== undefined) {
+        return !!userPermissions['quotations']?.view;
+      }
+      return false;
     }
-    // Only 'follow-ups' maps to quotations if not defined separately
-    if (menuId === 'follow-ups' && userPermissions['quotations'] !== undefined) {
-      return !!userPermissions['quotations']?.view;
-    }
-    // Any module not explicitly checked is strictly denied
-    return false;
   }
 
-  // 2. Only if no custom userPermissions are defined, fallback to role check
-  if (role === ROLES.SUPER_ADMIN) return true;
-
-  const roleDefaults = DEFAULT_ROLE_PERMISSIONS[role];
+  // 3. Fallback to role check
+  const normRole = normalizeRole(role);
+  const roleDefaults = DEFAULT_ROLE_PERMISSIONS[normRole];
   if (roleDefaults && roleDefaults[menuId] !== undefined) {
     return !!roleDefaults[menuId]?.view;
+  }
+
+  if (MENU_PERMISSIONS[normRole]?.includes(menuId)) {
+    return true;
   }
 
   return false;
@@ -252,61 +296,91 @@ export const canView = (role, moduleId, userPermissions = null) => {
 };
 
 export const canCreate = (role, moduleId, userPermissions = null) => {
+  if (isSuperAdminRole(role)) return true;
+
   if (userPermissions && typeof userPermissions === 'object' && Object.keys(userPermissions).length > 0) {
-    if (userPermissions[moduleId] !== undefined) {
-      return !!userPermissions[moduleId]?.create;
+    const hasAnyActive = Object.values(userPermissions).some(
+      p => p && (p === true || p.view || p.create || p.edit || p.delete)
+    );
+    if (hasAnyActive) {
+      if (userPermissions[moduleId] !== undefined) {
+        return !!userPermissions[moduleId]?.create;
+      }
+      if (moduleId === 'follow-ups' && userPermissions['quotations'] !== undefined) {
+        return !!userPermissions['quotations']?.create;
+      }
+      return false;
     }
-    if (moduleId === 'follow-ups' && userPermissions['quotations'] !== undefined) {
-      return !!userPermissions['quotations']?.create;
-    }
-    return false;
   }
-  if (role === ROLES.SUPER_ADMIN) return true;
-  const rolePerms = DEFAULT_ROLE_PERMISSIONS[role];
+
+  const normRole = normalizeRole(role);
+  const rolePerms = DEFAULT_ROLE_PERMISSIONS[normRole];
   return !!(rolePerms && rolePerms[moduleId]?.create);
 };
 
 export const canEdit = (role, moduleId, userPermissions = null) => {
+  if (isSuperAdminRole(role)) return true;
+
   if (userPermissions && typeof userPermissions === 'object' && Object.keys(userPermissions).length > 0) {
-    if (userPermissions[moduleId] !== undefined) {
-      return !!userPermissions[moduleId]?.edit;
+    const hasAnyActive = Object.values(userPermissions).some(
+      p => p && (p === true || p.view || p.create || p.edit || p.delete)
+    );
+    if (hasAnyActive) {
+      if (userPermissions[moduleId] !== undefined) {
+        return !!userPermissions[moduleId]?.edit;
+      }
+      if (moduleId === 'follow-ups' && userPermissions['quotations'] !== undefined) {
+        return !!userPermissions['quotations']?.edit;
+      }
+      return false;
     }
-    if (moduleId === 'follow-ups' && userPermissions['quotations'] !== undefined) {
-      return !!userPermissions['quotations']?.edit;
-    }
-    return false;
   }
-  if (role === ROLES.SUPER_ADMIN) return true;
-  const rolePerms = DEFAULT_ROLE_PERMISSIONS[role];
+
+  const normRole = normalizeRole(role);
+  const rolePerms = DEFAULT_ROLE_PERMISSIONS[normRole];
   return !!(rolePerms && rolePerms[moduleId]?.edit);
 };
 
 export const canDelete = (role, moduleId, userPermissions = null) => {
+  if (isSuperAdminRole(role)) return true;
+
   if (userPermissions && typeof userPermissions === 'object' && Object.keys(userPermissions).length > 0) {
-    if (userPermissions[moduleId] !== undefined) {
-      return !!userPermissions[moduleId]?.delete;
+    const hasAnyActive = Object.values(userPermissions).some(
+      p => p && (p === true || p.view || p.create || p.edit || p.delete)
+    );
+    if (hasAnyActive) {
+      if (userPermissions[moduleId] !== undefined) {
+        return !!userPermissions[moduleId]?.delete;
+      }
+      if (moduleId === 'follow-ups' && userPermissions['quotations'] !== undefined) {
+        return !!userPermissions['quotations']?.delete;
+      }
+      return false;
     }
-    if (moduleId === 'follow-ups' && userPermissions['quotations'] !== undefined) {
-      return !!userPermissions['quotations']?.delete;
-    }
-    return false;
   }
-  if (role === ROLES.SUPER_ADMIN) return true;
-  const rolePerms = DEFAULT_ROLE_PERMISSIONS[role];
+
+  const normRole = normalizeRole(role);
+  const rolePerms = DEFAULT_ROLE_PERMISSIONS[normRole];
   return !!(rolePerms && rolePerms[moduleId]?.delete);
 };
 
 export const usePermissions = (moduleId) => {
-  const context = useContext(AuthContext);
-  const currentUser = context?.currentUser;
-  const role = currentUser?.role;
-  const permissions = currentUser?.permissions;
+  let role = null;
+  let permissions = null;
+  try {
+    const raw = localStorage.getItem('maitri_user');
+    if (raw) {
+      const u = JSON.parse(raw);
+      role = u?.role;
+      permissions = u?.permissions;
+    }
+  } catch (e) {}
 
   return {
     canView: canView(role, moduleId, permissions),
     canCreate: canCreate(role, moduleId, permissions),
     canEdit: canEdit(role, moduleId, permissions),
     canDelete: canDelete(role, moduleId, permissions),
-    isSuperAdmin: role === ROLES.SUPER_ADMIN
+    isSuperAdmin: isSuperAdminRole(role)
   };
 };

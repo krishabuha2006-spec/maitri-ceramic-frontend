@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getUsers, createUser, updateUser, deleteUser, deactivateUser, resetUserPassword } from '../services/userService';
-import { ROLES, MODULE_LIST, DEFAULT_ROLE_PERMISSIONS, normalizePermissions, getEmptyPermissions } from '../utils/permissions';
+import { ROLES, MODULE_LIST, DEFAULT_ROLE_PERMISSIONS, normalizePermissions, getEmptyPermissions, isSuperAdminRole } from '../utils/permissions';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import {
@@ -12,7 +12,7 @@ export const Users = () => {
   const { currentUser, updateCurrentUserPermissions } = useAuth();
   const userRole = currentUser?.role;
   const userPerms = currentUser?.permissions;
-  const isSuperAdmin = !userRole || userRole === ROLES.SUPER_ADMIN;
+  const isSuperAdmin = !userRole || isSuperAdminRole(userRole);
   const canCreateUser = isSuperAdmin || (userPerms?.users?.create ?? false);
   const canEditUser = isSuperAdmin || (userPerms?.users?.edit ?? false);
   const canDeleteUser = isSuperAdmin || (userPerms?.users?.delete ?? false);
@@ -318,7 +318,7 @@ export const Users = () => {
 
   // Helper function to summarize permissions for table badge
   const getPermissionSummary = (user) => {
-    if (user.role === ROLES.SUPER_ADMIN) return 'Full System Access';
+    if (isSuperAdminRole(user.role)) return 'Full System Access';
     if (!user.permissions) return 'Role Default Access';
     
     const activeCount = Object.values(user.permissions).filter(p => p && p.view).length;
