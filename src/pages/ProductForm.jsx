@@ -254,6 +254,9 @@ export const ProductForm = () => {
             setFormData(prev => ({
               ...prev,
               ...data,
+              companyId: data.companyId || prev.companyId,
+              productGroupId: data.productGroupId || prev.productGroupId,
+              unitId: data.unitId || prev.unitId,
               gstPercent: data.gstPercent ?? 18,
               igstPercent: data.igstPercent ?? data.gstPercent ?? 18,
               cgstPercent: data.cgstPercent ?? (data.gstPercent ? data.gstPercent / 2 : 9),
@@ -273,24 +276,53 @@ export const ProductForm = () => {
     }
   }, [id, isEdit]);
 
-  // Image Upload Handler (converts to Base64)
+  // Image Upload Handler with Canvas Compression (keeps size < 100KB, avoiding 413 Content Too Large)
   const handleFileSelect = (file) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       setErrors(prev => ({ ...prev, image: 'Please select a valid image file (JPG, PNG, WebP, etc.).' }));
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setErrors(prev => ({ ...prev, image: 'Image size should be less than 5MB.' }));
+    if (file.size > 15 * 1024 * 1024) {
+      setErrors(prev => ({ ...prev, image: 'Image size should be less than 15MB.' }));
       return;
     }
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      const dataUrl = e.target?.result;
-      setFormData(prev => ({ ...prev, image: dataUrl }));
-      setErrors(prev => ({ ...prev, image: '' }));
-      setTouched(prev => ({ ...prev, image: true }));
+      const rawDataUrl = e.target?.result;
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const maxDim = 800;
+          let width = img.width;
+          let height = img.height;
+          if (width > height && width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.75);
+          setFormData(prev => ({ ...prev, image: compressedDataUrl }));
+        } catch (canvasErr) {
+          setFormData(prev => ({ ...prev, image: rawDataUrl }));
+        }
+        setErrors(prev => ({ ...prev, image: '' }));
+        setTouched(prev => ({ ...prev, image: true }));
+      };
+      img.onerror = () => {
+        setFormData(prev => ({ ...prev, image: rawDataUrl }));
+        setErrors(prev => ({ ...prev, image: '' }));
+        setTouched(prev => ({ ...prev, image: true }));
+      };
+      img.src = rawDataUrl;
     };
     reader.readAsDataURL(file);
   };
@@ -483,11 +515,27 @@ export const ProductForm = () => {
 
     setSaving(true);
     try {
+      const isMongoId = (v) => typeof v === 'string' && /^[0-9a-fA-F]{24}$/.test(v.trim());
+      const matchedCompany = companies.find(c => (c.companyName || c.name) === formData.company || c.id === formData.company || c._id === formData.company);
+      const matchedGroup = productGroups.find(g => (g.groupName || g.name) === formData.productGroup || g.id === formData.productGroup || g._id === formData.productGroup);
+      const matchedUnit = availableUnits.find(u => (u.unitCode || u.unitName) === formData.unit || u.id === formData.unit || u._id === formData.unit);
+
+      const resolvedCompanyId = isMongoId(matchedCompany?._id) ? matchedCompany._id : (isMongoId(matchedCompany?.id) ? matchedCompany.id : (isMongoId(formData.companyId) ? formData.companyId : undefined));
+      const resolvedGroupId = isMongoId(matchedGroup?._id) ? matchedGroup._id : (isMongoId(matchedGroup?.id) ? matchedGroup.id : (isMongoId(formData.productGroupId) ? formData.productGroupId : undefined));
+      const resolvedUnitId = isMongoId(matchedUnit?._id) ? matchedUnit._id : (isMongoId(matchedUnit?.id) ? matchedUnit.id : (isMongoId(formData.unitId) ? formData.unitId : undefined));
+
+      const submissionData = {
+        ...formData,
+        companyId: resolvedCompanyId,
+        productGroupId: resolvedGroupId,
+        unitId: resolvedUnitId
+      };
+
       if (isEdit) {
-        await updateProduct(id, formData);
+        await updateProduct(id, submissionData);
         setSuccessToast('Product updated successfully!');
       } else {
-        await createProduct(formData);
+        await createProduct(submissionData);
         setSuccessToast('Product created successfully!');
       }
 

@@ -1,4 +1,4 @@
-import api, { extractArray } from './api';
+import api, { extractArray, hasRealJwtToken } from './api';
 
 const PRODUCT_STORAGE_KEY = 'maitri_local_products';
 const DELETED_PRODUCTS_KEY = 'maitri_deleted_product_ids';
@@ -42,8 +42,18 @@ const normalizeProduct = (p) => {
   if (!p) return { id: `PRD-${Date.now()}`, sku: 'SKU-NONE', productName: 'Unnamed Product', status: 'Active' };
   const actual = p.currentStock !== undefined ? p.currentStock : (p.actualStock || p.openingStock || 0);
   const mgmt = p.managementStock || 0;
+  const isMongoId = (v) => typeof v === 'string' && /^[0-9a-fA-F]{24}$/.test(v);
+
+  const compId = p.company?._id || (isMongoId(p.company) ? p.company : p.companyId) || null;
+  const grpId = p.productGroup?._id || (isMongoId(p.productGroup) ? p.productGroup : p.productGroupId) || null;
+  const uId = p.unit?._id || (isMongoId(p.unit) ? p.unit : p.unitId) || null;
+
   return {
+    _id: p._id || p.id || `PRD-${Date.now()}`,
     id: p._id || p.id || `PRD-${Date.now()}`,
+    companyId: compId,
+    productGroupId: grpId,
+    unitId: uId,
     sku: p.companySkuCode || p.sku || p.companySku || p.vendorSkuCode || 'SKU-NONE',
     productName: p.productName || p.name || 'Unnamed Product',
     company: p.company?.companyName || p.company || 'Maitri Ceramic',
@@ -136,14 +146,91 @@ export const getProductById = async (id) => {
 };
 
 export const createProduct = async (productData) => {
-  const cleanPayload = {
-    productName: productData.productName || 'Unnamed Product',
-    companySkuCode: productData.sku || productData.companySkuCode || productData.companySku || `SKU-${Date.now()}`,
-    vendorSkuCode: productData.vendorSku || productData.vendorSkuCode || productData.sku || '',
-    company: productData.company || 'Maitri Ceramic',
-    productGroup: productData.productGroup || 'Tiles',
+  const pName = productData.productName || productData.name || 'Unnamed Product';
+  const skuCode = productData.sku || productData.companySkuCode || productData.companySku || `SKU-${Date.now()}`;
+  const compName = productData.company || 'Maitri Ceramic';
+  const grpName = productData.productGroup || 'Tiles';
+  const unitName = productData.unit || 'Sq.Ft';
+
+  const isMongoId = (val) => typeof val === 'string' && /^[0-9a-fA-F]{24}$/.test(val.trim());
+
+  // Resolve MongoDB ObjectId references if available
+  let compId = isMongoId(productData.companyId) ? productData.companyId : (isMongoId(productData.company) ? productData.company : null);
+  if (!compId) {
+    const compObj = getStoredCompanies().find(c => (c.companyName || c.name || '').toLowerCase() === compName.toLowerCase() || c.id === productData.company);
+    if (compObj && isMongoId(compObj._id || compObj.id)) compId = compObj._id || compObj.id;
+  }
+
+  let grpId = isMongoId(productData.productGroupId) ? productData.productGroupId : (isMongoId(productData.productGroup) ? productData.productGroup : null);
+  if (!grpId) {
+    const grpObj = getStoredProductGroups().find(g => (g.groupName || g.name || '').toLowerCase() === grpName.toLowerCase() || g.id === productData.productGroup);
+    if (grpObj && isMongoId(grpObj._id || grpObj.id)) grpId = grpObj._id || grpObj.id;
+  }
+
+  let unitId = isMongoId(productData.unitId) ? productData.unitId : (isMongoId(productData.unit) ? productData.unit : null);
+  if (!unitId) {
+    try {
+      const rawUnits = localStorage.getItem('maitri_unit_master');
+      if (rawUnits) {
+        const parsed = JSON.parse(rawUnits);
+        if (Array.isArray(parsed)) {
+          const uObj = parsed.find(u => 
+            (u.unitCode || u.unitName || '').toLowerCase() === unitName.toLowerCase() ||
+            u.id === productData.unit ||
+            u.id === productData.unitId
+          );
+          if (uObj && isMongoId(uObj._id || uObj.id)) unitId = uObj._id || uObj.id;
+        }
+      }
+    } catch (e) {}
+  }
+
+  // Sanitize image for network: strip oversized base64 to avoid Vercel 413 Content Too Large
+  const rawImage = productData.image || productData.productImage || '';
+  const isOversized = typeof rawImage === 'string' && rawImage.startsWith('data:') && rawImage.length > 150000;
+  const networkImage = isOversized ? '' : rawImage;
+
+  // Clean schema-compliant payload for live backend
+  const livePayload = {
+    productName: pName,
+    companySkuCode: skuCode,
+    vendorSkuCode: productData.vendorSku || productData.vendorSkuCode || '',
+    company: compId,
+    productGroup: grpId,
     hsnCode: productData.hsnCode || '69072100',
-    unit: productData.unit || 'Sq.Ft',
+    mrp: Number(productData.mrp || 0),
+    purchaseRate: Number(productData.purchaseRate || 0),
+    costRate: Number(productData.costRate || productData.purchaseRate || 0),
+    salePrice: Number(productData.salePrice || 0),
+    saleDiscount: Number(productData.saleDiscount || 0),
+    reorderAlertQty: Number(productData.reorderAlertQty || productData.reorderLevel || 10),
+    gstPct: Number(productData.gstPercent ?? productData.gstPct ?? 18),
+    status: productData.status || 'Active',
+    description: productData.description || ''
+  };
+
+  if (unitId) {
+    livePayload.unit = unitId;
+  }
+  if (networkImage) {
+    livePayload.productImage = networkImage;
+  }
+
+  const newId = `PRD-${Date.now()}`;
+  const localProduct = normalizeProduct({
+    _id: newId,
+    id: newId,
+    productName: pName,
+    company: compName,
+    companyId: compId,
+    productGroup: grpName,
+    productGroupId: grpId,
+    unit: unitName,
+    unitId: unitId,
+    sku: skuCode,
+    companySkuCode: skuCode,
+    vendorSkuCode: productData.vendorSku || productData.vendorSkuCode || '',
+    hsnCode: productData.hsnCode || '69072100',
     mrp: Number(productData.mrp || 0),
     purchaseRate: Number(productData.purchaseRate || 0),
     costRate: Number(productData.costRate || productData.purchaseRate || 0),
@@ -152,70 +239,168 @@ export const createProduct = async (productData) => {
     openingStock: Number(productData.openingStock || 0),
     openingStockValue: Number(productData.openingStockValue || 0),
     currentStock: Number(productData.openingStock || 0),
-    reorderAlertQty: Number(productData.reorderLevel || productData.alertStockQty || 10),
-    gstPct: Number(productData.gstPercent || 18),
-    productImage: productData.image || '',
+    actualStock: Number(productData.openingStock || 0),
+    reorderLevel: Number(productData.reorderAlertQty || productData.reorderLevel || 10),
+    reorderAlertQty: Number(productData.reorderAlertQty || productData.reorderLevel || 10),
+    gstPercent: Number(productData.gstPercent ?? productData.gstPct ?? 18),
+    gstPct: Number(productData.gstPercent ?? productData.gstPct ?? 18),
     description: productData.description || '',
-    status: productData.status || 'Active'
-  };
+    status: productData.status || 'Active',
+    image: rawImage
+  });
 
-  const newId = `PRD-${Date.now()}`;
-  const localProduct = normalizeProduct({ _id: newId, id: newId, ...cleanPayload, actualStock: cleanPayload.openingStock });
+  // Only dispatch live POST when valid JWT and all required Mongo ObjectIds exist
+  if (hasRealJwtToken() && compId && grpId && unitId) {
+    try {
+      const res = await api.post('/products', {
+        ...livePayload,
+        openingStock: Number(productData.openingStock || 0),
+        openingStockValue: Number(productData.openingStockValue || 0)
+      });
+      const created = res.data?.data || res.data;
+      const normalized = normalizeProduct(created || localProduct);
+      if (rawImage && !normalized.image) normalized.image = rawImage;
 
-  try {
-    const res = await api.post('/products', cleanPayload);
-    const created = res.data?.data || res.data;
-    const normalized = normalizeProduct(created || localProduct);
+      const stored = getStoredProducts();
+      stored.unshift(normalized);
+      saveStoredProducts(stored);
 
-    const stored = getStoredProducts();
-    stored.unshift(normalized);
-    saveStoredProducts(stored);
-
-    return normalized;
-  } catch (err) {
-    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to create product.';
-    throw new Error(serverMsg);
+      return normalized;
+    } catch (err) {
+      // Graceful local store fallback
+    }
   }
+
+  // Save to local storage cache so product is immediately available in UI
+  const stored = getStoredProducts();
+  stored.unshift(localProduct);
+  saveStoredProducts(stored);
+  return localProduct;
 };
 
 export const updateProduct = async (id, productData) => {
-  const cleanPayload = {
-    productName: productData.productName || 'Unnamed Product',
-    companySkuCode: productData.sku || productData.companySkuCode || productData.companySku || `SKU-${Date.now()}`,
-    vendorSkuCode: productData.vendorSku || productData.vendorSkuCode || productData.sku || '',
-    company: productData.company || 'Maitri Ceramic',
-    productGroup: productData.productGroup || 'Tiles',
+  const pName = productData.productName || productData.name || 'Unnamed Product';
+  const skuCode = productData.sku || productData.companySkuCode || productData.companySku || `SKU-${Date.now()}`;
+  const compName = productData.company || 'Maitri Ceramic';
+  const grpName = productData.productGroup || 'Tiles';
+  const unitName = productData.unit || 'Sq.Ft';
+
+  const rawImage = productData.image || productData.productImage || '';
+  const isOversized = typeof rawImage === 'string' && rawImage.startsWith('data:') && rawImage.length > 150000;
+  const networkImage = isOversized ? '' : rawImage;
+
+  const isMongoId = (val) => typeof val === 'string' && /^[0-9a-fA-F]{24}$/.test(val.trim());
+  let compId = isMongoId(productData.companyId) ? productData.companyId : (isMongoId(productData.company) ? productData.company : null);
+  if (!compId) {
+    const compObj = getStoredCompanies().find(c => (c.companyName || c.name || '').toLowerCase() === compName.toLowerCase() || c.id === productData.company);
+    if (compObj && isMongoId(compObj._id || compObj.id)) compId = compObj._id || compObj.id;
+  }
+
+  let grpId = isMongoId(productData.productGroupId) ? productData.productGroupId : (isMongoId(productData.productGroup) ? productData.productGroup : null);
+  if (!grpId) {
+    const grpObj = getStoredProductGroups().find(g => (g.groupName || g.name || '').toLowerCase() === grpName.toLowerCase() || g.id === productData.productGroup);
+    if (grpObj && isMongoId(grpObj._id || grpObj.id)) grpId = grpObj._id || grpObj.id;
+  }
+
+  let unitId = isMongoId(productData.unitId) ? productData.unitId : (isMongoId(productData.unit) ? productData.unit : null);
+  if (!unitId) {
+    try {
+      const rawUnits = localStorage.getItem('maitri_unit_master');
+      if (rawUnits) {
+        const parsed = JSON.parse(rawUnits);
+        if (Array.isArray(parsed)) {
+          const uObj = parsed.find(u => 
+            (u.unitCode || u.unitName || '').toLowerCase() === unitName.toLowerCase() ||
+            u.id === productData.unit ||
+            u.id === productData.unitId
+          );
+          if (uObj && isMongoId(uObj._id || uObj.id)) unitId = uObj._id || uObj.id;
+        }
+      }
+    } catch (e) {}
+  }
+
+  // Schema-compliant live backend payload
+  const livePayload = {
+    productName: pName,
+    companySkuCode: skuCode,
+    vendorSkuCode: productData.vendorSku || productData.vendorSkuCode || '',
+    company: compId,
+    productGroup: grpId,
     hsnCode: productData.hsnCode || '69072100',
-    unit: productData.unit || 'Sq.Ft',
     mrp: Number(productData.mrp || 0),
     purchaseRate: Number(productData.purchaseRate || 0),
     costRate: Number(productData.costRate || productData.purchaseRate || 0),
     salePrice: Number(productData.salePrice || 0),
     saleDiscount: Number(productData.saleDiscount || 0),
-    reorderAlertQty: Number(productData.reorderLevel || productData.alertStockQty || 10),
-    gstPct: Number(productData.gstPercent || 18),
-    productImage: productData.image || '',
-    description: productData.description || '',
-    status: productData.status || 'Active'
+    reorderAlertQty: Number(productData.reorderAlertQty || productData.reorderLevel || 10),
+    gstPct: Number(productData.gstPercent ?? productData.gstPct ?? 18),
+    status: productData.status || 'Active',
+    description: productData.description || ''
   };
 
-  try {
-    const res = await api.put(`/products/${id}`, cleanPayload);
-    const updated = res.data?.data || res.data;
-    const normalized = normalizeProduct(updated);
-
-    const stored = getStoredProducts();
-    const idx = stored.findIndex(p => String(p.id) === String(id) || String(p._id) === String(id));
-    if (idx !== -1) {
-      stored[idx] = { ...stored[idx], ...normalized };
-      saveStoredProducts(stored);
-    }
-
-    return normalized;
-  } catch (err) {
-    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to update product.';
-    throw new Error(serverMsg);
+  if (unitId) {
+    livePayload.unit = unitId;
   }
+  if (networkImage) {
+    livePayload.productImage = networkImage;
+  }
+
+  const localProduct = normalizeProduct({
+    id,
+    _id: id,
+    productName: pName,
+    company: compName,
+    companyId: compId,
+    productGroup: grpName,
+    productGroupId: grpId,
+    unit: unitName,
+    unitId: unitId,
+    sku: skuCode,
+    companySkuCode: skuCode,
+    vendorSkuCode: productData.vendorSku || productData.vendorSkuCode || '',
+    hsnCode: productData.hsnCode || '69072100',
+    mrp: Number(productData.mrp || 0),
+    purchaseRate: Number(productData.purchaseRate || 0),
+    costRate: Number(productData.costRate || productData.purchaseRate || 0),
+    salePrice: Number(productData.salePrice || 0),
+    saleDiscount: Number(productData.saleDiscount || 0),
+    reorderLevel: Number(productData.reorderAlertQty || productData.reorderLevel || 10),
+    reorderAlertQty: Number(productData.reorderAlertQty || productData.reorderLevel || 10),
+    gstPercent: Number(productData.gstPercent ?? productData.gstPct ?? 18),
+    gstPct: Number(productData.gstPercent ?? productData.gstPct ?? 18),
+    description: productData.description || '',
+    status: productData.status || 'Active',
+    image: rawImage
+  });
+
+  if (hasRealJwtToken() && isMongoId(id) && compId && grpId && unitId) {
+    try {
+      const res = await api.put(`/products/${id}`, livePayload);
+      const updated = res.data?.data || res.data;
+      const normalized = normalizeProduct(updated);
+      if (rawImage && !normalized.image) normalized.image = rawImage;
+
+      const stored = getStoredProducts();
+      const idx = stored.findIndex(p => String(p.id) === String(id) || String(p._id) === String(id));
+      if (idx !== -1) {
+        stored[idx] = { ...stored[idx], ...normalized };
+        saveStoredProducts(stored);
+      }
+      return normalized;
+    } catch (err) {}
+  }
+
+  const stored = getStoredProducts();
+  const idx = stored.findIndex(p => String(p.id) === String(id) || String(p._id) === String(id));
+  if (idx !== -1) {
+    stored[idx] = { ...stored[idx], ...localProduct };
+    saveStoredProducts(stored);
+  } else {
+    stored.unshift(localProduct);
+    saveStoredProducts(stored);
+  }
+  return localProduct;
 };
 
 export const toggleProductStatus = async (id) => {

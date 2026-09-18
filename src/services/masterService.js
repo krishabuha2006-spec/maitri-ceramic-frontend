@@ -52,6 +52,7 @@ const saveStoredTaxes = (list) => {
 };
 
 export const normalizeUnit = (u, idx = 0) => ({
+  _id: u._id || (typeof u.id === 'string' && /^[0-9a-fA-F]{24}$/.test(u.id) ? u.id : undefined),
   id: u._id || u.id || `UNIT-0${idx + 1}`,
   unitCode: u.unitCode || u.code || u.name || 'Pcs',
   unitName: u.unitName || u.name || u.unitCode || 'Pieces',

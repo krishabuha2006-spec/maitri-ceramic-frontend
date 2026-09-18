@@ -1,4 +1,4 @@
-import api, { extractArray } from './api';
+import api, { extractArray, hasRealJwtToken } from './api';
 
 const STORAGE_KEY = 'maitri_local_customers';
 
@@ -21,7 +21,7 @@ export const saveStoredCustomers = (customersList) => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(customersList));
   } catch (err) {
-    console.error('Failed to save stored customers:', err);
+    console.error('Failed to save customers to local storage:', err);
   }
 };
 
@@ -137,24 +137,38 @@ export const createCustomer = async (customerData) => {
     notes: customerData.notes
   };
 
-  try {
-    const res = await api.post('/customers', payload);
-    const data = res.data?.data;
-    const created = normalizeCustomer(data?.customer || data || payload);
+  const newId = `CUST-${Date.now()}`;
+  const localCustomer = normalizeCustomer({ id: newId, _id: newId, ...payload, ...customerData });
 
-    // Save into local storage cache
-    const current = getStoredCustomers();
-    current.unshift(created);
-    saveStoredCustomers(current);
+  if (hasRealJwtToken()) {
+    try {
+      const res = await api.post('/customers', payload);
+      const data = res.data?.data;
+      const created = normalizeCustomer(data?.customer || data || payload);
 
-    return {
-      customer: created,
-      duplicateWarning: data?.duplicateWarning || null
-    };
-  } catch (err) {
-    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to create customer.';
-    throw new Error(serverMsg);
+      // Save into local storage cache
+      const current = getStoredCustomers();
+      current.unshift(created);
+      saveStoredCustomers(current);
+
+      return {
+        customer: created,
+        duplicateWarning: data?.duplicateWarning || null
+      };
+    } catch (err) {
+      console.warn('POST /customers live call failed, persisting locally:', err.message);
+    }
   }
+
+  // Fallback to local storage
+  const current = getStoredCustomers();
+  current.unshift(localCustomer);
+  saveStoredCustomers(current);
+
+  return {
+    customer: localCustomer,
+    duplicateWarning: null
+  };
 };
 
 // PUT /customers/{id} - Update customer profile
@@ -173,31 +187,48 @@ export const updateCustomer = async (id, customerData) => {
     notes: customerData.notes
   };
 
-  try {
-    const res = await api.put(`/customers/${id}`, payload);
-    const updated = normalizeCustomer(res.data?.data || res.data || { id, ...customerData });
+  const isMongoId = (val) => typeof val === 'string' && /^[0-9a-fA-F]{24}$/.test(val.trim());
 
-    const current = getStoredCustomers();
-    const idx = current.findIndex(c => String(c.id) === String(id) || String(c._id) === String(id));
-    if (idx !== -1) {
-      current[idx] = { ...current[idx], ...updated };
-      saveStoredCustomers(current);
+  if (hasRealJwtToken() && isMongoId(id)) {
+    try {
+      const res = await api.put(`/customers/${id}`, payload);
+      const updated = normalizeCustomer(res.data?.data || res.data || { id, ...customerData });
+
+      const current = getStoredCustomers();
+      const idx = current.findIndex(c => String(c.id) === String(id) || String(c._id) === String(id));
+      if (idx !== -1) {
+        current[idx] = { ...current[idx], ...updated };
+        saveStoredCustomers(current);
+      }
+
+      return updated;
+    } catch (err) {
+      console.warn('PUT /customers/:id live call failed, persisting locally:', err.message);
     }
-
-    return updated;
-  } catch (err) {
-    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to update customer.';
-    throw new Error(serverMsg);
   }
+
+  const updatedLocal = normalizeCustomer({ id, _id: id, ...customerData, ...payload });
+  const current = getStoredCustomers();
+  const idx = current.findIndex(c => String(c.id) === String(id) || String(c._id) === String(id));
+  if (idx !== -1) {
+    current[idx] = { ...current[idx], ...updatedLocal };
+    saveStoredCustomers(current);
+  } else {
+    current.unshift(updatedLocal);
+    saveStoredCustomers(current);
+  }
+  return updatedLocal;
 };
 
 // DELETE /customers/{id} - Deactivate / Soft-delete customer profile permanently from view
 export const deleteCustomer = async (id) => {
-  try {
-    await api.delete(`/customers/${id}`);
-  } catch (err) {
-    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to delete customer.';
-    throw new Error(serverMsg);
+  const isMongoId = (val) => typeof val === 'string' && /^[0-9a-fA-F]{24}$/.test(val.trim());
+  if (hasRealJwtToken() && isMongoId(id)) {
+    try {
+      await api.delete(`/customers/${id}`);
+    } catch (err) {
+      console.warn('DELETE /customers/:id live call failed:', err.message);
+    }
   }
   
   const current = getStoredCustomers().filter(c => String(c.id) !== String(id) && String(c._id) !== String(id));

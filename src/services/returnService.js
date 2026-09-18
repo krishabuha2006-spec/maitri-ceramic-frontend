@@ -100,29 +100,47 @@ export const getReturnById = async (id) => {
 };
 
 export const createPurchaseReturn = async (returnData) => {
+  const newRet = {
+    _id: 'PR-' + Date.now(),
+    id: 'PR-' + Date.now(),
+    returnType: 'PURCHASE_RETURN',
+    returnNoteNumber: returnData.returnNoteNumber || `PRN-${Date.now().toString().slice(-6)}`,
+    date: returnData.returnDate || returnData.date || new Date().toISOString().split('T')[0],
+    returnDate: returnData.returnDate || returnData.date || new Date().toISOString().split('T')[0],
+    vendor: returnData.vendor || 'Vendor',
+    vendorName: returnData.vendor || 'Vendor',
+    purchaseRef: returnData.purchaseReferenceNote || returnData.purchaseRef || '-',
+    purchaseReferenceNote: returnData.purchaseReferenceNote || returnData.purchaseRef || '-',
+    sku: returnData.sku || 'SKU-UNKNOWN',
+    productName: returnData.productName || 'Product',
+    quantity: Number(returnData.quantity || 1),
+    unit: returnData.unit || 'Sq.Ft',
+    returnReason: returnData.returnReason || 'Goods return',
+    reason: returnData.returnReason || 'Goods return',
+    remarks: returnData.remarks || '',
+    notes: returnData.remarks || '',
+    status: 'CONFIRMED',
+    ...returnData
+  };
+
   try {
-    const res = await api.post('/returns/purchase-return', returnData);
-    return res.data?.data || res.data;
-  } catch (err) {
-    console.warn('Live POST /returns/purchase-return failed, saving to local store:', err.message);
+    const res = await api.post('/returns/purchase-return', newRet);
+    const saved = res.data?.data || res.data || newRet;
     const list = loadLocalReturns();
-    const newRet = {
-      _id: 'PR-' + Date.now(),
-      id: 'PR-' + Date.now(),
-      returnType: 'PURCHASE_RETURN',
-      returnNoteNumber: returnData.returnNoteNumber || `PRN-${Date.now().toString().slice(-6)}`,
-      date: returnData.returnDate || returnData.date || new Date().toISOString().split('T')[0],
-      vendor: returnData.vendor || 'Vendor',
-      purchaseRef: returnData.purchaseReferenceNote || returnData.purchaseRef || '-',
-      sku: returnData.sku || 'SKU-UNKNOWN',
-      productName: returnData.productName || 'Product',
-      quantity: Number(returnData.quantity || 1),
-      unit: returnData.unit || 'Sq.Ft',
-      returnReason: returnData.returnReason || 'Goods return',
-      remarks: returnData.remarks || '',
-      status: 'CONFIRMED',
-      ...returnData
-    };
+    list.unshift(saved);
+    saveLocalReturns(list);
+    return saved;
+  } catch (err) {
+    try {
+      const res2 = await api.post('/returns', { ...newRet, returnType: 'PURCHASE_RETURN' });
+      const saved2 = res2.data?.data || res2.data || newRet;
+      const list = loadLocalReturns();
+      list.unshift(saved2);
+      saveLocalReturns(list);
+      return saved2;
+    } catch (err2) {}
+
+    const list = loadLocalReturns();
     list.unshift(newRet);
     saveLocalReturns(list);
     return newRet;
@@ -130,30 +148,46 @@ export const createPurchaseReturn = async (returnData) => {
 };
 
 export const createSalesReturn = async (returnData) => {
+  const newRet = {
+    _id: 'SR-' + Date.now(),
+    id: 'SR-' + Date.now(),
+    returnType: 'SALES_RETURN',
+    returnNoteNumber: returnData.returnNoteNumber || `SRN-${Date.now().toString().slice(-6)}`,
+    date: returnData.returnDate || returnData.date || new Date().toISOString().split('T')[0],
+    returnDate: returnData.returnDate || returnData.date || new Date().toISOString().split('T')[0],
+    customerName: returnData.customerName || 'Customer',
+    invoiceNumber: returnData.invoiceNumber || '-',
+    challanNumber: returnData.challanNumber || '-',
+    sku: returnData.sku || 'SKU-UNKNOWN',
+    productName: returnData.productName || 'Product',
+    quantity: Number(returnData.quantity || 1),
+    unit: returnData.unit || 'Sq.Ft',
+    returnReason: returnData.returnReason || 'Goods return',
+    reason: returnData.returnReason || 'Goods return',
+    remarks: returnData.remarks || '',
+    notes: returnData.remarks || '',
+    status: 'CONFIRMED',
+    ...returnData
+  };
+
   try {
-    const res = await api.post('/returns/sales-return', returnData);
-    return res.data?.data || res.data;
-  } catch (err) {
-    console.warn('Live POST /returns/sales-return failed, saving to local store:', err.message);
+    const res = await api.post('/returns/sales-return', newRet);
+    const saved = res.data?.data || res.data || newRet;
     const list = loadLocalReturns();
-    const newRet = {
-      _id: 'SR-' + Date.now(),
-      id: 'SR-' + Date.now(),
-      returnType: 'SALES_RETURN',
-      returnNoteNumber: returnData.returnNoteNumber || `SRN-${Date.now().toString().slice(-6)}`,
-      date: returnData.returnDate || returnData.date || new Date().toISOString().split('T')[0],
-      customerName: returnData.customerName || 'Customer',
-      invoiceNumber: returnData.invoiceNumber || '-',
-      challanNumber: returnData.challanNumber || '-',
-      sku: returnData.sku || 'SKU-UNKNOWN',
-      productName: returnData.productName || 'Product',
-      quantity: Number(returnData.quantity || 1),
-      unit: returnData.unit || 'Sq.Ft',
-      returnReason: returnData.returnReason || 'Goods return',
-      remarks: returnData.remarks || '',
-      status: 'CONFIRMED',
-      ...returnData
-    };
+    list.unshift(saved);
+    saveLocalReturns(list);
+    return saved;
+  } catch (err) {
+    try {
+      const res2 = await api.post('/returns', { ...newRet, returnType: 'SALES_RETURN' });
+      const saved2 = res2.data?.data || res2.data || newRet;
+      const list = loadLocalReturns();
+      list.unshift(saved2);
+      saveLocalReturns(list);
+      return saved2;
+    } catch (err2) {}
+
+    const list = loadLocalReturns();
     list.unshift(newRet);
     saveLocalReturns(list);
     return newRet;
