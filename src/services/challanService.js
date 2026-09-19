@@ -1,100 +1,64 @@
 import api, { extractArray } from './api';
 import * as XLSX from 'xlsx';
 
-const STORAGE_KEY = 'maitri_challans_list';
-
-let MOCK_CHALLANS = [
-  {
-    id: 'CH-2026-001',
-    _id: '6aa9a12b92ab3c10a4023910',
-    challanNumber: 'CH-2026-001',
-    date: '2026-03-06',
-    customerId: 'CUST-001',
-    customerName: 'Rajesh Sharma Construction',
-    customerContact: '9825012345',
-    customerAddress: 'Site 12, Green Villa Project, SG Highway, Ahmedabad',
-    refQuotationNo: 'QT-2026-001',
-    refOrderNo: 'ORD-8821',
-    salesperson: 'Vikram Mehta',
-    driverName: 'Ramesh Patel',
-    vehicleNo: 'GJ-01-AB-1234',
-    deliveryDetails: 'Dispatched via Tata Ace (GJ-01-AB-1234) Driver: Ramesh Patel',
-    status: 'FINALIZED',
-    isFinalized: true,
-    items: [
-      {
-        sku: 'VT-60120-GL',
-        productName: 'Glazed Vitrified Tile 600x1200mm Statuario',
-        description: 'Statuario Marble Finish Heavy Duty',
-        quantity: 1150,
-        unit: 'Sq.Ft'
-      }
-    ],
-    remarks: 'Partial dispatch delivered at site 12.'
-  },
-  {
-    id: 'CH-2026-002',
-    _id: '6aa9a12b92ab3c10a4023911',
-    challanNumber: 'CH-2026-002',
-    date: '2026-03-12',
-    customerId: 'CUST-002',
-    customerName: 'Mehta Interior Designers',
-    customerContact: '9898011223',
-    customerAddress: 'Office 402, Titanium City Centre, Prahladnagar, Ahmedabad',
-    refQuotationNo: 'QT-2026-002',
-    refOrderNo: 'ORD-8822',
-    salesperson: 'Vikram Mehta',
-    driverName: 'Haresh Bhai',
-    vehicleNo: 'GJ-27-TT-9988',
-    deliveryDetails: 'Mahindra Bolero Maxi Truck (GJ-27-TT-9988)',
-    status: 'DRAFT',
-    isFinalized: false,
-    items: [
-      {
-        sku: 'CP-DIV-3WAY',
-        productName: 'Single Lever 3-Way Concealed Diverter Complete',
-        description: 'CP Bath Fittings',
-        quantity: 8,
-        unit: 'Set'
-      }
-    ],
-    remarks: 'Ready for delivery dispatch'
-  }
-];
-
+/**
+ * Normalizes a Challan document from the backend API into a consistent shape
+ * used across the frontend UI.
+ */
 export const normalizeChallan = (c) => {
   if (!c) return null;
   const cust = c.customer || {};
   const statusStr = (c.status || (c.isFinalized ? 'FINALIZED' : 'DRAFT')).toUpperCase();
+  const salespersonName = typeof c.salesperson === 'object' ? (c.salesperson?.name || 'Lax Savani') : (c.salesperson || 'Vikram Mehta');
+  const quotNo = c.quotation?.quotationNumber || c.quotationNumber || c.refQuotationNo || (typeof c.quotation === 'string' ? c.quotation : '—');
+  const confId = c.confirmation?._id || c.confirmation || c.confirmationId || '';
 
   return {
     id: c._id || c.id || `CH-${Date.now()}`,
     _id: c._id || c.id,
     challanNumber: c.challanNumber || (c._id ? `CH-${c._id.slice(-6).toUpperCase()}` : 'CH-2026'),
-    date: c.challanDate ? c.challanDate.split('T')[0] : (c.date || new Date().toISOString().split('T')[0]),
+    date: c.challanDate ? c.challanDate.split('T')[0] : (c.date ? c.date.split('T')[0] : new Date().toISOString().split('T')[0]),
+    challanDate: c.challanDate || c.date || new Date().toISOString(),
     customerId: cust._id || cust.id || c.customerId || '',
     customerName: cust.customerName || c.customerName || 'Customer',
-    customerContact: cust.mobile || cust.contactNumber || c.customerContact || '',
-    customerAddress: cust.siteAddress || cust.address || c.customerAddress || '',
-    refQuotationNo: c.quotationNumber || c.refQuotationNo || 'QT',
-    refOrderNo: c.orderNumber || c.refOrderNo || '',
-    salesperson: c.salesperson || 'Vikram Mehta',
+    customerContact: c.customerContact || cust.mobile || cust.contactNumber || '',
+    customerAddress: c.customerAddress || cust.shippingAddress || cust.billingAddress || cust.siteAddress || cust.address || '',
+    customerCity: cust.city || '',
+    customerType: cust.customerType || '',
+    customerGst: cust.gstNumber || 'N/A',
+    refQuotationNo: quotNo,
+    quotationId: c.quotation?._id || c.quotation || '',
+    confirmationId: confId,
+    salesperson: salespersonName,
+    salespersonMobile: c.salesperson?.mobile || '',
+    salespersonEmail: c.salesperson?.email || '',
     driverName: c.driverName || '',
     vehicleNo: c.vehicleNumber || c.vehicleNo || '',
     deliveryDetails: c.deliveryDetails || '',
     status: statusStr,
     isFinalized: statusStr === 'FINALIZED' || statusStr === 'DELIVERED',
-    items: Array.isArray(c.items) ? c.items.map(i => ({
-      confirmedItemId: i.confirmedItemId || i._id || i.id,
-      productId: i.product?._id || i.product || i.productId,
-      sku: i.product?.sku || i.sku || 'SKU',
-      productName: i.product?.productName || i.productName || 'Product',
-      description: i.description || '',
-      quantity: Number(i.quantityToIssue || i.dispatchQuantity || i.quantity || 0),
-      unit: i.unit || 'Pcs',
-      remarks: i.remarks || ''
-    })) : [],
-    remarks: c.remarks || ''
+    invoiced: Boolean(c.invoiced),
+    finalizedAt: c.finalizedAt || null,
+    finalizedBy: typeof c.finalizedBy === 'object' ? c.finalizedBy?.name : (c.finalizedBy || null),
+    items: Array.isArray(c.items) ? c.items.map(i => {
+      const prod = i.product || {};
+      const unitVal = i.unit?.unitName || i.unit?.unitCode || prod.unit?.unitName || prod.unit?.unitCode || (typeof i.unit === 'string' && i.unit.length <= 12 ? i.unit : 'Boxes');
+      return {
+        confirmedItemId: i.confirmedItem || i.confirmedItemId || i._id || i.id,
+        productId: prod._id || prod.id || i.product || i.productId,
+        sku: i.skuCodeSnapshot || prod.companySkuCode || prod.sku || i.sku || 'SKU',
+        productName: i.productNameSnapshot || prod.productName || i.productName || 'Product',
+        description: i.description || (prod.hsnCode ? `HSN: ${prod.hsnCode}` : ''),
+        quantity: Number(i.quantityToIssue != null ? i.quantityToIssue : (i.dispatchQuantity != null ? i.dispatchQuantity : (i.quantity || 0))),
+        unit: unitVal || 'Pcs',
+        remarks: i.remarks || '',
+        stock: prod.currentStock != null ? prod.currentStock : null,
+        mrp: prod.mrp || i.unitPriceSnapshot || 0
+      };
+    }) : [],
+    remarks: c.remarks || '',
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt
   };
 };
 
@@ -105,14 +69,22 @@ export const normalizeChallan = (c) => {
 export const getChallans = async (params = {}) => {
   try {
     const queryParams = { limit: 100, page: 1, ...params };
+    if (queryParams.status === 'ALL') delete queryParams.status;
+    if (!queryParams.search) delete queryParams.search;
+
     const res = await api.get('/challans', { params: queryParams });
-    const rawList = extractArray(res.data, ['challans', 'records', 'items', 'data']);
+    const rawList = res.data?.data?.challans || extractArray(res.data, ['challans', 'records', 'items', 'data']);
     if (Array.isArray(rawList)) {
       const normalized = rawList.map(normalizeChallan);
-      return { data: normalized, total: res.data?.total || res.data?.data?.pagination?.total || normalized.length, isLive: true };
+      return {
+        data: normalized,
+        total: res.data?.data?.pagination?.total || res.data?.total || normalized.length,
+        pagination: res.data?.data?.pagination || null,
+        isLive: true
+      };
     }
   } catch (err) {
-    console.warn('GET /challans notice:', err?.response?.data || err.message);
+    console.error('GET /challans notice:', err?.response?.data || err.message);
   }
 
   return { data: [], total: 0, isLive: false };
@@ -133,9 +105,20 @@ export const getChallanById = async (id) => {
  * Body: { confirmationId, deliveryDetails, remarks, items: [{ confirmedItemId, quantityToIssue, remarks }] }
  */
 export const createChallan = async (challanData) => {
-  const res = await api.post('/challans', challanData);
-  const created = normalizeChallan(res.data?.data?.challan || res.data?.data || res.data);
-  return created;
+  const payload = {
+    confirmationId: challanData.confirmationId,
+    deliveryDetails: challanData.deliveryDetails || '',
+    remarks: challanData.remarks || '',
+    items: (challanData.items || []).map(i => ({
+      confirmedItemId: i.confirmedItemId || i.confirmedItem || i.id || i._id,
+      quantityToIssue: Number(i.quantityToIssue || i.quantity || 0),
+      remarks: i.remarks || ''
+    }))
+  };
+
+  const res = await api.post('/challans', payload);
+  const created = res.data?.data?.challan || res.data?.data || res.data;
+  return normalizeChallan(created);
 };
 
 /**
@@ -143,53 +126,37 @@ export const createChallan = async (challanData) => {
  * Body: { deliveryDetails, remarks, items: [{ confirmedItemId, quantityToIssue, remarks }] }
  */
 export const updateChallan = async (id, updateData) => {
-  try {
-    const res = await api.put(`/challans/${id}`, updateData);
-    return normalizeChallan(res.data?.data?.challan || res.data?.data || res.data);
-  } catch (err) {
-    console.warn(`PUT /challans/${id} notice:`, err?.response?.data || err.message);
-    const item = MOCK_CHALLANS.find(c => c.id === id || c._id === id);
-    if (item) {
-      Object.assign(item, updateData);
-      return normalizeChallan(item);
-    }
-    throw err;
-  }
+  const payload = {
+    deliveryDetails: updateData.deliveryDetails,
+    remarks: updateData.remarks,
+    ...(updateData.items ? {
+      items: updateData.items.map(i => ({
+        confirmedItemId: i.confirmedItemId || i.confirmedItem || i.id || i._id,
+        quantityToIssue: Number(i.quantityToIssue || i.quantity || 0),
+        remarks: i.remarks || ''
+      }))
+    } : {})
+  };
+
+  const res = await api.put(`/challans/${id}`, payload);
+  const updated = res.data?.data?.challan || res.data?.data || res.data;
+  return normalizeChallan(updated);
 };
 
 /**
  * 5. PUT /challans/{id}/finalize - Finalize Challan (ATOMIC DUAL-WRITE: stock deduction + delivery recording)
  */
 export const finalizeChallan = async (id) => {
-  try {
-    const res = await api.put(`/challans/${id}/finalize`);
-    return res.data;
-  } catch (err) {
-    console.warn(`PUT /challans/${id}/finalize notice:`, err?.response?.data || err.message);
-    const item = MOCK_CHALLANS.find(c => c.id === id || c._id === id);
-    if (item) {
-      item.status = 'FINALIZED';
-      item.isFinalized = true;
-    }
-    return { success: true, message: 'Challan finalized. Stock deducted.' };
-  }
+  const res = await api.put(`/challans/${id}/finalize`);
+  return res.data;
 };
 
 /**
  * 6. PUT /challans/{id}/cancel - Cancel DRAFT Challan (Allowed ONLY while status is DRAFT)
  */
 export const cancelChallan = async (id) => {
-  try {
-    const res = await api.put(`/challans/${id}/cancel`);
-    return res.data;
-  } catch (err) {
-    console.warn(`PUT /challans/${id}/cancel notice:`, err?.response?.data || err.message);
-    const item = MOCK_CHALLANS.find(c => c.id === id || c._id === id);
-    if (item) {
-      item.status = 'CANCELLED';
-    }
-    return { success: true, message: 'Challan cancelled.' };
-  }
+  const res = await api.put(`/challans/${id}/cancel`);
+  return res.data;
 };
 
 /**
@@ -198,11 +165,42 @@ export const cancelChallan = async (id) => {
 export const getChallanPrintData = async (id) => {
   try {
     const res = await api.get(`/challans/${id}/print`);
-    return res.data?.data || res.data;
+    const printData = res.data?.data || res.data;
+    if (printData) {
+      const cust = printData.customer || {};
+      return {
+        ...printData,
+        id,
+        _id: id,
+        challanNumber: printData.challanNumber,
+        challanDate: printData.challanDate,
+        date: printData.challanDate ? printData.challanDate.split('T')[0] : '',
+        status: printData.status || 'DRAFT',
+        customerName: cust.name || cust.customerName || 'Customer',
+        customerContact: cust.contact || cust.mobile || '',
+        customerAddress: cust.address || cust.shippingAddress || '',
+        customerGst: cust.gstNumber || 'N/A',
+        refQuotationNo: printData.quotationNumber || 'N/A',
+        refConfirmationNo: printData.confirmationNumber || 'N/A',
+        salesperson: printData.salesperson || 'Sales Rep',
+        deliveryDetails: printData.deliveryDetails || '',
+        remarks: printData.remarks || '',
+        finalizedAt: printData.finalizedAt || null,
+        finalizedBy: printData.finalizedBy || null,
+        items: Array.isArray(printData.items) ? printData.items.map(i => ({
+          sku: i.skuCodeSnapshot || i.sku || 'SKU',
+          productName: i.productNameSnapshot || i.productName || 'Product',
+          description: i.description || '',
+          quantity: Number(i.quantityToIssue != null ? i.quantityToIssue : (i.quantity || 0)),
+          unit: i.unit?.unitName || (typeof i.unit === 'string' && i.unit.length <= 10 ? i.unit : 'Boxes') || 'Pcs',
+          remarks: i.remarks || ''
+        })) : []
+      };
+    }
   } catch (err) {
     console.warn(`GET /challans/${id}/print notice:`, err?.response?.data || err.message);
-    return getChallanById(id);
   }
+  return getChallanById(id);
 };
 
 /**
@@ -211,19 +209,25 @@ export const getChallanPrintData = async (id) => {
  */
 export const exportChallans = async (params = {}) => {
   try {
-    const res = await api.get('/challans/export', { params, responseType: 'blob' });
+    const cleanParams = {};
+    if (params.customerId) cleanParams.customerId = params.customerId;
+    if (params.status && params.status !== 'ALL') cleanParams.status = params.status;
+
+    const res = await api.get('/challans/export', { params: cleanParams, responseType: 'blob' });
     if (res.data && res.data.size > 0) {
       const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = `Challans_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.download = `Delivery_Challans_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
       window.URL.revokeObjectURL(downloadUrl);
       return { success: true };
     }
   } catch (err) {
-    console.warn('GET /challans/export notice, creating client-side XLSX:', err?.response?.data || err.message);
+    console.warn('Backend GET /challans/export notice, falling back to client-side XLSX:', err?.message);
   }
 
   // Client-side fallback export
@@ -244,7 +248,7 @@ export const exportChallans = async (params = {}) => {
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Delivery Challans');
-    XLSX.writeFile(wb, `Challans_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb, `Delivery_Challans_${new Date().toISOString().split('T')[0]}.xlsx`);
     return { success: true };
   } catch (e) {
     console.error('Challan export failed:', e);

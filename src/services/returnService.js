@@ -56,12 +56,11 @@ export const getReturns = async (params = {}) => {
   try {
     const res = await api.get('/returns', { params });
     const items = extractArray(res.data, ['returns', 'returnNotes', 'records', 'items']);
-    const total = res.data?.total || res.data?.count || res.data?.data?.total || items.length;
-    if (items && items.length > 0) {
-      return { data: items, total };
+    if (Array.isArray(items)) {
+      return { data: items, total, isLive: true };
     }
   } catch (err) {
-    console.warn('Live /returns API fetch failed, using fallback:', err.message);
+    console.warn('Live /returns API fetch notice:', err?.response?.data || err.message);
   }
 
   let list = loadLocalReturns();

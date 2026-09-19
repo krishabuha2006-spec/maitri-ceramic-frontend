@@ -134,14 +134,24 @@ export const extractArray = (resData, preferredKeys = []) => {
 
   const keysToTry = [
     ...preferredKeys,
-    'users', 'roles', 'products', 'customers', 'quotations', 'invoices',
-    'challans', 'payments', 'returns', 'entries', 'movements', 'companies',
-    'productGroups', 'modules', 'items', 'docs', 'records', 'list', 'data'
+    'users', 'roles', 'products', 'customers', 'quotations', 'confirmations',
+    'orders', 'invoices', 'challans', 'payments', 'returns', 'entries',
+    'followUps', 'movements', 'companies', 'productGroups', 'units', 'taxes',
+    'taxPresets', 'paymentModes', 'vendors', 'quotationFormats', 'modules',
+    'permissions', 'auditLogs', 'logs', 'alerts', 'items', 'docs', 'records',
+    'list', 'data', 'reports', 'catalog', 'history'
   ];
 
   for (const key of keysToTry) {
     if (target[key] && Array.isArray(target[key])) return target[key];
     if (resData[key] && Array.isArray(resData[key])) return resData[key];
+  }
+
+  // Fallback: check if target has any array property
+  for (const prop in target) {
+    if (Array.isArray(target[prop]) && prop !== 'errors') {
+      return target[prop];
+    }
   }
 
   return [];

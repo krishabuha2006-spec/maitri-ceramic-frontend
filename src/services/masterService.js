@@ -304,14 +304,22 @@ export const getPaymentModes = async () => {
   try {
     const res = await api.get('/payment-modes');
     const list = extractArray(res.data, ['paymentModes', 'modes', 'data']);
-    if (Array.isArray(list) && list.length > 0) return list;
+    if (Array.isArray(list) && list.length > 0) {
+      return list.map(m => ({
+        _id: m._id || m.id,
+        id: m._id || m.id,
+        modeName: m.modeName || m.name || 'Bank Transfer',
+        modeCode: m.modeCode || '',
+        requiresReference: m.requiresReference !== undefined ? m.requiresReference : true
+      }));
+    }
   } catch (err) {}
   return [
-    { id: 'Bank Transfer', name: 'Bank Transfer (NEFT/RTGS/IMPS)' },
-    { id: 'UPI', name: 'UPI / QR Code' },
-    { id: 'Cheque', name: 'Cheque' },
-    { id: 'Cash', name: 'Cash' },
-    { id: 'Credit Card', name: 'Credit / Debit Card' }
+    { _id: '6aa7c9ec612a410d893bcbc0', id: '6aa7c9ec612a410d893bcbc0', modeName: 'Bank Transfer', modeCode: 'BANK_TRANSFER', requiresReference: true },
+    { _id: '6aa7c9eb612a410d893bcbbf', id: '6aa7c9eb612a410d893bcbbf', modeName: 'Cash', modeCode: 'CASH', requiresReference: false },
+    { _id: '6aa7c9ec612a410d893bcbc1', id: '6aa7c9ec612a410d893bcbc1', modeName: 'UPI', modeCode: 'UPI', requiresReference: true },
+    { _id: '6aa7c9ec612a410d893bcbc2', id: '6aa7c9ec612a410d893bcbc2', modeName: 'Cheque', modeCode: 'CHEQUE', requiresReference: true },
+    { _id: '6aa7c9ec612a410d893bcbc3', id: '6aa7c9ec612a410d893bcbc3', modeName: 'Debit/Credit Card', modeCode: 'CARD', requiresReference: true }
   ];
 };
 

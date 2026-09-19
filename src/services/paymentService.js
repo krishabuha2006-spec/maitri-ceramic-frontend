@@ -47,12 +47,16 @@ const extractSafeString = (val, fallback = '') => {
 export const normalizePayment = (p) => {
   if (!p) return null;
   const cust = p.customer || {};
-  const amt = Number(p.amountReceived || p.amount || 0);
+  const amt = Number(p.totalAmount !== undefined ? p.totalAmount : (p.amountReceived !== undefined ? p.amountReceived : (p.amount || 0)));
 
   const paymentMode = extractSafeString(p.paymentMode, 'Bank Transfer');
-  const bankAccount = extractSafeString(p.bankAccount || p.depositedAccount, 'Current Account');
-  const customerName = extractSafeString(cust) || extractSafeString(p.customerName) || 'Customer';
-  const invoiceNumber = extractSafeString(p.invoiceNumber || (p.allocations && p.allocations[0]?.invoiceNumber) || p.invoice, '-');
+  const bankAccount = extractSafeString(p.bankCashAccount || p.bankAccount || p.depositedAccount, 'Current Account');
+  const customerName = cust.customerName || cust.name || extractSafeString(p.customerName) || 'Customer';
+  
+  const firstAlloc = (Array.isArray(p.allocations) && p.allocations[0]) ? p.allocations[0] : null;
+  const invSnap = firstAlloc?.invoiceNumberSnapshot || firstAlloc?.invoice?.invoiceNumber || firstAlloc?.invoiceNumber;
+  const invoiceNumber = invSnap || extractSafeString(p.invoiceNumber || p.invoice, '-');
+
   const receiptNumber = extractSafeString(p.receiptNumber || p.paymentNumber || (p._id ? `RCT-${p._id.slice(-6).toUpperCase()}` : 'RCT-2026'), 'RCT-2026');
   const referenceNumber = extractSafeString(p.referenceNumber || p.transactionReference, '-');
 
@@ -104,25 +108,67 @@ export const getPaymentById = async (id) => {
   throw new Error('Receipt not found');
 };
 
-/**
- * 3. POST /payments - Record customer payment
- */
 export const createPayment = async (paymentData) => {
-  const amt = Number(paymentData.amount || paymentData.amountReceived || 0);
+  const totalAmount = Number(paymentData.totalAmount || paymentData.amount || paymentData.amountReceived || 0);
+
+  // Map paymentModeId if string passed
+  let modeId = paymentData.paymentModeId;
+  if (!modeId && paymentData.paymentMode) {
+    const s = String(paymentData.paymentMode).toLowerCase();
+    if (s.includes('cash')) modeId = '6aa7c9eb612a410d893bcbbf';
+    else if (s.includes('upi')) modeId = '6aa7c9ec612a410d893bcbc1';
+    else if (s.includes('cheque')) modeId = '6aa7c9ec612a410d893bcbc2';
+    else if (s.includes('card')) modeId = '6aa7c9ec612a410d893bcbc3';
+    else modeId = '6aa7c9ec612a410d893bcbc0';
+  }
+  if (!modeId) modeId = '6aa7c9ec612a410d893bcbc0'; // default Bank Transfer
+
+  // Format allocations
+  let allocations = [];
+  if (Array.isArray(paymentData.allocations) && paymentData.allocations.length > 0) {
+    allocations = paymentData.allocations
+      .map(a => ({
+        invoiceId: a.invoiceId || a.invoice?._id || a.id || a._id,
+        allocatedAmount: Number(a.allocatedAmount || a.amount || 0)
+      }))
+      .filter(a => a.invoiceId && a.allocatedAmount > 0);
+  } else if (paymentData.invoiceId) {
+    allocations = [{
+      invoiceId: paymentData.invoiceId,
+      allocatedAmount: totalAmount
+    }];
+  }
+
+  // Format paymentDate YYYY-MM-DD
+  let dateStr = new Date().toISOString().split('T')[0];
+  if (paymentData.paymentDate) {
+    dateStr = paymentData.paymentDate.split('T')[0];
+  } else if (paymentData.date) {
+    dateStr = paymentData.date.split('T')[0];
+  }
+
   const payload = {
     customerId: paymentData.customerId,
-    amountReceived: amt,
-    paymentDate: paymentData.date ? new Date(paymentData.date).toISOString() : new Date().toISOString(),
-    paymentMode: paymentData.paymentMode || 'BANK_TRANSFER',
+    paymentModeId: modeId,
+    totalAmount: totalAmount,
+    paymentDate: dateStr,
     referenceNumber: paymentData.referenceNumber || '',
-    depositedAccount: paymentData.bankAccount || '',
-    notes: paymentData.remarks || '',
-    allocations: paymentData.allocations || []
+    bankCashAccount: paymentData.bankCashAccount || paymentData.bankAccount || '',
+    remarks: paymentData.remarks || paymentData.notes || '',
+    allocations: allocations
   };
 
-  const res = await api.post('/payments', payload);
-  const created = normalizePayment(res.data?.data?.payment || res.data?.data || res.data);
-  return created;
+  try {
+    const res = await api.post('/payments', payload);
+    const created = normalizePayment(res.data?.data?.payment || res.data?.data || res.data);
+    return created;
+  } catch (err) {
+    const backendMsg = err?.response?.data?.message || err?.response?.data?.error;
+    if (backendMsg) {
+      throw new Error(backendMsg);
+    }
+    throw err;
+  }
 };
 
 /**

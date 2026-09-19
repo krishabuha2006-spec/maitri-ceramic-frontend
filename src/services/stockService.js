@@ -159,20 +159,12 @@ export const getLowStockReport = async (params = {}) => {
   try {
     const res = await api.get('/stock/low-stock-report', { params });
     const rawList = extractArray(res.data, ['lowStock', 'products', 'items', 'data']);
-    if (Array.isArray(rawList) && rawList.length > 0) {
+    if (Array.isArray(rawList)) {
       return rawList;
     }
   } catch (err) {
     console.warn('GET /stock/low-stock-report notice:', err?.response?.data || err.message);
   }
-
-  // Client threshold calculation fallback
-  try {
-    const { data: products } = await getProducts({ limit: 500 });
-    if (Array.isArray(products)) {
-      return products.filter(p => (Number(p.actualStock) || 0) <= (Number(p.reorderPoint || p.reorderAlertQty || p.minStock) || 50));
-    }
-  } catch (e) {}
 
   return [];
 };
@@ -184,7 +176,7 @@ export const getPurchaseAlerts = async () => {
   try {
     const res = await api.get('/stock/purchase-alerts');
     const rawList = extractArray(res.data, ['alerts', 'shortfalls', 'items', 'data']);
-    if (Array.isArray(rawList) && rawList.length > 0) {
+    if (Array.isArray(rawList)) {
       return rawList;
     }
   } catch (err) {

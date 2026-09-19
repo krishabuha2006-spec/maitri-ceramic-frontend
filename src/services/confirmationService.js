@@ -21,39 +21,23 @@ export const getConfirmationById = async (id) => {
 };
 
 export const createConfirmation = async (payload) => {
-  try {
-    const res = await api.post('/confirmations', payload);
-    return res.data?.data || res.data;
-  } catch (err) {
-    return payload;
-  }
+  const res = await api.post('/confirmations', payload);
+  return res.data?.data || res.data;
 };
 
 export const updateConfirmation = async (id, payload) => {
-  try {
-    const res = await api.put(`/confirmations/${id}`, payload);
-    return res.data?.data || res.data;
-  } catch (err) {
-    return payload;
-  }
+  const res = await api.put(`/confirmations/${id}`, payload);
+  return res.data?.data || res.data;
 };
 
 export const approveConfirmation = async (id) => {
-  try {
-    const res = await api.put(`/confirmations/${id}/approve`);
-    return res.data;
-  } catch (err) {
-    return { success: true };
-  }
+  const res = await api.put(`/confirmations/${id}/approve`);
+  return res.data;
 };
 
 export const cancelConfirmation = async (id) => {
-  try {
-    const res = await api.put(`/confirmations/${id}/cancel`);
-    return res.data;
-  } catch (err) {
-    return { success: true };
-  }
+  const res = await api.put(`/confirmations/${id}/cancel`);
+  return res.data;
 };
 
 export const getConfirmationQuantityLedger = async (id) => {

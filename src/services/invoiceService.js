@@ -71,7 +71,9 @@ export const normalizeInvoice = (inv) => {
     refNumber: inv.quotationNumber || inv.refNumber || '',
     buyersOrderNo: inv.orderNumber || inv.buyersOrderNo || '',
     dispatchDocNo: inv.challanNumber || inv.dispatchDocNo || '',
-    taxableTotal: Number(inv.taxableTotal || inv.subTotal || 0),
+    taxableTotal: Number(inv.subTotal || inv.taxableTotal || 0),
+    cgstAmount: Number(inv.cgstAmount || ((inv.totalGst || 0) / 2)),
+    sgstAmount: Number(inv.sgstAmount || ((inv.totalGst || 0) / 2)),
     totalGst: Number(inv.totalGst || inv.taxAmount || 0),
     finalTotal: total,
     grandTotal: total,
@@ -80,7 +82,35 @@ export const normalizeInvoice = (inv) => {
     balanceDue: due,
     status: rawStatus,
     amountInWords: inv.amountInWords || numberToWords(total),
-    items: Array.isArray(inv.items) ? inv.items : []
+    declaration: inv.declaration || 'We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.',
+    items: Array.isArray(inv.items) ? inv.items.map(i => {
+      const prod = i.product || {};
+      const unitVal = typeof i.unit === 'object' && i.unit !== null 
+        ? (i.unit.unitName || i.unit.unitCode || 'Pcs')
+        : (typeof i.unit === 'string' && i.unit.length <= 10 ? i.unit : 'Pcs');
+
+      const pName = typeof i.productName === 'string' && i.productName 
+        ? i.productName 
+        : (i.descriptionSnapshot || i.productNameSnapshot || prod.productName || 'Product');
+
+      const skuVal = typeof i.sku === 'string' && i.sku 
+        ? i.sku 
+        : (i.skuCodeSnapshot || prod.companySkuCode || 'SKU');
+
+      return {
+        _id: i._id,
+        sku: skuVal,
+        productName: pName,
+        hsnCode: typeof i.hsnCode === 'string' ? i.hsnCode : (prod.hsnCode || '69072100'),
+        quantity: Number(i.quantity || 0),
+        unit: unitVal,
+        rate: Number(i.rateSnapshot ?? i.rate ?? 0),
+        discount: Number(i.discountPct ?? i.discount ?? 0),
+        taxableAmount: Number(i.netAmount ?? i.taxableAmount ?? (i.rateSnapshot ? i.rateSnapshot * i.quantity : 0)),
+        gstPercent: Number(i.gstPctSnapshot ?? i.gstPercent ?? 18),
+        amount: Number((i.netAmount ?? i.amount ?? 0) + (i.gstAmount ?? 0))
+      };
+    }) : []
   };
 };
 

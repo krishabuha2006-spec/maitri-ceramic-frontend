@@ -106,20 +106,30 @@ export const InvoiceDetails = () => {
             </tr>
           </thead>
           <tbody>
-            {invoice.items?.map((item, i) => (
-              <tr key={i}>
-                <td>{i + 1}</td>
-                <td style={{ fontWeight: 600 }}>{item.productName}</td>
-                <td>{item.hsnCode}</td>
-                <td>{item.quantity}</td>
-                <td>{item.unit}</td>
-                <td>{formatCurrency(item.rate)}</td>
-                <td>{item.discount}%</td>
-                <td>{formatCurrency(item.taxableAmount)}</td>
-                <td>{item.gstPercent}%</td>
-                <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatCurrency(item.amount)}</td>
-              </tr>
-            ))}
+            {invoice.items?.map((item, i) => {
+              const unitStr = typeof item.unit === 'object' && item.unit !== null
+                ? (item.unit.unitName || item.unit.unitCode || 'Pcs')
+                : (item.unit || 'Pcs');
+              const nameStr = typeof item.productName === 'object' && item.productName !== null
+                ? (item.productName.productName || item.productName.name || 'Product')
+                : (item.productName || item.descriptionSnapshot || 'Product');
+              const hsnStr = typeof item.hsnCode === 'object' ? '69072100' : (item.hsnCode || '69072100');
+
+              return (
+                <tr key={i}>
+                  <td>{i + 1}</td>
+                  <td style={{ fontWeight: 600 }}>{nameStr}</td>
+                  <td>{hsnStr}</td>
+                  <td>{item.quantity}</td>
+                  <td>{unitStr}</td>
+                  <td>{formatCurrency(item.rate)}</td>
+                  <td>{item.discount || 0}%</td>
+                  <td>{formatCurrency(item.taxableAmount)}</td>
+                  <td>{item.gstPercent || 18}%</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatCurrency(item.amount)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
