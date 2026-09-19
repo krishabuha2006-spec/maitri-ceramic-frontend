@@ -256,6 +256,44 @@ export const Login = () => {
               <LogIn size={20} />
               <span>{loading ? 'Signing In...' : 'Sign In'}</span>
             </button>
+
+            {/* Live Backend Super Admin Quick Fill */}
+            <div style={{
+              marginTop: '1.25rem',
+              padding: '0.75rem 1rem',
+              backgroundColor: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '10px',
+              fontSize: '0.82rem',
+              color: '#475569'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                <strong style={{ color: '#0f172a' }}>Live Backend Super Admin:</strong>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIdentifier('9825702369');
+                    setPassword('Laksh@2508');
+                    setValidationErrors({});
+                  }}
+                  style={{
+                    border: '1px solid #bfdbfe',
+                    background: '#eff6ff',
+                    color: '#2563eb',
+                    fontWeight: 700,
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem'
+                  }}
+                >
+                  Autofill
+                </button>
+              </div>
+              <div style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: '#64748b' }}>
+                Mobile: <strong>9825702369</strong> &bull; Pass: <strong>Laksh@2508</strong>
+              </div>
+            </div>
           </form>
 
           {/* Footer Security Badge */}

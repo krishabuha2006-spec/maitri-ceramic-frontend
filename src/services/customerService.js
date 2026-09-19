@@ -63,13 +63,13 @@ export const getCustomers = async (params = {}) => {
     const queryParams = { limit: 1000, page: 1, ...params };
     const res = await api.get('/customers', { params: queryParams });
     const rawList = extractArray(res.data, ['customers', 'customerList', 'records', 'data']);
-    
+
     if (Array.isArray(rawList)) {
       const normalized = rawList.map(normalizeCustomer);
       saveStoredCustomers(normalized);
-      return { 
-        data: normalized, 
-        total: res.data?.data?.pagination?.total || res.data?.total || normalized.length, 
+      return {
+        data: normalized,
+        total: res.data?.data?.pagination?.total || res.data?.total || normalized.length,
         pagination: res.data?.data?.pagination,
         isLive: true
       };
@@ -80,10 +80,10 @@ export const getCustomers = async (params = {}) => {
 
   // Local storage fallback only if server call failed completely
   let list = getStoredCustomers().map(normalizeCustomer);
-  
+
   if (params.search) {
     const q = String(params.search).toLowerCase();
-    list = list.filter(c => 
+    list = list.filter(c =>
       c.name.toLowerCase().includes(q) ||
       c.mobile.includes(q) ||
       c.city.toLowerCase().includes(q) ||
@@ -105,7 +105,7 @@ export const getCustomers = async (params = {}) => {
 // GET /customers/{id} - Get single customer profile by ID
 export const getCustomerById = async (id) => {
   if (!id) throw new Error('Customer ID required');
-  
+
   try {
     const res = await api.get(`/customers/${id}`);
     const raw = res.data?.data?.customer || res.data?.data || res.data;
@@ -230,7 +230,7 @@ export const deleteCustomer = async (id) => {
       console.warn('DELETE /customers/:id live call failed:', err.message);
     }
   }
-  
+
   const current = getStoredCustomers().filter(c => String(c.id) !== String(id) && String(c._id) !== String(id));
   saveStoredCustomers(current);
   return { success: true, message: 'Customer profile deleted successfully.' };
@@ -340,7 +340,7 @@ export const exportCustomerList = async (params = {}) => {
   const customers = getStoredCustomers();
   if (!customers.length) return null;
   const csvContent = 'Customer ID,Name,Mobile,City,State,GST,Customer Type,Outstanding\n' +
-    customers.map(c => `"${c.id}","${c.name}","${c.mobile}","${c.city}","${c.state}","${c.gstNumber || ''}","${c.customerType}","${c.totalOutstanding}"` ).join('\n');
+    customers.map(c => `"${c.id}","${c.name}","${c.mobile}","${c.city}","${c.state}","${c.gstNumber || ''}","${c.customerType}","${c.totalOutstanding}"`).join('\n');
   return new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
 };
 

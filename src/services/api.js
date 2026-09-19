@@ -114,7 +114,7 @@ api.interceptors.response.use(
         if (window.location.pathname !== '/login') {
           window.location.href = '/login';
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     return Promise.reject(error);
@@ -125,7 +125,7 @@ api.interceptors.response.use(
 export const extractArray = (resData, preferredKeys = []) => {
   if (!resData) return [];
   if (Array.isArray(resData)) return resData;
-  
+
   const inner = resData.data;
   if (Array.isArray(inner)) return inner;
 

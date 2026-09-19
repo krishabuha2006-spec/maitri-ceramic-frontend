@@ -20,29 +20,32 @@ export const ProductForm = () => {
 
   const [formData, setFormData] = useState({
     productName: '',
-    company: 'Kajaria',
-    productGroup: 'Vitrified Tiles',
+    company: '',
+    companyId: '',
+    productGroup: '',
+    productGroupId: '',
     hsnCode: '69072100',
     sku: '',
     vendorSku: '',
     companySku: '',
-    unit: 'Sq.Ft',
+    unit: '',
+    unitId: '',
     image: '',
     gstPercent: 18,
     igstPercent: 18,
     cgstPercent: 9,
     sgstPercent: 9,
     cessPercent: 0,
-    mrp: 90,
-    purchaseRate: 50,
-    costRate: 52,
-    salePrice: 70,
+    mrp: '',
+    purchaseRate: '',
+    costRate: '',
+    salePrice: '',
     saleDiscount: 0,
-    openingStock: 100,
-    openingStockValue: 5200,
+    openingStock: 0,
+    openingStockValue: 0,
     defaultQty: 1,
-    reorderLevel: 50,
-    alertStockQty: 25,
+    reorderLevel: 10,
+    alertStockQty: 10,
     status: 'Active'
   });
 
@@ -56,16 +59,8 @@ export const ProductForm = () => {
   const [successToast, setSuccessToast] = useState('');
   const [formErrorSummary, setFormErrorSummary] = useState('');
 
-  // Company Master Modal & List State
-  const [companies, setCompanies] = useState([
-    { id: 'CMP-001', companyName: 'Kajaria' },
-    { id: 'CMP-002', companyName: 'Hindware' },
-    { id: 'CMP-003', companyName: 'Jaquar' },
-    { id: 'CMP-004', companyName: 'Somany' },
-    { id: 'CMP-005', companyName: 'Cera' },
-    { id: 'CMP-006', companyName: 'Asian Paints' },
-    { id: 'CMP-007', companyName: 'Maitri Ceramic' }
-  ]);
+  // Dynamic live master lists from backend
+  const [companies, setCompanies] = useState([]);
   const [showCompanyModal, setShowCompanyModal] = useState(false);
   const [savingCompany, setSavingCompany] = useState(false);
   const [companyFormError, setCompanyFormError] = useState('');
@@ -76,15 +71,7 @@ export const ProductForm = () => {
     status: 'Active'
   });
 
-  // Product Group Master Modal & List State
-  const [productGroups, setProductGroups] = useState([
-    { id: 'PG-001', groupName: 'Vitrified Tiles' },
-    { id: 'PG-002', groupName: 'Ceramic Wall Tiles' },
-    { id: 'PG-003', groupName: 'Parking & GVT Tiles' },
-    { id: 'PG-004', groupName: 'Sanitaryware & Bathware' },
-    { id: 'PG-005', groupName: 'CP Fittings' },
-    { id: 'PG-006', groupName: 'Adhesives & Chemicals' }
-  ]);
+  const [productGroups, setProductGroups] = useState([]);
   const [availableUnits, setAvailableUnits] = useState([]);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [savingGroup, setSavingGroup] = useState(false);
@@ -98,30 +85,50 @@ export const ProductForm = () => {
   });
 
   useEffect(() => {
-    getCompanies()
-      .then(list => {
-        if (Array.isArray(list) && list.length > 0) {
-          setCompanies(list);
-        }
-      })
-      .catch(err => console.error(err));
+    Promise.all([
+      getCompanies(),
+      getProductGroups(),
+      getUnits()
+    ]).then(([comps, grps, units]) => {
+      const validComps = Array.isArray(comps) ? comps : [];
+      const validGrps = Array.isArray(grps) ? grps : [];
+      const validUnits = Array.isArray(units) ? units : [];
 
-    getProductGroups()
-      .then(list => {
-        if (Array.isArray(list) && list.length > 0) {
-          setProductGroups(list);
-        }
-      })
-      .catch(err => console.error(err));
+      setCompanies(validComps);
+      setProductGroups(validGrps);
+      setAvailableUnits(validUnits);
 
-    getUnits()
-      .then(list => {
-        if (Array.isArray(list) && list.length > 0) {
-          setAvailableUnits(list);
-        }
-      })
-      .catch(err => console.error(err));
-  }, []);
+      if (!isEdit) {
+        setFormData(prev => {
+          const defaultComp = validComps[0];
+          const defaultGrp = validGrps[0];
+          const defaultUnit = validUnits[0];
+
+          const compName = prev.company || defaultComp?.companyName || defaultComp?.name || '';
+          const compId = prev.companyId || defaultComp?._id || defaultComp?.id || '';
+          const grpName = prev.productGroup || defaultGrp?.groupName || defaultGrp?.name || '';
+          const grpId = prev.productGroupId || defaultGrp?._id || defaultGrp?.id || '';
+          const unitName = prev.unit || defaultUnit?.unitCode || defaultUnit?.unitName || '';
+          const unitId = prev.unitId || defaultUnit?._id || defaultUnit?.id || '';
+
+          const generatedSku = prev.sku || generateAutoSku(compName, grpName, prev.productName);
+
+          return {
+            ...prev,
+            company: compName,
+            companyId: compId,
+            productGroup: grpName,
+            productGroupId: grpId,
+            unit: unitName,
+            unitId: unitId,
+            sku: generatedSku
+          };
+        });
+      }
+    }).catch(err => {
+      console.error('Failed to load master data from live backend:', err);
+    });
+  }, [isEdit]);
 
   const handleOpenGroupModal = () => {
     setGroupFormError('');
@@ -142,20 +149,21 @@ export const ProductForm = () => {
     try {
       const newGrp = await createProductGroup({
         groupName: groupFormData.groupName.trim(),
-        groupCode: groupFormData.groupCode.trim(),
         description: groupFormData.description.trim(),
-        parentGroup: groupFormData.parentGroup,
         status: groupFormData.status
       });
 
       const addedName = newGrp?.groupName || groupFormData.groupName.trim();
+      const addedId = newGrp?._id || newGrp?.id;
 
-      setProductGroups(prev => {
-        const exists = prev.some(g => (g.groupName || '').toLowerCase() === addedName.toLowerCase());
-        return exists ? prev : [...prev, newGrp];
-      });
+      const refreshedGroups = await getProductGroups();
+      setProductGroups(refreshedGroups);
 
-      setFormData(prev => ({ ...prev, productGroup: addedName }));
+      setFormData(prev => ({
+        ...prev,
+        productGroup: addedName,
+        productGroupId: addedId || prev.productGroupId
+      }));
       setShowGroupModal(false);
       setSuccessToast(`Product Group "${addedName}" added.`);
       setTimeout(() => setSuccessToast(''), 3000);
@@ -185,20 +193,21 @@ export const ProductForm = () => {
     try {
       const newComp = await createCompany({
         companyName: companyFormData.companyName.trim(),
-        code: companyFormData.code.trim(),
         isOwnCompany: companyFormData.isOwnCompany,
         status: companyFormData.status
       });
 
       const addedName = newComp?.companyName || companyFormData.companyName.trim();
+      const addedId = newComp?._id || newComp?.id;
 
-      setCompanies(prev => {
-        const exists = prev.some(c => c.companyName.toLowerCase() === addedName.toLowerCase());
-        if (exists) return prev;
-        return [...prev, { id: newComp?.id || `CMP-${Date.now()}`, companyName: addedName }];
-      });
+      const refreshedCompanies = await getCompanies();
+      setCompanies(refreshedCompanies);
 
-      setFormData(prev => ({ ...prev, company: addedName }));
+      setFormData(prev => ({
+        ...prev,
+        company: addedName,
+        companyId: addedId || prev.companyId
+      }));
       setSuccessToast(`Company / Brand "${addedName}" created successfully!`);
       setTimeout(() => setSuccessToast(''), 3000);
       setShowCompanyModal(false);
@@ -842,14 +851,23 @@ export const ProductForm = () => {
                   if (e.target.value === '__ADD_NEW__') {
                     handleOpenCompanyModal();
                   } else {
-                    handleChange(e);
+                    const selectedName = e.target.value;
+                    const found = companies.find(c => (c.companyName || c.name) === selectedName || (c._id || c.id) === selectedName);
+                    setFormData(prev => ({
+                      ...prev,
+                      company: selectedName,
+                      companyId: found?._id || found?.id || prev.companyId
+                    }));
                   }
                 }}
                 onBlur={handleBlur}
                 style={{ height: '46px', borderRadius: '10px' }}
               >
+                {companies.length === 0 && <option value="">Loading live companies...</option>}
                 {companies.map(c => (
-                  <option key={c.id || c.companyName} value={c.companyName}>{c.companyName}</option>
+                  <option key={c._id || c.id || c.companyName} value={c.companyName}>
+                    {c.companyName} {c.isOwnCompany ? '(Own)' : ''}
+                  </option>
                 ))}
                 <option value="__ADD_NEW__" style={{ fontWeight: 700, color: '#2563eb' }}>+ Add New Company...</option>
               </select>
@@ -892,14 +910,21 @@ export const ProductForm = () => {
                   if (e.target.value === '__ADD_NEW_GROUP__') {
                     handleOpenGroupModal();
                   } else {
-                    handleChange(e);
+                    const selectedName = e.target.value;
+                    const found = productGroups.find(g => (g.groupName || g.name) === selectedName || (g._id || g.id) === selectedName);
+                    setFormData(prev => ({
+                      ...prev,
+                      productGroup: selectedName,
+                      productGroupId: found?._id || found?.id || prev.productGroupId
+                    }));
                   }
                 }}
                 onBlur={handleBlur}
                 style={{ height: '46px', borderRadius: '10px' }}
               >
+                {productGroups.length === 0 && <option value="">Loading live groups...</option>}
                 {productGroups.map(g => (
-                  <option key={g.id || g.groupName} value={g.groupName}>{g.groupName}</option>
+                  <option key={g._id || g.id || g.groupName} value={g.groupName}>{g.groupName}</option>
                 ))}
                 <option value="__ADD_NEW_GROUP__" style={{ fontWeight: 700, color: '#2563eb' }}>+ Add New Group...</option>
               </select>
@@ -972,25 +997,25 @@ export const ProductForm = () => {
                 name="unit"
                 className="form-control"
                 value={formData.unit}
-                onChange={handleChange}
+                onChange={(e) => {
+                  const selectedVal = e.target.value;
+                  const found = availableUnits.find(u => u.unitCode === selectedVal || u.unitName === selectedVal || (u._id || u.id) === selectedVal);
+                  setFormData(prev => ({
+                    ...prev,
+                    unit: selectedVal,
+                    unitId: found?._id || found?.id || prev.unitId
+                  }));
+                }}
                 style={{ height: '46px', borderRadius: '10px' }}
               >
                 {availableUnits.length > 0 ? (
                   availableUnits.map(u => (
-                    <option key={u.id || u.unitCode} value={u.unitCode}>
+                    <option key={u._id || u.id || u.unitCode} value={u.unitCode}>
                       {u.unitCode} ({u.unitName})
                     </option>
                   ))
                 ) : (
-                  <>
-                    <option value="Sq.Ft">Sq.Ft (Square Feet)</option>
-                    <option value="Sq.Mt">Sq.Mt (Square Meter)</option>
-                    <option value="Box">Box (Box / Carton)</option>
-                    <option value="Pcs">Pcs (Pieces)</option>
-                    <option value="Set">Set (Set)</option>
-                    <option value="Kg">Kg (Kilogram)</option>
-                    <option value="Bag">Bag (Bag)</option>
-                  </>
+                  <option value="">Loading live units...</option>
                 )}
               </select>
             </div>
