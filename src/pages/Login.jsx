@@ -7,10 +7,6 @@ export const Login = () => {
   const navigate = useNavigate();
   const { loginWithBackend, currentUser, loading: authLoading } = useAuth();
 
-  if (!authLoading && currentUser) {
-    return <Navigate to="/" replace />;
-  }
-
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -18,6 +14,10 @@ export const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
+
+  if (!authLoading && currentUser) {
+    return <Navigate to="/" replace />;
+  }
 
   // Form Validation Logic
   const validate = () => {

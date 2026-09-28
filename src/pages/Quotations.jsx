@@ -252,7 +252,7 @@ export const Quotations = () => {
       )}
 
       {/* Filter & Table Container */}
-      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflow: 'hidden', backgroundColor: '#ffffff' }}>
+      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflowX: 'auto', backgroundColor: '#ffffff' }}>
         {/* Tab & Filters Bar */}
         <div style={{ padding: '0.6rem 0.85rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', backgroundColor: '#ffffff', flexWrap: 'wrap' }}>
           
@@ -337,8 +337,8 @@ export const Quotations = () => {
         </div>
 
         {/* Quotations Table */}
-        <div style={{ overflowX: 'hidden', width: '100%' }}>
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'auto' }}>
+        <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+          <table className="data-table" style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', tableLayout: 'auto' }}>
             <thead>
               <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                 <th style={{ padding: '0.55rem 0.75rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>Quotation No.</th>

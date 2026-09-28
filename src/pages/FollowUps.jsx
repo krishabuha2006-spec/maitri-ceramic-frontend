@@ -1046,8 +1046,8 @@ export const FollowUps = () => {
       </div>
 
       {/* Clean Follow-Ups Data Table */}
-      <div className="table-container" style={{ overflowX: 'hidden', borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#ffffff', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)' }}>
-        <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+      <div className="table-container" style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#ffffff', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)' }}>
+        <table className="data-table" style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
           <thead>
             <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
               <th style={{ padding: '0.65rem 0.6rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center' }}>Quotation No.</th>

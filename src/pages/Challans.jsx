@@ -416,8 +416,8 @@ export const Challans = () => {
       </div>
 
       {/* Challans Table */}
-      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflowX: 'hidden', backgroundColor: '#ffffff' }}>
-        <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflowX: 'auto', backgroundColor: '#ffffff', WebkitOverflowScrolling: 'touch' }}>
+        <table className="data-table" style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
           <thead>
             <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
               <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>Challan No.</th>

@@ -555,8 +555,8 @@ export const Settings = () => {
           </div>
 
           {/* Units Table */}
-          <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', overflow: 'hidden', backgroundColor: '#ffffff' }}>
-            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', overflowX: 'auto', backgroundColor: '#ffffff', WebkitOverflowScrolling: 'touch' }}>
+            <table className="data-table" style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                   <th style={{ padding: '0.6rem 0.8rem', fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Unit Code</th>
@@ -667,8 +667,8 @@ export const Settings = () => {
           </div>
 
           {/* Tax Presets Table */}
-          <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', overflow: 'hidden', backgroundColor: '#ffffff' }}>
-            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', overflowX: 'auto', backgroundColor: '#ffffff', WebkitOverflowScrolling: 'touch' }}>
+            <table className="data-table" style={{ width: '100%', minWidth: '750px', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                   <th style={{ padding: '0.6rem 0.8rem', fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Tax Preset Name</th>

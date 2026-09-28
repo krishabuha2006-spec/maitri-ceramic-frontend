@@ -291,8 +291,8 @@ export const Products = () => {
         </div>
 
         {/* Responsive Clean Product Table */}
-        <div style={{ overflowX: 'hidden', width: '100%', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.775rem' }}>
+        <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+          <table className="data-table" style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '0.775rem' }}>
             <thead>
               <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
                 <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700 }}>SKU</th>

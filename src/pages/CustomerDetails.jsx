@@ -855,7 +855,7 @@ export const CustomerDetails = () => {
       </div>
 
       {/* Tab Workstation Content Container */}
-      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', backgroundColor: '#ffffff', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', overflowX: 'hidden' }}>
+      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', backgroundColor: '#ffffff', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', overflowX: 'auto' }}>
 
         {/* Tab 1: Quotations */}
         {activeTab === 'quotations' && (

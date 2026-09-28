@@ -295,31 +295,27 @@ body {
   color: var(--text-main);
 }
 
-/* Tables - Fluid and Non-Sliding */
+/* Tables - Responsive Horizontal Scroll */
 .table-container {
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  overflow-x: hidden;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
   box-shadow: var(--shadow-sm);
   width: 100%;
   max-width: 100%;
 }
 
-.table-header-bar {
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
+.table-responsive {
+  width: 100%;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
 }
 
 .data-table {
   width: 100% !important;
-  max-width: 100% !important;
-  min-width: 0 !important;
+  min-width: 850px;
   border-collapse: collapse;
   text-align: left;
   font-size: 0.775rem;
@@ -344,8 +340,7 @@ body {
   color: var(--text-main);
   vertical-align: middle;
   font-size: 0.775rem;
-  word-break: break-word;
-  overflow-wrap: break-word;
+  white-space: nowrap;
 }
 
 .data-table tbody tr:hover {
@@ -1711,12 +1706,13 @@ img, svg, video {
   }
 }
 
-/* Report Table Container (Clean Full View - No Inner Scrollbox) */
+/* Report Table Container (Responsive Horizontal Scroll) */
 .report-table-scroll {
-  overflow-x: hidden;
+  overflow-x: auto !important;
   overflow-y: visible;
   width: 100%;
   position: relative;
+  -webkit-overflow-scrolling: touch;
 }
 
 .reports-layout-grid {

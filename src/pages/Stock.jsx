@@ -313,10 +313,10 @@ export const Stock = () => {
       </div>
 
       {/* Tab Content */}
-      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflowX: 'hidden', backgroundColor: '#ffffff' }}>
+      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflowX: 'auto', backgroundColor: '#ffffff' }}>
         {activeTab === 'inventory' && (
           <>
-            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.785rem' }}>
+            <table className="data-table" style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', fontSize: '0.785rem' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                   <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>SKU</th>

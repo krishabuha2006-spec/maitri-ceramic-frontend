@@ -693,7 +693,7 @@ export const Reports = () => {
           )}
 
           {/* Main Table Document Container */}
-          <div className="table-container printable-document" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflow: 'hidden', backgroundColor: '#ffffff' }}>
+          <div className="table-container printable-document" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflow: 'visible', backgroundColor: '#ffffff' }}>
             
             {/* Report Header Bar */}
             <div style={{ padding: '1.1rem 1.35rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>

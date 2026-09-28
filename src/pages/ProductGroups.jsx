@@ -409,8 +409,8 @@ export const ProductGroups = () => {
           </div>
 
           {/* Table */}
-          <div style={{ overflowX: 'hidden', width: '100%' }}>
-            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+          <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+            <table className="data-table" style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
                   <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, width: '110px' }}>Code</th>

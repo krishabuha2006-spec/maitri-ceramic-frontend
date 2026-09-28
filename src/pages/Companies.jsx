@@ -584,8 +584,8 @@ export const Companies = () => {
       </div>
 
       {/* Data Table Container */}
-      <div className="table-container" style={{ width: '100%', overflowX: 'hidden' }}>
-        <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+      <div className="table-container" style={{ width: '100%', overflowX: 'auto' }}>
+        <table className="data-table" style={{ width: '100%', minWidth: '750px', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
           <thead>
             <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
               <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontWeight: 700 }}>Company / Brand Name</th>

@@ -662,7 +662,7 @@ export const Customers = () => {
       </div>
 
       {/* Main Table Card */}
-      <div className="table-container" style={{ width: '100%', overflow: 'hidden' }}>
+      <div className="table-container" style={{ width: '100%', overflowX: 'auto' }}>
         {/* Filter Bar */}
         <div className="table-header-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', padding: '0.85rem 1rem', borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}>
           <div style={{ position: 'relative', minWidth: '220px', flex: '1 1 280px', maxWidth: '420px' }}>
@@ -715,8 +715,8 @@ export const Customers = () => {
         </div>
 
         {/* Data Table */}
-        <div style={{ width: '100%', overflowX: 'hidden' }}>
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+        <div style={{ width: '100%', overflowX: 'auto' }}>
+          <table className="data-table" style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
             <thead>
               <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
                 <th style={{ padding: '0.6rem 0.5rem', width: '38px', textAlign: 'center' }}></th>

@@ -451,7 +451,7 @@ export const QuotationFormats = () => {
       </div>
 
       {/* Table Container */}
-      <div className="table-container" style={{ backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', overflow: 'hidden' }}>
+      <div className="table-container" style={{ backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', overflowX: 'auto' }}>
         {/* Filter bar */}
         <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
           <div style={{ position: 'relative', flex: '1 1 280px', maxWidth: '380px' }}>
@@ -481,7 +481,8 @@ export const QuotationFormats = () => {
         </div>
 
         {/* Formats Data Table */}
-        <table className="data-table">
+        <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+          <table className="data-table" style={{ width: '100%', minWidth: '750px' }}>
           <thead>
             <tr>
               <th>Format Name</th>
@@ -608,6 +609,7 @@ export const QuotationFormats = () => {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Custom Confirm Modal */}
