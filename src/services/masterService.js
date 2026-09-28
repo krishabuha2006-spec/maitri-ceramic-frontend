@@ -364,50 +364,39 @@ export const getVendors = async (params = {}) => {
   try {
     const res = await api.get('/vendors', { params });
     const list = extractArray(res.data, ['vendors', 'suppliers', 'data']);
-    if (Array.isArray(list) && list.length > 0) return { data: list, total: res.data?.data?.pagination?.total || list.length };
-  } catch (err) {}
-  return {
-    data: [
-      { id: 'VND-001', vendorName: 'Kajaria Ceramics Ltd', city: 'Morbi', contactPerson: 'Rajesh Shah', mobile: '9825000111' },
-      { id: 'VND-002', vendorName: 'Somany Ceramics Ltd', city: 'Kadi', contactPerson: 'Jayesh Patel', mobile: '9825000222' }
-    ],
-    total: 2
-  };
+    return {
+      data: Array.isArray(list) ? list : [],
+      total: res.data?.data?.pagination?.total || (Array.isArray(list) ? list.length : 0)
+    };
+  } catch (err) {
+    console.error('GET /vendors error:', err);
+    return { data: [], total: 0 };
+  }
 };
 
 export const getVendorById = async (id) => {
   try {
     const res = await api.get(`/vendors/${id}`);
     return res.data?.data || res.data;
-  } catch (err) {}
-  return { id, vendorName: 'Kajaria Ceramics Ltd', city: 'Morbi', contactPerson: 'Rajesh Shah', mobile: '9825000111' };
+  } catch (err) {
+    console.error('GET /vendors/:id error:', err);
+    return null;
+  }
 };
 
 export const createVendor = async (data) => {
-  try {
-    const res = await api.post('/vendors', data);
-    return res.data?.data || res.data;
-  } catch (err) {
-    return data;
-  }
+  const res = await api.post('/vendors', data);
+  return res.data?.data || res.data;
 };
 
 export const updateVendor = async (id, data) => {
-  try {
-    const res = await api.put(`/vendors/${id}`, data);
-    return res.data?.data || res.data;
-  } catch (err) {
-    return data;
-  }
+  const res = await api.put(`/vendors/${id}`, data);
+  return res.data?.data || res.data;
 };
 
 export const deactivateVendor = async (id) => {
-  try {
-    const res = await api.put(`/vendors/${id}/deactivate`);
-    return res.data;
-  } catch (err) {
-    return { success: true };
-  }
+  const res = await api.put(`/vendors/${id}/deactivate`);
+  return res.data;
 };
 
 

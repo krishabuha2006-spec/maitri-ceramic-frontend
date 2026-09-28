@@ -1,5 +1,6 @@
-import api, { extractArray } from './api';
+import api, { extractArray, hasRealJwtToken } from './api';
 import { getFollowUps as getModule6FollowUps, createFollowUp as createModule6FollowUp } from './followUpService';
+import { printQuotationPdf } from '../utils/quotationPdfGenerator';
 
 const STORAGE_KEY = 'maitri_quotations_list';
 
@@ -82,14 +83,14 @@ const getStoredQuotations = () => {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
-  } catch (e) {}
+  } catch (e) { }
   return MOCK_QUOTATIONS;
 };
 
 const saveStoredQuotations = (list) => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  } catch (e) {}
+  } catch (e) { }
 };
 
 /**
@@ -132,6 +133,25 @@ export const computeValidityDate = (validityVal, baseDateVal) => {
   return d.toISOString().split('T')[0];
 };
 
+export const normalizeQuotationStatus = (rawStatus) => {
+  if (!rawStatus) return 'Draft';
+  const s = String(rawStatus).toUpperCase();
+  switch (s) {
+    case 'DRAFT': return 'Draft';
+    case 'SENT': return 'Sent';
+    case 'CUSTOMER_INTERESTED': return 'Customer Interested';
+    case 'NEGOTIATION': return 'Negotiation';
+    case 'CONFIRMED': return 'Confirmed';
+    case 'PARTIALLY_CONFIRMED': return 'Partially Confirmed';
+    case 'REJECTED': return 'Rejected';
+    case 'EXPIRED': return 'Expired';
+    case 'CLOSED': return 'Closed';
+    case 'FOLLOW_UP_PENDING': return 'Follow-up Pending';
+    case 'FOLLOW_UP_COMPLETED': return 'Follow-up Completed';
+    default: return rawStatus;
+  }
+};
+
 /**
  * Standardize quotation object structure
  */
@@ -139,7 +159,7 @@ export const normalizeQuotation = (q) => {
   if (!q) return null;
   const qId = q._id || q.id;
   const qNum = q.quotationNumber || `QT-${qId ? String(qId).slice(-6).toUpperCase() : '001'}`;
-  
+
   const rawItems = Array.isArray(q.items) ? q.items : [];
   const normalizedItems = rawItems.map((i, idx) => {
     const qty = Number(i.quantity ?? 0);
@@ -198,7 +218,7 @@ export const normalizeQuotation = (q) => {
     quotationType: q.quotationType || q.formatKey || 'Standard Customer Quotation',
     formatKey: normalizeFormatKey(q.formatKey || q.quotationType),
     validity: q.validityDate || q.validityPeriod || q.validity || '15 Days',
-    status: q.status || 'Draft',
+    status: normalizeQuotationStatus(q.status),
     reference: q.reference || '',
     remarks: q.remarks || '',
     items: normalizedItems,
@@ -230,7 +250,7 @@ export const getQuotations = async (params = {}) => {
       if (params.customerId || params.customerName) {
         const cid = (params.customerId || '').toString().toLowerCase();
         const cname = (params.customerName || '').toString().toLowerCase();
-        normalized = normalized.filter(qt => 
+        normalized = normalized.filter(qt =>
           (cid && qt.customerId && qt.customerId.toString().toLowerCase() === cid) ||
           (cname && qt.customerName && qt.customerName.toLowerCase().includes(cname))
         );
@@ -242,8 +262,8 @@ export const getQuotations = async (params = {}) => {
 
       if (params.search) {
         const q = params.search.toLowerCase();
-        normalized = normalized.filter(qt => 
-          qt.quotationNumber.toLowerCase().includes(q) || 
+        normalized = normalized.filter(qt =>
+          qt.quotationNumber.toLowerCase().includes(q) ||
           qt.customerName.toLowerCase().includes(q) ||
           (qt.remarks && qt.remarks.toLowerCase().includes(q))
         );
@@ -265,8 +285,8 @@ export const getQuotations = async (params = {}) => {
   }
   if (params.search) {
     const q = params.search.toLowerCase();
-    list = list.filter(qt => 
-      qt.quotationNumber.toLowerCase().includes(q) || 
+    list = list.filter(qt =>
+      qt.quotationNumber.toLowerCase().includes(q) ||
       qt.customerName.toLowerCase().includes(q)
     );
   }
@@ -334,7 +354,7 @@ export const createQuotation = async (quotationData) => {
   try {
     const res = await api.post('/quotations', backendPayload);
     const created = normalizeQuotation(res.data?.data?.quotation || res.data?.data || res.data);
-    
+
     // Cache update
     const current = getStoredQuotations();
     saveStoredQuotations([created, ...current]);
@@ -361,7 +381,7 @@ export const getPendingQuotations = async () => {
 
   // Fallback: filter active pending statuses
   const { data: allQuotations } = await getQuotations();
-  return allQuotations.filter(q => 
+  return allQuotations.filter(q =>
     ['Draft', 'Sent', 'Follow-up Pending', 'Customer Interested', 'Negotiation'].includes(q.status)
   );
 };
@@ -452,7 +472,7 @@ export const updateQuotation = async (id, quotationData) => {
   try {
     const res = await api.put(`/quotations/${id}`, backendPayload);
     const updated = normalizeQuotation(res.data?.data?.quotation || res.data?.data || res.data);
-    
+
     const current = getStoredQuotations();
     saveStoredQuotations(current.map(q => String(q.id) === String(id) || String(q._id) === String(id) ? updated : q));
     return updated;
@@ -469,36 +489,132 @@ export const updateQuotation = async (id, quotationData) => {
  * 7. PUT /quotations/{id}/send - Mark quotation as SENT to customer (DRAFT -> SENT)
  */
 export const sendQuotation = async (id) => {
-  try {
-    const res = await api.put(`/quotations/${id}/send`);
-    const sent = normalizeQuotation(res.data?.data?.quotation || res.data?.data || res.data);
-    
-    const current = getStoredQuotations();
-    saveStoredQuotations(current.map(q => String(q.id) === String(id) ? { ...q, status: 'Sent' } : q));
-    return sent;
-  } catch (err) {
-    console.warn('PUT /quotations/:id/send fallback:', err?.response?.data || err.message);
-    const current = getStoredQuotations();
-    saveStoredQuotations(current.map(q => String(q.id) === String(id) ? { ...q, status: 'Sent' } : q));
-    return { id, status: 'Sent' };
+  const isMongoId = (val) => typeof val === 'string' && /^[0-9a-fA-F]{24}$/.test(val.trim());
+  if (hasRealJwtToken() && isMongoId(id)) {
+    try {
+      const res = await api.put(`/quotations/${id}/send`);
+      const sent = normalizeQuotation(res.data?.data?.quotation || res.data?.data || res.data);
+
+      const current = getStoredQuotations();
+      saveStoredQuotations(current.map(q => String(q.id) === String(id) || String(q._id) === String(id) ? { ...q, status: 'Sent' } : q));
+      return sent;
+    } catch (err) {
+      const errMsg = err?.response?.data?.message || err?.response?.data?.error || err.message || 'Failed to send quotation.';
+      console.warn('PUT /quotations/:id/send error:', errMsg);
+      throw new Error(errMsg);
+    }
   }
+
+  // Fallback update
+  const current = getStoredQuotations();
+  saveStoredQuotations(current.map(q => String(q.id) === String(id) ? { ...q, status: 'Sent' } : q));
+  return { id, status: 'Sent' };
 };
 
 /**
  * 8. PUT /quotations/{id}/cancel - Cancel quotation (Soft-delete only: isActive: false)
  */
 export const cancelQuotation = async (id) => {
-  try {
-    const res = await api.put(`/quotations/${id}/cancel`);
-    const current = getStoredQuotations();
-    saveStoredQuotations(current.map(q => String(q.id) === String(id) ? { ...q, status: 'Cancelled' } : q));
-    return res.data;
-  } catch (err) {
-    console.warn('PUT /quotations/:id/cancel fallback:', err?.response?.data || err.message);
-    const current = getStoredQuotations();
-    saveStoredQuotations(current.map(q => String(q.id) === String(id) ? { ...q, status: 'Cancelled' } : q));
-    return { success: true, message: 'Quotation cancelled' };
+  const isMongoId = (val) => typeof val === 'string' && /^[0-9a-fA-F]{24}$/.test(val.trim());
+  if (hasRealJwtToken() && isMongoId(id)) {
+    try {
+      const res = await api.put(`/quotations/${id}/cancel`);
+      const current = getStoredQuotations();
+      saveStoredQuotations(current.map(q => String(q.id) === String(id) || String(q._id) === String(id) ? { ...q, status: 'Cancelled' } : q));
+      return res.data;
+    } catch (err) {
+      const errMsg = err?.response?.data?.message || err?.response?.data?.error || err.message || 'Failed to cancel quotation.';
+      console.warn('PUT /quotations/:id/cancel error:', errMsg);
+      throw new Error(errMsg);
+    }
   }
+
+  // Fallback update
+  const current = getStoredQuotations();
+  saveStoredQuotations(current.map(q => String(q.id) === String(id) ? { ...q, status: 'Cancelled' } : q));
+  return { success: true, message: 'Quotation cancelled' };
+};
+
+/**
+ * 8b. Update quotation status via backend workflow and follow-up engines
+ */
+export const toBackendStatusKey = (s) => {
+  if (!s) return 'DRAFT';
+  const clean = String(s).toUpperCase().trim().replace(/[\s-]+/g, '_');
+  if (clean.includes('INTEREST')) return 'CUSTOMER_INTERESTED';
+  if (clean.includes('NEGOTIAT')) return 'NEGOTIATION';
+  if (clean.includes('PARTIAL')) return 'PARTIALLY_CONFIRMED';
+  if (clean.includes('CONFIRM')) return 'CONFIRMED';
+  if (clean.includes('CANCEL')) return 'CANCELLED';
+  if (clean.includes('REJECT')) return 'REJECTED';
+  if (clean.includes('EXPIRE')) return 'EXPIRED';
+  if (clean.includes('CLOSE')) return 'CLOSED';
+  if (clean.includes('COMPLETE')) return 'FOLLOW_UP_COMPLETED';
+  if (clean.includes('FOLLOW') || clean.includes('PENDING')) return 'FOLLOW_UP_PENDING';
+  if (clean.includes('SENT')) return 'SENT';
+  if (clean.includes('DRAFT')) return 'DRAFT';
+  return clean;
+};
+
+export const updateQuotationStatus = async (id, newStatus, remarks = '') => {
+  const mongoIdRegex = /^[0-9a-fA-F]{24}$/;
+  let validId = id;
+
+  const currentStored = getStoredQuotations();
+  const matched = currentStored.find(q => String(q.id) === String(id) || String(q._id) === String(id) || q.quotationNumber === id);
+  if (matched && matched._id && mongoIdRegex.test(matched._id)) {
+    validId = matched._id;
+  } else if (matched && matched.id && mongoIdRegex.test(matched.id)) {
+    validId = matched.id;
+  }
+
+  const statusKey = toBackendStatusKey(newStatus);
+  const displayStatus = normalizeQuotationStatus(statusKey);
+  const qNum = matched?.quotationNumber || (typeof id === 'string' && id.startsWith('QT') ? id : 'Quotation');
+
+  if (hasRealJwtToken() && mongoIdRegex.test(validId)) {
+    try {
+      if (statusKey === 'SENT') {
+        await api.put(`/quotations/${validId}/send`);
+      } else if (statusKey === 'CONFIRMED' || statusKey === 'PARTIALLY_CONFIRMED') {
+        await confirmQuotation(validId, { remarks: remarks || 'Confirmed by customer' });
+      } else if (statusKey === 'CANCELLED') {
+        await cancelQuotation(validId);
+      } else if (['CUSTOMER_INTERESTED', 'NEGOTIATION', 'REJECTED', 'FOLLOW_UP_PENDING', 'FOLLOW_UP_COMPLETED', 'EXPIRED', 'CLOSED'].includes(statusKey)) {
+        await api.post('/follow-ups', {
+          quotationId: validId,
+          communicationType: 'OTHER',
+          resultingStatus: statusKey,
+          customerResponse: remarks && remarks.trim() ? remarks.trim() : `Status updated to ${displayStatus}`,
+          remarks: remarks && remarks.trim() ? remarks.trim() : null
+        });
+      }
+    } catch (err) {
+      const errMsg = err?.response?.data?.message || err?.response?.data?.error || err.message || 'Status update failed on server.';
+      console.warn('updateQuotationStatus backend error:', errMsg);
+      throw new Error(errMsg);
+    }
+  }
+
+  // Update local storage cache
+  const updatedList = currentStored.map(q => {
+    if (String(q.id) === String(id) || String(q._id) === String(id) || String(q.id) === String(validId) || String(q._id) === String(validId) || q.quotationNumber === id) {
+      return {
+        ...q,
+        status: displayStatus,
+        remarks: remarks || q.remarks
+      };
+    }
+    return q;
+  });
+  saveStoredQuotations(updatedList);
+
+  return {
+    id: validId,
+    quotationNumber: qNum,
+    status: displayStatus,
+    statusKey
+  };
 };
 
 /**
@@ -519,7 +635,22 @@ export const renderQuotationFormat = async (id, formatKey = 'STANDARD_GST') => {
 /**
  * 10. GET /quotations/{id}/export - Download quotation in any format as Excel (.xlsx) or PDF
  */
-export const exportQuotationDocument = async (id, format = 'pdf', quotationNumber = 'QT') => {
+export const exportQuotationDocument = async (id, format = 'pdf', quotationNumber = 'QT', quotationData = null) => {
+  if (format === 'pdf') {
+    try {
+      let fullQuotation = quotationData;
+      if (!fullQuotation || !fullQuotation.items) {
+        fullQuotation = await getQuotationById(id);
+      }
+      if (fullQuotation) {
+        printQuotationPdf(fullQuotation);
+        return { success: true };
+      }
+    } catch (e) {
+      console.warn('Direct PDF print fallback:', e.message);
+    }
+  }
+
   try {
     const res = await api.get(`/quotations/${id}/export`, {
       params: { format, type: format },
@@ -528,8 +659,8 @@ export const exportQuotationDocument = async (id, format = 'pdf', quotationNumbe
 
     const isXlsx = format.toLowerCase().includes('xls');
     const blob = new Blob([res.data], {
-      type: isXlsx 
-        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      type: isXlsx
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         : 'application/pdf'
     });
 
@@ -572,7 +703,7 @@ export const confirmQuotation = async (id, confirmationDetails = {}) => {
   let targetQuotation = null;
   try {
     targetQuotation = await getQuotationById(id);
-  } catch (e) {}
+  } catch (e) { }
 
   const validQuotationId = (targetQuotation?._id && mongoIdRegex.test(targetQuotation._id))
     ? targetQuotation._id
@@ -628,7 +759,7 @@ export const confirmQuotation = async (id, confirmationDetails = {}) => {
   try {
     const res = await api.post('/confirmations', payload);
     const result = normalizeQuotation(res.data?.data?.quotation || res.data?.data || res.data);
-    
+
     // Update local storage
     const current = getStoredQuotations();
     const updated = current.map(q => {
@@ -677,7 +808,7 @@ export const getQuantityLedger = async (confirmationId) => {
   try {
     const res = await api.get(`/confirmations/${confirmationId}/quantity-ledger`);
     return res.data?.data || res.data;
-  } catch (err) {}
+  } catch (err) { }
   return null;
 };
 
@@ -685,6 +816,6 @@ export const getAmountComparison = async (confirmationId) => {
   try {
     const res = await api.get(`/confirmations/${confirmationId}/amount-comparison`);
     return res.data?.data || res.data;
-  } catch (err) {}
+  } catch (err) { }
   return null;
 };

@@ -12,6 +12,7 @@ import {
 import { formatDate } from '../utils/formatters';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
+import ConfirmModal from '../components/ConfirmModal';
 import { 
   Plus, 
   Search, 
@@ -50,6 +51,17 @@ export const Challans = () => {
   const [editChallan, setEditChallan] = useState(null);
   const [editFormData, setEditFormData] = useState({ deliveryDetails: '', remarks: '', items: [] });
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // Custom Confirm Modal
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    type: '', // 'finalize' | 'cancel'
+    challan: null,
+    title: '',
+    message: '',
+    confirmLabel: '',
+    danger: false
+  });
 
   const showToast = (msg, type = 'success') => {
     setToastMessage(msg);
@@ -136,37 +148,51 @@ export const Challans = () => {
     }
   };
 
-  // Finalize Challan (PUT /challans/{id}/finalize)
-  const handleFinalize = async (challan) => {
-    if (!window.confirm(`Finalize Delivery Challan ${challan.challanNumber}?\n\nThis executes an ATOMIC DUAL-WRITE transaction:\n1. Deducts physical warehouse stock\n2. Locks challan to immutable FINALIZED status.`)) {
-      return;
-    }
-    const id = challan._id || challan.id;
-    setActionLoadingId(id);
-    try {
-      const res = await finalizeChallan(id);
-      showToast(res.message || `Challan ${challan.challanNumber} finalized successfully! Physical stock deducted.`);
-      loadChallans();
-    } catch (err) {
-      showToast(err.response?.data?.message || err.message || 'Error finalizing challan', 'error');
-    } finally {
-      setActionLoadingId(null);
-    }
+  // Finalize Challan Modal Trigger
+  const handleFinalize = (challan) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'finalize',
+      challan,
+      title: 'Finalize Delivery Challan',
+      message: `Finalize Delivery Challan ${challan.challanNumber}?\n\nThis executes an ATOMIC DUAL-WRITE transaction:\n1. Deducts physical warehouse stock\n2. Locks challan to immutable FINALIZED status.`,
+      confirmLabel: 'Yes, Finalize Challan',
+      danger: false
+    });
   };
 
-  // Cancel DRAFT Challan (PUT /challans/{id}/cancel)
-  const handleCancel = async (challan) => {
-    if (!window.confirm(`Are you sure you want to cancel DRAFT Challan ${challan.challanNumber}?`)) {
-      return;
-    }
+  // Cancel DRAFT Challan Modal Trigger
+  const handleCancel = (challan) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'cancel',
+      challan,
+      title: 'Cancel Delivery Challan',
+      message: `Are you sure you want to cancel DRAFT Challan ${challan.challanNumber}? This action cannot be undone.`,
+      confirmLabel: 'Yes, Cancel Challan',
+      danger: true
+    });
+  };
+
+  // Execute confirmed action from modal
+  const handleConfirmModalAction = async () => {
+    const { type, challan } = confirmModal;
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    if (!challan) return;
+
     const id = challan._id || challan.id;
     setActionLoadingId(id);
     try {
-      const res = await cancelChallan(id);
-      showToast(res.message || `Challan ${challan.challanNumber} cancelled.`);
+      if (type === 'finalize') {
+        const res = await finalizeChallan(id);
+        showToast(res.message || `Challan ${challan.challanNumber} finalized successfully! Physical stock deducted.`);
+      } else if (type === 'cancel') {
+        const res = await cancelChallan(id);
+        showToast(res.message || `Challan ${challan.challanNumber} cancelled.`);
+      }
       loadChallans();
     } catch (err) {
-      showToast(err.response?.data?.message || err.message || 'Error cancelling challan', 'error');
+      showToast(err.response?.data?.message || err.message || 'Error processing request', 'error');
     } finally {
       setActionLoadingId(null);
     }
@@ -390,19 +416,19 @@ export const Challans = () => {
       </div>
 
       {/* Challans Table */}
-      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflowX: 'auto', backgroundColor: '#ffffff' }}>
-        <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1020px', fontSize: '0.8rem' }}>
+      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflowX: 'hidden', backgroundColor: '#ffffff' }}>
+        <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
           <thead>
             <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              <th style={{ padding: '0.75rem 0.85rem', fontWeight: 700, color: '#475569', minWidth: '140px' }}>Challan No.</th>
-              <th style={{ padding: '0.75rem 0.85rem', fontWeight: 700, color: '#475569', minWidth: '105px' }}>Date</th>
-              <th style={{ padding: '0.75rem 0.85rem', fontWeight: 700, color: '#475569', minWidth: '190px' }}>Customer Name</th>
-              <th style={{ padding: '0.75rem 0.85rem', fontWeight: 700, color: '#475569', minWidth: '130px' }}>Ref Quotation</th>
-              <th style={{ padding: '0.75rem 0.85rem', fontWeight: 700, color: '#475569', minWidth: '220px' }}>Vehicle / Delivery Details</th>
-              <th style={{ padding: '0.75rem 0.85rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '85px' }}>Items</th>
-              <th style={{ padding: '0.75rem 0.85rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '95px' }}>Total Qty</th>
-              <th style={{ padding: '0.75rem 0.85rem', textAlign: 'center', minWidth: '110px' }}>Status</th>
-              <th style={{ padding: '0.75rem 0.85rem', textAlign: 'center', minWidth: '190px' }}>Actions</th>
+              <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>Challan No.</th>
+              <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>Date</th>
+              <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Customer Name</th>
+              <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>Ref Quotation</th>
+              <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Vehicle / Delivery Details</th>
+              <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Items</th>
+              <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Total Qty</th>
+              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', whiteSpace: 'nowrap' }}>Status</th>
+              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', whiteSpace: 'nowrap' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -959,6 +985,17 @@ export const Challans = () => {
           </div>
         </Modal>
       )}
+
+      {/* Custom Confirm Modal for Finalize and Cancel */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel}
+        onConfirm={handleConfirmModalAction}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        danger={confirmModal.danger}
+      />
     </div>
   );
 };

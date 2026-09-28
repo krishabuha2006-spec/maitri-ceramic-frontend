@@ -236,7 +236,7 @@ export const Products = () => {
             className="form-control"
             value={companyFilter}
             onChange={(e) => setCompanyFilter(e.target.value)}
-            style={{ width: '140px', height: '38px', borderRadius: '8px', fontSize: '0.825rem' }}
+            style={{ minWidth: '180px', width: 'auto', height: '38px', borderRadius: '8px', fontSize: '0.825rem' }}
           >
             <option value="">All Brands</option>
             {companies.map(c => (
@@ -249,7 +249,7 @@ export const Products = () => {
             className="form-control"
             value={groupFilter}
             onChange={(e) => setGroupFilter(e.target.value)}
-            style={{ width: '150px', height: '38px', borderRadius: '8px', fontSize: '0.825rem' }}
+            style={{ minWidth: '220px', width: 'auto', height: '38px', borderRadius: '8px', fontSize: '0.825rem' }}
           >
             <option value="">All Groups</option>
             {groups.map(g => (
@@ -262,7 +262,7 @@ export const Products = () => {
             className="form-control"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            style={{ width: '115px', height: '38px', borderRadius: '8px', fontSize: '0.825rem' }}
+            style={{ minWidth: '120px', width: 'auto', height: '38px', borderRadius: '8px', fontSize: '0.825rem' }}
           >
             <option value="">All Status</option>
             <option value="Active">Active</option>
@@ -291,21 +291,21 @@ export const Products = () => {
         </div>
 
         {/* Responsive Clean Product Table */}
-        <div style={{ overflowX: 'auto', width: '100%', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.775rem', minWidth: '1100px' }}>
+        <div style={{ overflowX: 'hidden', width: '100%', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.775rem' }}>
             <thead>
               <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
-                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, minWidth: '125px' }}>SKU</th>
-                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, minWidth: '220px' }}>Product Name</th>
-                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, minWidth: '110px' }}>Company</th>
-                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, minWidth: '130px' }}>Group</th>
-                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center', minWidth: '75px' }}>HSN</th>
-                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center', minWidth: '55px' }}>Unit</th>
-                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'right', minWidth: '85px' }}>MRP</th>
-                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'right', minWidth: '95px' }}>Sale Price</th>
-                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center', minWidth: '90px' }}>Stock Qty</th>
-                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center', minWidth: '80px' }}>Status</th>
-                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center', minWidth: '105px' }}>Actions</th>
+                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700 }}>SKU</th>
+                <th style={{ padding: '0.55rem 0.65rem', fontWeight: 700 }}>Product Name</th>
+                <th style={{ padding: '0.55rem 0.65rem', fontWeight: 700 }}>Company</th>
+                <th style={{ padding: '0.55rem 0.65rem', fontWeight: 700 }}>Group</th>
+                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center' }}>HSN</th>
+                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center' }}>Unit</th>
+                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'right' }}>MRP</th>
+                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'right' }}>Sale Price</th>
+                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center' }}>Stock Qty</th>
+                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center' }}>Status</th>
+                <th style={{ padding: '0.55rem 0.65rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -426,7 +426,8 @@ export const Products = () => {
                           <Link
                             to={`/products/${p.id}`}
                             className="action-btn action-btn-view"
-                            title="View Details"
+                            data-tooltip="View Details"
+                            aria-label="View Product Details"
                           >
                             <Eye size={14} />
                           </Link>
@@ -435,7 +436,8 @@ export const Products = () => {
                             <Link
                               to={`/products/edit/${p.id}`}
                               className="action-btn action-btn-edit"
-                              title="Edit Product"
+                              data-tooltip="Edit Product"
+                              aria-label="Edit Product"
                             >
                               <Edit size={14} />
                             </Link>
@@ -446,7 +448,8 @@ export const Products = () => {
                               type="button"
                               className="action-btn action-btn-toggle"
                               onClick={() => handleToggleStatus(p.id, p.productName, p.status)}
-                              title={p.status === 'Active' ? 'Deactivate' : 'Activate'}
+                              data-tooltip={p.status === 'Active' ? 'Deactivate' : 'Activate'}
+                              aria-label={p.status === 'Active' ? 'Deactivate Product' : 'Activate Product'}
                             >
                               {p.status === 'Active' ? (
                                 <ToggleRight size={16} style={{ color: '#16a34a' }} />
@@ -461,7 +464,8 @@ export const Products = () => {
                               type="button"
                               className="action-btn action-btn-delete"
                               onClick={() => handleDeleteProduct(p.id, p.productName)}
-                              title="Delete Product"
+                              data-tooltip="Delete Product"
+                              aria-label="Delete Product"
                               style={{ color: '#dc2626' }}
                             >
                               <Trash2 size={14} />

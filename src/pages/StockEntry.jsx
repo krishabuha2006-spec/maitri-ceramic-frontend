@@ -62,11 +62,19 @@ export const StockEntry = () => {
     }));
   };
 
+  const handleNumberFocus = (e) => {
+    if (e.target) e.target.select();
+  };
+
   const handleChange = (e) => {
     const { name, value, type } = e.target;
+    let val = value;
+    if (type === 'number') {
+      val = String(val).replace(/^0+(?=\d)/, '');
+    }
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'number' ? Number(value) : value
+      [name]: val
     }));
     if (formError) setFormError('');
   };
@@ -103,23 +111,11 @@ export const StockEntry = () => {
     <div style={{ maxWidth: '980px', margin: '0 auto', paddingBottom: '3rem', fontFamily: 'var(--font-family)' }}>
       {/* Toast Notification */}
       {successToast && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.75rem',
-          backgroundColor: '#16a34a',
-          color: '#ffffff',
-          padding: '1rem 1.5rem',
-          borderRadius: '12px',
-          boxShadow: '0 10px 25px rgba(22, 163, 74, 0.3)',
-          fontWeight: 600
-        }}>
-          <CheckCircle2 size={22} />
-          <span>{successToast}</span>
+        <div className="floating-toast-container">
+          <div className="floating-toast">
+            <CheckCircle2 size={16} />
+            <span>{successToast}</span>
+          </div>
         </div>
       )}
 
@@ -282,6 +278,7 @@ export const StockEntry = () => {
                 className="form-control"
                 value={formData.quantity}
                 onChange={handleChange}
+                onFocus={handleNumberFocus}
                 required
                 min="1"
                 style={{ height: '42px', borderRadius: '8px', fontWeight: 700 }}

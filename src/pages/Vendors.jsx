@@ -1,19 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
-  Building2, Plus, Search, Edit3, ToggleLeft, ToggleRight, 
-  CheckCircle2, AlertCircle, RefreshCw, X, Save, ArrowLeft, ShieldCheck
+  Truck, Plus, Search, Edit3, ToggleLeft, ToggleRight, 
+  CheckCircle2, AlertCircle, RefreshCw, X, Save, ArrowLeft, Phone, Mail, MapPin
 } from 'lucide-react';
-import { getCompanies, createCompany, updateCompany, toggleCompanyStatus } from '../services/productService';
+import { getVendors, createVendor, updateVendor, toggleVendorStatus } from '../services/vendorService';
 import StatusBadge from '../components/StatusBadge';
 import Pagination from '../components/Pagination';
 
-export const Companies = () => {
-  const [companies, setCompanies] = useState([]);
+export const Vendors = () => {
+  const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
   const [successToast, setSuccessToast] = useState('');
 
   // Pagination state
@@ -25,96 +24,100 @@ export const Companies = () => {
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [validationErrors, setValidationErrors] = useState({});
   const [formData, setFormData] = useState({
-    companyName: '',
+    vendorName: '',
+    mobile: '',
+    email: '',
     gstNumber: '',
-    contactPerson: '',
-    contactMobile: '',
     address: '',
-    isOwnCompany: false,
     status: 'Active'
   });
 
-  const loadCompanies = async () => {
+  const loadVendors = async () => {
     setLoading(true);
     try {
-      const data = await getCompanies();
-      setCompanies(data || []);
+      const data = await getVendors();
+      setVendors(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error('Error loading companies:', err);
+      console.error('Error loading vendors:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadCompanies();
+    loadVendors();
   }, []);
 
-  // Open Full Page Form for Adding New Company
+  // Open Full Page Form for Adding New Vendor
   const handleAddNew = () => {
     setEditingId(null);
     setFormError('');
+    setValidationErrors({});
     setFormData({
-      companyName: '',
+      vendorName: '',
+      mobile: '',
+      email: '',
       gstNumber: '',
-      contactPerson: '',
-      contactMobile: '',
       address: '',
-      isOwnCompany: false,
       status: 'Active'
     });
     setShowForm(true);
   };
 
-  // Open Full Page Form for Editing Existing Company
-  const handleEdit = (comp) => {
-    setEditingId(comp.id || comp._id);
+  // Open Full Page Form for Editing Existing Vendor
+  const handleEdit = (vendor) => {
+    setEditingId(vendor.id || vendor._id);
     setFormError('');
+    setValidationErrors({});
     setFormData({
-      companyName: comp.companyName || '',
-      gstNumber: comp.gstNumber || '',
-      contactPerson: comp.contactPerson || '',
-      contactMobile: comp.contactMobile || '',
-      address: comp.address || '',
-      isOwnCompany: comp.companyType === 'OWN' || !!comp.isOwnCompany,
-      status: comp.status || (comp.isActive === false ? 'Inactive' : 'Active')
+      vendorName: vendor.vendorName || '',
+      mobile: vendor.mobile || '',
+      email: vendor.email || '',
+      gstNumber: vendor.gstNumber || '',
+      address: vendor.address || '',
+      status: vendor.status || (vendor.isActive === false ? 'Inactive' : 'Active')
     });
     setShowForm(true);
   };
 
-  const handleToggleStatus = async (comp) => {
-    const id = comp.id || comp._id;
-    const isCurrentlyActive = comp.status === 'Active' || comp.isActive !== false;
+  const handleToggleStatus = async (vendor) => {
+    const id = vendor.id || vendor._id;
+    const isCurrentlyActive = vendor.status === 'Active' || vendor.isActive !== false;
     const actionText = isCurrentlyActive ? 'deactivated' : 'activated';
 
     try {
-      await toggleCompanyStatus(id, isCurrentlyActive);
-      setSuccessToast(`Company "${comp.companyName}" ${actionText} successfully.`);
+      await toggleVendorStatus(id, isCurrentlyActive);
+      setSuccessToast(`Vendor "${vendor.vendorName}" ${actionText} successfully.`);
       setTimeout(() => setSuccessToast(''), 2500);
-      loadCompanies();
+      loadVendors();
     } catch (err) {
-      alert(err.message || `Failed to update status.`);
+      alert(err.message || 'Failed to update vendor status.');
     }
   };
-
-  const [validationErrors, setValidationErrors] = useState({});
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
 
     const errors = {};
-    if (!formData.companyName.trim()) {
-      errors.companyName = 'Company / Brand Name is required.';
+    if (!formData.vendorName.trim()) {
+      errors.vendorName = 'Vendor / Supplier Name is required.';
     }
 
     const trimmedGst = (formData.gstNumber || '').trim().toUpperCase();
     if (trimmedGst) {
-      // Standard Indian GSTIN Regex (15 alphanumeric characters: 2 state + 5 PAN alpha + 4 PAN num + 1 PAN alpha + 1 entity num + 'Z' + 1 checksum)
       const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
       if (trimmedGst.length !== 15 || !gstRegex.test(trimmedGst)) {
         errors.gstNumber = 'Invalid GSTIN format (e.g. 24ABCDE1234F1Z9). Must be a valid 15-character GSTIN.';
+      }
+    }
+
+    if (formData.email && formData.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email.trim())) {
+        errors.email = 'Please enter a valid email address.';
       }
     }
 
@@ -127,30 +130,28 @@ export const Companies = () => {
     setSaving(true);
     try {
       const payload = {
-        companyName: formData.companyName.trim(),
+        vendorName: formData.vendorName.trim(),
+        mobile: formData.mobile ? formData.mobile.trim() : null,
+        email: formData.email ? formData.email.trim().toLowerCase() : null,
         gstNumber: trimmedGst || null,
-        contactPerson: formData.contactPerson ? formData.contactPerson.trim() : null,
-        contactMobile: formData.contactMobile ? formData.contactMobile.trim() : null,
         address: formData.address ? formData.address.trim() : null,
-        isOwnCompany: formData.isOwnCompany,
-        companyType: formData.isOwnCompany ? 'OWN' : 'BRAND_MANUFACTURER',
         status: formData.status,
         isActive: formData.status === 'Active'
       };
 
       if (editingId) {
-        await updateCompany(editingId, payload);
-        setSuccessToast(`Company "${formData.companyName}" updated successfully!`);
+        await updateVendor(editingId, payload);
+        setSuccessToast(`Vendor "${formData.vendorName}" updated successfully!`);
       } else {
-        await createCompany(payload);
-        setSuccessToast(`New Company "${formData.companyName}" created successfully!`);
+        await createVendor(payload);
+        setSuccessToast(`New Vendor "${formData.vendorName}" created successfully!`);
       }
 
       setTimeout(() => setSuccessToast(''), 3000);
       setShowForm(false);
-      loadCompanies();
+      loadVendors();
     } catch (err) {
-      setFormError(err.message || 'Failed to save company record.');
+      setFormError(err.message || 'Failed to save vendor record.');
     } finally {
       setSaving(false);
     }
@@ -158,24 +159,22 @@ export const Companies = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, statusFilter, typeFilter]);
+  }, [search, statusFilter]);
 
   // Filter logic
-  const filteredCompanies = companies.filter(c => {
+  const filteredVendors = vendors.filter(v => {
     const q = search.toLowerCase();
     const matchSearch = !search || 
-      c.companyName.toLowerCase().includes(q) || 
-      (c.gstNumber && c.gstNumber.toLowerCase().includes(q)) ||
-      (c.contactPerson && c.contactPerson.toLowerCase().includes(q)) ||
-      (c.contactMobile && c.contactMobile.includes(q));
+      (v.vendorName && v.vendorName.toLowerCase().includes(q)) || 
+      (v.gstNumber && v.gstNumber.toLowerCase().includes(q)) ||
+      (v.mobile && v.mobile.includes(q)) ||
+      (v.email && v.email.toLowerCase().includes(q));
 
-    const matchStatus = !statusFilter || c.status === statusFilter;
-    const matchType = !typeFilter || (typeFilter === 'own' ? c.isOwnCompany : !c.isOwnCompany);
-
-    return matchSearch && matchStatus && matchType;
+    const matchStatus = !statusFilter || v.status === statusFilter;
+    return matchSearch && matchStatus;
   });
 
-  // Render Full Page Form View (1020px layout matching Users & CreateChallan)
+  // Render Full Page Form View (1020px layout matching Companies & Users)
   if (showForm) {
     return (
       <div style={{ maxWidth: '1020px', margin: '0 auto', paddingBottom: '3rem', fontFamily: 'var(--font-family)' }}>
@@ -204,14 +203,14 @@ export const Companies = () => {
             }}
           >
             <ArrowLeft size={18} />
-            <span>Back to Companies</span>
+            <span>Back to Vendors</span>
           </button>
           <div>
             <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-              {editingId ? 'Edit Company / Brand Profile' : 'Add New Company / Brand'}
+              {editingId ? 'Edit Vendor / Supplier Profile' : 'Add New Vendor / Supplier'}
             </h1>
             <p style={{ color: '#64748b', fontSize: '0.825rem', margin: '0.15rem 0 0 0' }}>
-              Define company name, GSTIN, primary firm configuration, contact information, and active status.
+              Define supplier name, contact phone, email, GSTIN, and registered office address.
             </p>
           </div>
         </div>
@@ -247,30 +246,30 @@ export const Companies = () => {
           }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.25rem' }}>
               
-              {/* Company Name */}
+              {/* Vendor Name */}
               <div style={{ gridColumn: 'span 8' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.4rem' }}>
-                  Company / Brand Name <span style={{ color: '#dc2626' }}>*</span>
+                  Vendor / Supplier Name <span style={{ color: '#dc2626' }}>*</span>
                 </label>
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="e.g. Kajaria, Hindware, Jaquar, Somany..."
-                  value={formData.companyName}
+                  placeholder="e.g. Morbi Tile Factory, Ceramic Hub Supplier..."
+                  value={formData.vendorName}
                   onChange={(e) => {
-                    setFormData({ ...formData, companyName: e.target.value });
-                    if (validationErrors.companyName) setValidationErrors(prev => ({ ...prev, companyName: '' }));
+                    setFormData({ ...formData, vendorName: e.target.value });
+                    if (validationErrors.vendorName) setValidationErrors(prev => ({ ...prev, vendorName: '' }));
                   }}
                   style={{
                     height: '44px',
                     borderRadius: '8px',
-                    borderColor: validationErrors.companyName ? '#dc2626' : undefined,
-                    backgroundColor: validationErrors.companyName ? '#fef2f2' : undefined
+                    borderColor: validationErrors.vendorName ? '#dc2626' : undefined,
+                    backgroundColor: validationErrors.vendorName ? '#fef2f2' : undefined
                   }}
                 />
-                {validationErrors.companyName && (
+                {validationErrors.vendorName && (
                   <div style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.3rem', fontWeight: 500 }}>
-                    {validationErrors.companyName}
+                    {validationErrors.vendorName}
                   </div>
                 )}
               </div>
@@ -289,9 +288,7 @@ export const Companies = () => {
                   onChange={(e) => {
                     const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15);
                     setFormData({ ...formData, gstNumber: val });
-                    if (validationErrors.gstNumber) {
-                      setValidationErrors(prev => ({ ...prev, gstNumber: '' }));
-                    }
+                    if (validationErrors.gstNumber) setValidationErrors(prev => ({ ...prev, gstNumber: '' }));
                   }}
                   style={{
                     height: '44px',
@@ -314,22 +311,7 @@ export const Companies = () => {
                 )}
               </div>
 
-              {/* Contact Person */}
-              <div style={{ gridColumn: 'span 6' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.4rem' }}>
-                  Contact Person Name
-                </label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="e.g. Rajesh Shah, Sales Head"
-                  value={formData.contactPerson}
-                  onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
-                  style={{ height: '44px', borderRadius: '8px' }}
-                />
-              </div>
-
-              {/* Contact Mobile */}
+              {/* Mobile Number */}
               <div style={{ gridColumn: 'span 6' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.4rem' }}>
                   Contact Mobile Number
@@ -338,21 +320,49 @@ export const Companies = () => {
                   type="text"
                   className="form-control"
                   placeholder="e.g. 98250 12345"
-                  value={formData.contactMobile}
-                  onChange={(e) => setFormData({ ...formData, contactMobile: e.target.value })}
+                  value={formData.mobile}
+                  onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
                   style={{ height: '44px', borderRadius: '8px' }}
                 />
               </div>
 
-              {/* Address */}
-              <div style={{ gridColumn: 'span 12' }}>
+              {/* Email Address */}
+              <div style={{ gridColumn: 'span 6' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.4rem' }}>
-                  Registered Office / Showroom Address
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  className="form-control"
+                  placeholder="e.g. supplier@morbi.com"
+                  value={formData.email}
+                  onChange={(e) => {
+                    setFormData({ ...formData, email: e.target.value });
+                    if (validationErrors.email) setValidationErrors(prev => ({ ...prev, email: '' }));
+                  }}
+                  style={{
+                    height: '44px',
+                    borderRadius: '8px',
+                    borderColor: validationErrors.email ? '#dc2626' : undefined,
+                    backgroundColor: validationErrors.email ? '#fef2f2' : undefined
+                  }}
+                />
+                {validationErrors.email && (
+                  <div style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.3rem', fontWeight: 500 }}>
+                    {validationErrors.email}
+                  </div>
+                )}
+              </div>
+
+              {/* Registered Address */}
+              <div style={{ gridColumn: 'span 8' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.4rem' }}>
+                  Registered Office / Warehouse Address
                 </label>
                 <textarea
                   className="form-control"
                   rows={2}
-                  placeholder="e.g. 101, Corporate Heights, Near Circle, Ahmedabad, Gujarat"
+                  placeholder="e.g. Plot No 42, 8-A National Highway, Morbi, Gujarat"
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   style={{ borderRadius: '8px', fontSize: '0.825rem' }}
@@ -360,7 +370,7 @@ export const Companies = () => {
               </div>
 
               {/* Status */}
-              <div style={{ gridColumn: 'span 6' }}>
+              <div style={{ gridColumn: 'span 4' }}>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
                   Account Status
                 </label>
@@ -371,35 +381,10 @@ export const Companies = () => {
                   style={{ height: '44px', borderRadius: '8px', fontWeight: 600 }}
                 >
                   <option value="Active">Active (Available across catalog)</option>
-                  <option value="Inactive">Inactive (Disabled for new quotations)</option>
+                  <option value="Inactive">Inactive (Disabled for new purchases)</option>
                 </select>
               </div>
 
-              {/* Primary Own Firm Checkbox */}
-              <div style={{ gridColumn: 'span 6', display: 'flex', alignItems: 'center' }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.85rem 1.1rem',
-                  backgroundColor: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '10px',
-                  width: '100%',
-                  marginTop: '1.4rem'
-                }}>
-                  <input
-                    type="checkbox"
-                    id="isOwnCompanyCheckFull"
-                    checked={formData.isOwnCompany}
-                    onChange={(e) => setFormData({ ...formData, isOwnCompany: e.target.checked })}
-                    style={{ width: '18px', height: '18px', accentColor: '#2563eb', cursor: 'pointer' }}
-                  />
-                  <label htmlFor="isOwnCompanyCheckFull" style={{ cursor: 'pointer', margin: 0, fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
-                    This is our Own Primary Company (Max 1 allowed)
-                  </label>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -446,7 +431,7 @@ export const Companies = () => {
               ) : (
                 <>
                   <Save size={16} />
-                  <span>{editingId ? 'Update Company Profile' : 'Save Company Profile'}</span>
+                  <span>{editingId ? 'Update Vendor Profile' : 'Save Vendor Profile'}</span>
                 </>
               )}
             </button>
@@ -481,14 +466,14 @@ export const Companies = () => {
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <Building2 size={20} />
+              <Truck size={20} />
             </div>
             <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-              Company & Brand Management
+              Vendor & Supplier Management
             </h2>
           </div>
           <p style={{ fontSize: '0.825rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>
-            Manage ceramic manufacturing brands, suppliers & primary company configurations
+            Manage ceramic tile suppliers, manufacturers & procurement vendors
           </p>
         </div>
 
@@ -516,7 +501,7 @@ export const Companies = () => {
             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderRadius: '8px', padding: '0.6rem 1.25rem', fontWeight: 700 }}
           >
             <Plus size={18} />
-            <span>Add New Company</span>
+            <span>Add New Vendor</span>
           </button>
         </div>
       </div>
@@ -540,7 +525,7 @@ export const Companies = () => {
           <input
             type="text"
             className="form-control"
-            placeholder="Search company name, GSTIN, contact..."
+            placeholder="Search vendor name, GSTIN, mobile, email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{ paddingLeft: '36px', height: '38px', borderRadius: '8px', fontSize: '0.825rem' }}
@@ -557,24 +542,12 @@ export const Companies = () => {
         </div>
 
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'nowrap', flexShrink: 0, marginLeft: 'auto' }}>
-          {/* Filter by Type */}
-          <select
-            className="form-control"
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            style={{ width: '170px', height: '38px', borderRadius: '8px', fontSize: '0.825rem', flexShrink: 0 }}
-          >
-            <option value="">All Company Types</option>
-            <option value="own">Primary Own Firm</option>
-            <option value="brand">Brand Supplier</option>
-          </select>
-
           {/* Filter by Status */}
           <select
             className="form-control"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            style={{ width: '135px', height: '38px', borderRadius: '8px', fontSize: '0.825rem', flexShrink: 0 }}
+            style={{ width: '140px', height: '38px', borderRadius: '8px', fontSize: '0.825rem', flexShrink: 0 }}
           >
             <option value="">All Status</option>
             <option value="Active">Active</option>
@@ -588,10 +561,9 @@ export const Companies = () => {
         <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
           <thead>
             <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontWeight: 700 }}>Company / Brand Name</th>
-              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontWeight: 700, whiteSpace: 'nowrap' }}>Category</th>
-              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontWeight: 700, whiteSpace: 'nowrap' }}>GSTIN</th>
+              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontWeight: 700 }}>Vendor / Supplier Name</th>
               <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontWeight: 700 }}>Contact Info</th>
+              <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontWeight: 700, whiteSpace: 'nowrap' }}>GSTIN</th>
               <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontWeight: 700, whiteSpace: 'nowrap' }}>Status</th>
               <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontWeight: 700, whiteSpace: 'nowrap' }}>Actions</th>
             </tr>
@@ -599,93 +571,65 @@ export const Companies = () => {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '2.5rem' }}>
+                <td colSpan="5" style={{ textAlign: 'center', padding: '2.5rem' }}>
                   <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
                     <RefreshCw size={22} style={{ animation: 'spin 1s linear infinite', color: '#2563eb' }} />
-                    <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#475569' }}>Loading company records...</span>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#475569' }}>Loading vendor records...</span>
                   </div>
                 </td>
               </tr>
-            ) : filteredCompanies.length === 0 ? (
+            ) : filteredVendors.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-                  No companies found matching search filters.
+                <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                  No vendors found matching search filters.
                 </td>
               </tr>
             ) : (
-              filteredCompanies
+              filteredVendors
                 .slice((currentPage - 1) * pageSize, currentPage * pageSize)
-                .map(comp => (
-                <tr key={comp.id || comp._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                .map(v => (
+                <tr key={v.id || v._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '0.65rem 0.75rem', verticalAlign: 'middle', fontWeight: 700, color: '#0f172a' }}>
-                    {comp.companyName}
-                    {comp.address && (
-                      <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 400, marginTop: '2px' }}>
-                        {comp.address}
+                    {v.vendorName}
+                    {v.address && (
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 400, marginTop: '2px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <MapPin size={11} style={{ flexShrink: 0, color: '#94a3b8' }} />
+                        <span>{v.address}</span>
                       </div>
                     )}
                   </td>
-                  <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
-                    {comp.isOwnCompany ? (
-                      <span style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        backgroundColor: '#f0fdf4',
-                        color: '#15803d',
-                        border: '1px solid #bbf7d0',
-                        padding: '0.25rem 0.65rem',
-                        borderRadius: '20px',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.35rem',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        <ShieldCheck size={13} style={{ color: '#16a34a' }} />
-                        <span>Primary Own Firm</span>
-                      </span>
-                    ) : (
-                      <span style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        backgroundColor: '#f8fafc',
-                        color: '#475569',
-                        border: '1px solid #cbd5e1',
-                        padding: '0.25rem 0.65rem',
-                        borderRadius: '20px',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.4rem',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#64748b' }}></span>
-                        <span>Brand Supplier</span>
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', fontFamily: 'monospace', color: '#475569', fontWeight: 600 }}>
-                    {comp.gstNumber || '-'}
-                  </td>
                   <td style={{ padding: '0.65rem 0.75rem', verticalAlign: 'middle', color: '#334155' }}>
-                    {comp.contactPerson ? (
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.8rem' }}>{comp.contactPerson}</div>
-                        {comp.contactMobile && (
-                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{comp.contactMobile}</div>
+                    {v.mobile || v.email ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        {v.mobile && (
+                          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Phone size={12} style={{ color: '#2563eb' }} />
+                            <span>{v.mobile}</span>
+                          </div>
+                        )}
+                        {v.email && (
+                          <div style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Mail size={12} style={{ color: '#94a3b8' }} />
+                            <span>{v.email}</span>
+                          </div>
                         )}
                       </div>
                     ) : (
                       <span style={{ color: '#94a3b8' }}>-</span>
                     )}
                   </td>
-                  <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', verticalAlign: 'middle' }}>
-                    <StatusBadge status={comp.status} />
+                  <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', fontFamily: 'monospace', color: '#475569', fontWeight: 600 }}>
+                    {v.gstNumber || '-'}
+                  </td>
+                  <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                    <StatusBadge status={v.status} />
                   </td>
                   <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                       <button 
-                        onClick={() => handleEdit(comp)} 
+                        onClick={() => handleEdit(v)} 
                         className="action-btn action-btn-edit"
-                        data-tooltip="Edit Company Details"
+                        data-tooltip="Edit Vendor Details"
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -702,9 +646,9 @@ export const Companies = () => {
                         <Edit3 size={15} />
                       </button>
                       <button 
-                        onClick={() => handleToggleStatus(comp)} 
+                        onClick={() => handleToggleStatus(v)} 
                         className="action-btn action-btn-toggle"
-                        data-tooltip={comp.status === 'Active' || comp.isActive !== false ? 'Deactivate Company' : 'Activate Company'}
+                        data-tooltip={v.status === 'Active' || v.isActive !== false ? 'Deactivate Vendor' : 'Activate Vendor'}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -713,11 +657,11 @@ export const Companies = () => {
                           height: '32px',
                           borderRadius: '8px',
                           border: '1px solid #cbd5e1',
-                          backgroundColor: (comp.status === 'Active' || comp.isActive !== false) ? '#f0fdf4' : '#f8fafc',
+                          backgroundColor: (v.status === 'Active' || v.isActive !== false) ? '#f0fdf4' : '#f8fafc',
                           cursor: 'pointer'
                         }}
                       >
-                        {comp.status === 'Active' || comp.isActive !== false ? (
+                        {v.status === 'Active' || v.isActive !== false ? (
                           <ToggleRight size={18} style={{ color: '#16a34a' }} />
                         ) : (
                           <ToggleLeft size={18} style={{ color: '#94a3b8' }} />
@@ -734,7 +678,7 @@ export const Companies = () => {
         {/* Pagination Controls */}
         <Pagination
           currentPage={currentPage}
-          totalItems={filteredCompanies.length}
+          totalItems={filteredVendors.length}
           pageSize={pageSize}
           onPageChange={setCurrentPage}
           onPageSizeChange={setPageSize}
@@ -744,5 +688,4 @@ export const Companies = () => {
   );
 };
 
-export default Companies;
-
+export default Vendors;

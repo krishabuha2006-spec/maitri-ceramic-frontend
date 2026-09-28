@@ -20,38 +20,17 @@ export const RESULTING_STATUSES = [
   { value: 'CLOSED', label: 'Closed' }
 ];
 
-let INITIAL_MOCK_FOLLOWUPS = [
-  {
-    id: 'FLW-001',
-    _id: '6aa8e52a92ab3c10a4023901',
-    quotationId: '6aa8e9ba9f4e2dfd4bc01550',
-    quotationNumber: 'QT-2026-001',
-    customerName: 'Rajesh Sharma Construction',
-    quotationAmount: 144432.00,
-    followUpDate: '2026-03-05',
-    nextFollowUpDate: '2026-03-18',
-    salesperson: 'Vikram Mehta',
-    communicationType: 'CALL',
-    resultingStatus: 'CUSTOMER_INTERESTED',
-    status: 'Customer Interested',
-    customerResponse: 'Customer reviewed Statuario tile sample. Requested final 2% discount approval.',
-    remarks: 'Needs glossy finish sample delivery at site.',
-    expectedOrderValue: 140000,
-    nextAction: 'Call site engineer after sample delivery.',
-    isActive: true,
-    createdAt: '2026-03-05'
-  }
-];
-
 export const getStoredFollowUps = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.filter(f => f && f.id !== 'FLW-001' && f._id !== '6aa8e52a92ab3c10a4023901');
+      }
     }
   } catch (e) {}
-  return INITIAL_MOCK_FOLLOWUPS;
+  return [];
 };
 
 export const saveStoredFollowUps = (list) => {
@@ -144,9 +123,28 @@ export const createFollowUp = async (followUpData) => {
     const res = await api.post('/follow-ups', payload);
     const created = normalizeFollowUp(res.data?.data?.followUp || res.data?.data || res.data);
     
-    // Save to local cache
+    // Save to local follow-up cache
     const current = getStoredFollowUps();
     saveStoredFollowUps([created, ...current]);
+
+    // Also sync quotation status in local quotation cache
+    try {
+      const qRaw = localStorage.getItem('maitri_quotations_list');
+      if (qRaw) {
+        const qList = JSON.parse(qRaw);
+        if (Array.isArray(qList)) {
+          const displayStatus = String(resStatus).replace(/_/g, ' ');
+          const updatedQList = qList.map(q => {
+            if (String(q.id) === String(followUpData.quotationId) || String(q._id) === String(followUpData.quotationId) || q.quotationNumber === followUpData.quotationNumber) {
+              return { ...q, status: displayStatus };
+            }
+            return q;
+          });
+          localStorage.setItem('maitri_quotations_list', JSON.stringify(updatedQList));
+        }
+      }
+    } catch (e) {}
+
     return created;
   } catch (err) {
     const serverErr = err?.response?.data?.message || err?.message;
@@ -161,6 +159,25 @@ export const createFollowUp = async (followUpData) => {
     });
     const current = getStoredFollowUps();
     saveStoredFollowUps([fallback, ...current]);
+
+    // Sync quotation status in local quotation cache in offline/fallback mode too
+    try {
+      const qRaw = localStorage.getItem('maitri_quotations_list');
+      if (qRaw) {
+        const qList = JSON.parse(qRaw);
+        if (Array.isArray(qList)) {
+          const displayStatus = String(resStatus).replace(/_/g, ' ');
+          const updatedQList = qList.map(q => {
+            if (String(q.id) === String(followUpData.quotationId) || String(q._id) === String(followUpData.quotationId) || q.quotationNumber === followUpData.quotationNumber) {
+              return { ...q, status: displayStatus };
+            }
+            return q;
+          });
+          localStorage.setItem('maitri_quotations_list', JSON.stringify(updatedQList));
+        }
+      }
+    } catch (e) {}
+
     return fallback;
   }
 };
@@ -343,12 +360,55 @@ export const updateFollowUp = async (id, updateData) => {
     
     const current = getStoredFollowUps();
     saveStoredFollowUps(current.map(f => String(f.id) === String(id) || String(f._id) === String(id) ? updated : f));
+
+    // Also sync quotation status in local quotation cache
+    if (resStatus) {
+      try {
+        const qRaw = localStorage.getItem('maitri_quotations_list');
+        if (qRaw) {
+          const qList = JSON.parse(qRaw);
+          if (Array.isArray(qList)) {
+            const displayStatus = String(resStatus).replace(/_/g, ' ');
+            const qTargetId = updated.quotationId || updateData.quotationId;
+            const updatedQList = qList.map(q => {
+              if (String(q.id) === String(qTargetId) || String(q._id) === String(qTargetId) || q.quotationNumber === updateData.quotationNumber) {
+                return { ...q, status: displayStatus };
+              }
+              return q;
+            });
+            localStorage.setItem('maitri_quotations_list', JSON.stringify(updatedQList));
+          }
+        }
+      } catch (e) {}
+    }
+
     return updated;
   } catch (err) {
     console.warn('PUT /follow-ups/:id notice:', err?.response?.data || err.message);
     const current = getStoredFollowUps();
     const updated = normalizeFollowUp({ ...updateData, id });
     saveStoredFollowUps(current.map(f => String(f.id) === String(id) || String(f._id) === String(id) ? updated : f));
+
+    if (resStatus) {
+      try {
+        const qRaw = localStorage.getItem('maitri_quotations_list');
+        if (qRaw) {
+          const qList = JSON.parse(qRaw);
+          if (Array.isArray(qList)) {
+            const displayStatus = String(resStatus).replace(/_/g, ' ');
+            const qTargetId = updated.quotationId || updateData.quotationId;
+            const updatedQList = qList.map(q => {
+              if (String(q.id) === String(qTargetId) || String(q._id) === String(qTargetId) || q.quotationNumber === updateData.quotationNumber) {
+                return { ...q, status: displayStatus };
+              }
+              return q;
+            });
+            localStorage.setItem('maitri_quotations_list', JSON.stringify(updatedQList));
+          }
+        }
+      } catch (e) {}
+    }
+
     return updated;
   }
 };

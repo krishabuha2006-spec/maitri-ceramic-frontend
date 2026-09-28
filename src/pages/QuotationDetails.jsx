@@ -6,6 +6,7 @@ import {
   approveConfirmation, 
   sendQuotation, 
   cancelQuotation, 
+  updateQuotationStatus,
   renderQuotationFormat, 
   exportQuotationDocument 
 } from '../services/quotationService';
@@ -15,24 +16,53 @@ import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
 import { 
   ArrowLeft, CheckCircle2, FileText, Printer, Plus, Trash2, ShieldCheck, 
-  Download, LayoutTemplate, Send, XCircle, FileSpreadsheet, RefreshCw 
+  Download, LayoutTemplate, Send, XCircle, FileSpreadsheet, RefreshCw,
+  Receipt, Truck, Check, AlertCircle 
 } from 'lucide-react';
+
+import ConfirmModal from '../components/ConfirmModal';
 
 export const QuotationDetails = () => {
   const { id } = useParams();
   const [quotation, setQuotation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [productsList, setProductsList] = useState([]);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState('success');
 
   // Active Presentation Format Layout (Module 5 Spec: 8 Formats)
   const [selectedFormat, setSelectedFormat] = useState('STANDARD');
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Status Change Modal state
+  const [statusModal, setStatusModal] = useState({
+    isOpen: false,
+    status: 'Customer Interested',
+    remarks: '',
+    saving: false
+  });
 
   // Confirmation Modal state
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [confirmationItems, setConfirmationItems] = useState([]);
   const [extraItems, setExtraItems] = useState([]);
   const [confirmationRemarks, setConfirmationRemarks] = useState('');
+
+  // General Confirm Modal state for send, cancel, approve
+  const [actionModal, setActionModal] = useState({
+    isOpen: false,
+    type: '', // 'send' | 'cancel' | 'approve'
+    title: '',
+    message: '',
+    confirmLabel: '',
+    danger: false
+  });
+
+  const showToast = (msg, type = 'success') => {
+    setToastType(type);
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 3500);
+  };
 
   const FORMAT_OPTIONS = [
     { key: 'STANDARD', label: '1. Standard Customer Quotation (STANDARD)' },
@@ -53,18 +83,25 @@ export const QuotationDetails = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const qt = await getQuotationById(id);
-      setQuotation(qt);
-      if (qt.items) {
-        setConfirmationItems(qt.items.map(item => ({
-          ...item,
-          quotedQty: item.quantity,
-          confirmedQty: item.confirmedQty ?? item.quantity,
-          extraQty: item.extraQty ?? 0,
-          deliveredQty: item.deliveredQty ?? 0,
-          pendingDeliveryQty: Math.max(0, ((item.confirmedQty ?? item.quantity) + (item.extraQty ?? 0)) - (item.deliveredQty ?? 0))
-        })));
+      const data = await getQuotationById(id);
+      setQuotation(data);
+      if (data?.formatKey) {
+        setSelectedFormat(data.formatKey);
       }
+      
+      const mappedItems = (data.items || []).map((item, idx) => ({
+        originalQuotationItemId: item.id || item._id || `item_${idx}`,
+        sku: item.sku || item.companySku || '',
+        productName: item.productName || item.name || '',
+        originalQuantity: Number(item.quantity || 0),
+        confirmedQuantity: Number(item.confirmedQty ?? item.quantity ?? 0),
+        extraQuantity: Number(item.extraQty || 0),
+        rate: Number(item.rate || item.quotedRate || 0),
+        remarks: item.remarks || ''
+      }));
+      setConfirmationItems(mappedItems);
+      setExtraItems([]);
+      setConfirmationRemarks(data.remarks || '');
     } catch (err) {
       console.error(err);
     } finally {
@@ -74,49 +111,73 @@ export const QuotationDetails = () => {
 
   const fetchCatalogProducts = async () => {
     try {
-      const res = await getProducts();
-      setProductsList(res.data || []);
+      const res = await getProducts({ limit: 300 });
+      setProductsList(Array.isArray(res?.data) ? res.data : []);
     } catch (err) {
-      console.error('Failed to load catalog products', err);
+      console.warn('Could not fetch catalog products for ad-hoc selection:', err);
     }
   };
 
-  const handleQtyChange = (index, field, val) => {
+  const handleConfirmedQtyChange = (index, val) => {
     const updated = [...confirmationItems];
-    updated[index][field] = Number(val);
-    const totalCommitted = Number(updated[index].confirmedQty || 0) + Number(updated[index].extraQty || 0);
-    const delivered = Number(updated[index].deliveredQty || 0);
-    updated[index].pendingDeliveryQty = Math.max(0, totalCommitted - delivered);
+    updated[index].confirmedQuantity = Math.max(0, Number(val));
     setConfirmationItems(updated);
   };
 
-  const addExtraItemRow = () => {
+  const handleExtraQtyChange = (index, val) => {
+    const updated = [...confirmationItems];
+    updated[index].extraQuantity = Math.max(0, Number(val));
+    setConfirmationItems(updated);
+  };
+
+  const handleAddExtraAdHocItem = () => {
     setExtraItems(prev => [
       ...prev,
-      { productId: '', adHocName: '', adHocMrp: 0, quantity: 1, remarks: '' }
+      {
+        tempId: Date.now(),
+        productId: '',
+        adHocName: '',
+        adHocMrp: 0,
+        quantity: 1,
+        gstPct: 18,
+        remarks: ''
+      }
     ]);
   };
 
-  const removeExtraItemRow = (idx) => {
-    setExtraItems(prev => prev.filter((_, i) => i !== idx));
+  const handleExtraItemChange = (index, field, value) => {
+    setExtraItems(prev => {
+      const copy = [...prev];
+      if (field === 'productId') {
+        const matched = productsList.find(p => p.id === value || p._id === value);
+        copy[index] = {
+          ...copy[index],
+          productId: value,
+          adHocName: matched ? matched.productName : copy[index].adHocName,
+          adHocMrp: matched ? (matched.salePrice || matched.mrp || 0) : copy[index].adHocMrp
+        };
+      } else {
+        copy[index] = {
+          ...copy[index],
+          [field]: (field === 'quantity' || field === 'adHocMrp' || field === 'gstPct') ? Number(value) : value
+        };
+      }
+      return copy;
+    });
   };
 
-  const handleExtraItemChange = (idx, field, val) => {
-    const updated = [...extraItems];
-    updated[idx][field] = val;
-    setExtraItems(updated);
+  const handleRemoveExtraItem = (index) => {
+    setExtraItems(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleConfirmSubmit = async () => {
-    const confirmedTotal = confirmationItems.reduce((sum, item) => {
-      const totalQty = Number(item.confirmedQty || 0) + Number(item.extraQty || 0);
-      const net = (item.rate * totalQty) * (1 - (item.discountPercent || 0) / 100);
-      return sum + net;
+  const handleSaveConfirmation = async (e) => {
+    e.preventDefault();
+    const confirmedTotal = confirmationItems.reduce((acc, item) => {
+      return acc + ((Number(item.confirmedQuantity) + Number(item.extraQuantity)) * Number(item.rate));
     }, 0);
 
-    const extraTotal = extraItems.reduce((sum, item) => {
-      const price = Number(item.adHocMrp || 0);
-      return sum + (price * Number(item.quantity || 1));
+    const extraTotal = extraItems.reduce((acc, item) => {
+      return acc + (Number(item.quantity || 0) * Number(item.adHocMrp || 0));
     }, 0);
 
     try {
@@ -127,53 +188,106 @@ export const QuotationDetails = () => {
         remarks: confirmationRemarks
       });
       setIsConfirmModalOpen(false);
+      showToast('Quotation confirmed successfully!');
       loadData();
     } catch (err) {
-      alert('Error confirming quotation: ' + err.message);
+      showToast('Error confirming quotation: ' + err.message);
     }
   };
 
-  const handleApproveConfirmation = async () => {
-    try {
-      await approveConfirmation(quotation.confirmationId || id);
-      alert('Quotation confirmation approved by manager successfully.');
-      loadData();
-    } catch (err) {
-      alert('Error approving confirmation: ' + err.message);
-    }
-  };
-
-  const handleSendQuotation = async () => {
-    if (!window.confirm(`Mark quotation #${quotation.quotationNumber} as SENT to customer?`)) return;
+  const handleConfirmActionModal = async () => {
+    const { type } = actionModal;
+    setActionModal(prev => ({ ...prev, isOpen: false }));
     setActionLoading(true);
+
     try {
-      await sendQuotation(id);
+      if (type === 'send') {
+        await sendQuotation(id);
+        showToast(`Quotation #${quotation.quotationNumber} marked as SENT!`);
+      } else if (type === 'cancel') {
+        await cancelQuotation(id);
+        showToast(`Quotation #${quotation.quotationNumber} cancelled.`);
+      } else if (type === 'approve') {
+        await approveConfirmation(quotation.confirmationId || id);
+        showToast('Quotation confirmation approved by manager successfully.');
+      }
       await loadData();
     } catch (err) {
-      alert('Failed to mark as sent: ' + (err.message || 'Error'));
+      showToast(err.message || 'Action failed.', 'error');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleCancelQuotation = async () => {
-    if (!window.confirm(`Are you sure you want to cancel quotation #${quotation.quotationNumber}?`)) return;
-    setActionLoading(true);
+  const handleOpenStatusModal = () => {
+    if (!quotation) return;
+    const validStatuses = ['Draft', 'Sent', 'Confirmed', 'Cancelled', 'Expired'];
+    setStatusModal({
+      isOpen: true,
+      status: validStatuses.includes(quotation.status) ? quotation.status : 'Sent',
+      remarks: quotation.remarks || '',
+      saving: false
+    });
+  };
+
+  const handleSaveStatusChange = async (e) => {
+    if (e) e.preventDefault();
+    if (!quotation) return;
+    const targetId = quotation._id || quotation.id || id;
+    const newStatus = statusModal.status;
+    const remarks = statusModal.remarks;
+
+    setStatusModal(prev => ({ ...prev, saving: true }));
     try {
-      await cancelQuotation(id);
+      await updateQuotationStatus(targetId, newStatus, remarks);
+      showToast(`Quotation #${quotation.quotationNumber} status updated to "${newStatus}" successfully!`);
+      setStatusModal({ isOpen: false, status: 'Draft', remarks: '', saving: false });
       await loadData();
     } catch (err) {
-      alert('Failed to cancel quotation: ' + (err.message || 'Error'));
-    } finally {
-      setActionLoading(false);
+      showToast(err.message || 'Failed to update status.', 'error');
+      setStatusModal(prev => ({ ...prev, saving: false }));
     }
+  };
+
+  const handleSendQuotation = () => {
+    setActionModal({
+      isOpen: true,
+      type: 'send',
+      title: 'Send Quotation to Customer',
+      message: `Mark quotation #${quotation.quotationNumber} as SENT to customer?`,
+      confirmLabel: 'Mark as Sent',
+      danger: false
+    });
+  };
+
+  const handleCancelQuotation = () => {
+    setActionModal({
+      isOpen: true,
+      type: 'cancel',
+      title: 'Cancel Quotation',
+      message: `Are you sure you want to cancel quotation #${quotation.quotationNumber}?`,
+      confirmLabel: 'Cancel Quotation',
+      danger: true
+    });
+  };
+
+  const handleApproveConfirmation = () => {
+    setActionModal({
+      isOpen: true,
+      type: 'approve',
+      title: 'Approve Confirmation',
+      message: `Approve confirmed order for quotation #${quotation.quotationNumber}?`,
+      confirmLabel: 'Approve Confirmation',
+      danger: false
+    });
   };
 
   const handleExport = async (format) => {
     try {
-      await exportQuotationDocument(id, format, quotation.quotationNumber);
+      showToast(`Generating ${format.toUpperCase()} export...`);
+      await exportQuotationDocument(id, format, quotation.quotationNumber, quotation);
     } catch (err) {
-      alert(`Export as ${format.toUpperCase()} failed: ` + (err.message || 'Error'));
+      showToast(`Export as ${format.toUpperCase()} failed: ` + (err.message || 'Error'), 'error');
     }
   };
 
@@ -181,7 +295,10 @@ export const QuotationDetails = () => {
     setSelectedFormat(formatKey);
     try {
       await renderQuotationFormat(id, formatKey);
-    } catch (err) {}
+      showToast(`Switched view to format '${formatKey}'`);
+    } catch (err) {
+      console.warn('Render format error:', err);
+    }
   };
 
   if (loading) {
@@ -202,16 +319,30 @@ export const QuotationDetails = () => {
   const totalActualAmount = confirmedAmount + extraProductAmount;
 
   return (
-    <div style={{ maxWidth: '1050px' }}>
+    <div style={{ maxWidth: '1050px', margin: '0 auto', width: '100%', paddingBottom: '3rem' }}>
       
       {/* Top Action Controls */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <Link to="/quotations" className="btn btn-secondary btn-sm">
+        <Link 
+          to={quotation.customerId ? `/customers/${quotation.customerId}?tab=quotations` : '/customers'} 
+          className="btn btn-secondary btn-sm"
+        >
           <ArrowLeft size={16} />
-          <span>Back to Quotation Directory</span>
+          <span>Back to Customer Quotations</span>
         </Link>
         
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Quick Status Update */}
+          <button 
+            type="button" 
+            className="btn btn-secondary btn-sm" 
+            onClick={handleOpenStatusModal}
+            disabled={actionLoading}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#f0f9ff', borderColor: '#bae6fd', color: '#0284c7' }}
+          >
+            <RefreshCw size={14} /> Update Status
+          </button>
+
           {/* Send to customer */}
           {quotation.status === 'Draft' && (
             <button 
@@ -230,7 +361,6 @@ export const QuotationDetails = () => {
             type="button" 
             className="btn btn-secondary btn-sm" 
             onClick={() => handleExport('pdf')}
-            title="Download PDF"
             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
           >
             <Download size={15} /> PDF
@@ -241,29 +371,63 @@ export const QuotationDetails = () => {
             type="button" 
             className="btn btn-secondary btn-sm" 
             onClick={() => handleExport('xlsx')}
-            title="Download Excel Spreadsheet"
             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
           >
             <FileSpreadsheet size={15} /> Excel
           </button>
 
-          {/* Print */}
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-            <Printer size={15} /> Print
-          </button>
+          {/* Follow up button */}
+          <Link 
+            to={quotation.customerId ? `/customers/${quotation.customerId}?tab=follow-ups` : '/customers'}
+            className="btn btn-secondary btn-sm" 
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#c2410c', backgroundColor: '#fff7ed', borderColor: '#fed7aa' }}
+          >
+            <Send size={14} style={{ transform: 'rotate(45deg)' }} /> Follow-Up
+          </Link>
 
           {/* Approve confirmation */}
           {quotation.pendingApproval && (
-            <button type="button" className="btn btn-primary btn-sm" onClick={handleApproveConfirmation} style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}>
+            <button 
+              type="button" 
+              className="btn btn-primary btn-sm" 
+              onClick={handleApproveConfirmation}
+              style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}
+            >
               <ShieldCheck size={16} /> Approve Confirmation
             </button>
           )}
 
           {/* Confirm */}
           {quotation.status !== 'Confirmed' && quotation.status !== 'Cancelled' && (
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsConfirmModalOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+            <button 
+              type="button" 
+              className="btn btn-primary btn-sm" 
+              onClick={() => setIsConfirmModalOpen(true)} 
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+            >
               <CheckCircle2 size={15} /> Confirm Items
             </button>
+          )}
+
+          {/* Delivery Challan & Generate Invoice when Confirmed */}
+          {quotation.status === 'Confirmed' && (
+            <>
+              <Link
+                to={`/challans/create?customerId=${quotation.customerId}&quotationId=${quotation.id || quotation._id}`}
+                className="btn btn-secondary btn-sm"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#16a34a', backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}
+              >
+                <Truck size={15} /> Create Challan
+              </Link>
+
+              <Link
+                to={`/invoices/create?customerId=${quotation.customerId}&quotationId=${quotation.id || quotation._id}`}
+                className="btn btn-primary btn-sm"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#059669', borderColor: '#059669' }}
+              >
+                <Receipt size={15} /> Generate Invoice
+              </Link>
+            </>
           )}
 
           {/* Cancel Quotation */}
@@ -273,7 +437,6 @@ export const QuotationDetails = () => {
               className="btn btn-secondary btn-sm" 
               onClick={handleCancelQuotation}
               disabled={actionLoading}
-              title="Cancel Quotation"
               style={{ color: '#dc2626', borderColor: '#fecaca', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
             >
               <XCircle size={15} /> Cancel
@@ -288,7 +451,14 @@ export const QuotationDetails = () => {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
               <h2 style={{ fontSize: '1.35rem', fontWeight: 700, margin: 0 }}>Quotation #{quotation.quotationNumber}</h2>
-              <StatusBadge status={quotation.status} />
+              <button
+                type="button"
+                onClick={handleOpenStatusModal}
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                title="Click to update status"
+              >
+                <StatusBadge status={quotation.status} />
+              </button>
               <span className="badge badge-info">{selectedFormat}</span>
             </div>
             <div style={{ color: '#475569', fontSize: '0.88rem', marginTop: '0.5rem', lineHeight: 1.6 }}>
@@ -419,7 +589,7 @@ export const QuotationDetails = () => {
         footer={
           <>
             <button className="btn btn-secondary" onClick={() => setIsConfirmModalOpen(false)}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleConfirmSubmit}>Confirm & Save Material Requirement</button>
+            <button className="btn btn-primary" onClick={handleSaveConfirmation}>Confirm & Save Material Requirement</button>
           </>
         }
       >
@@ -440,18 +610,18 @@ export const QuotationDetails = () => {
             </thead>
             <tbody>
               {confirmationItems.map((item, idx) => {
-                const totalCommitted = Number(item.confirmedQty || 0) + Number(item.extraQty || 0);
+                const totalCommitted = Number(item.confirmedQuantity || 0) + Number(item.extraQuantity || 0);
 
                 return (
                   <tr key={idx}>
                     <td style={{ fontWeight: 600 }}>{item.productName}</td>
-                    <td>{item.quotedQty}</td>
+                    <td>{item.originalQuantity}</td>
                     <td>
                       <input 
                         type="number" 
                         className="form-control" 
-                        value={item.confirmedQty} 
-                        onChange={(e) => handleQtyChange(idx, 'confirmedQty', e.target.value)}
+                        value={item.confirmedQuantity} 
+                        onChange={(e) => handleConfirmedQtyChange(idx, e.target.value)}
                         style={{ padding: '0.25rem 0.4rem', width: '80px', fontWeight: 600 }}
                       />
                     </td>
@@ -459,8 +629,8 @@ export const QuotationDetails = () => {
                       <input 
                         type="number" 
                         className="form-control" 
-                        value={item.extraQty} 
-                        onChange={(e) => handleQtyChange(idx, 'extraQty', e.target.value)}
+                        value={item.extraQuantity} 
+                        onChange={(e) => handleExtraQtyChange(idx, e.target.value)}
                         style={{ padding: '0.25rem 0.4rem', width: '80px', color: '#d97706' }}
                       />
                     </td>
@@ -478,7 +648,7 @@ export const QuotationDetails = () => {
         <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>Extra Products / Accessories</span>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={addExtraItemRow}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={handleAddExtraAdHocItem}>
               <Plus size={14} /> Add Item
             </button>
           </div>
@@ -509,7 +679,7 @@ export const QuotationDetails = () => {
                 onChange={(e) => handleExtraItemChange(idx, 'quantity', e.target.value)}
                 style={{ width: '70px', fontSize: '0.8rem' }}
               />
-              <button type="button" className="btn btn-danger btn-sm" onClick={() => removeExtraItemRow(idx)}>
+              <button type="button" className="btn btn-danger btn-sm" onClick={() => handleRemoveExtraItem(idx)}>
                 <Trash2 size={14} />
               </button>
             </div>
@@ -517,8 +687,113 @@ export const QuotationDetails = () => {
         </div>
       </Modal>
 
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={actionModal.isOpen}
+        title={actionModal.title}
+        message={actionModal.message}
+        confirmLabel={actionModal.confirmLabel}
+        danger={actionModal.danger}
+        onConfirm={handleConfirmActionModal}
+        onCancel={() => setActionModal(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Status Update Modal */}
+      {statusModal.isOpen && quotation && (
+        <Modal
+          isOpen={statusModal.isOpen}
+          onClose={() => setStatusModal(prev => ({ ...prev, isOpen: false }))}
+          title={`Update Quotation Status — #${quotation.quotationNumber}`}
+          footer={
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', width: '100%' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setStatusModal(prev => ({ ...prev, isOpen: false }))}
+                style={{ borderRadius: '8px', fontSize: '0.825rem' }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                onClick={handleSaveStatusChange}
+                disabled={statusModal.saving}
+                style={{ borderRadius: '8px', fontSize: '0.825rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+              >
+                <Check size={15} />
+                <span>{statusModal.saving ? 'Updating...' : 'Save New Status'}</span>
+              </button>
+            </div>
+          }
+        >
+          <form onSubmit={handleSaveStatusChange} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ backgroundColor: '#f8fafc', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>CURRENT STATUS</span>
+                <div><StatusBadge status={quotation.status} /></div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>CUSTOMER</span>
+                <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>
+                  {quotation.customerName}
+                </div>
+              </div>
+            </div>
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem', display: 'block' }}>
+                Select New Quotation Status <span style={{ color: '#dc2626' }}>*</span>
+              </label>
+              <select
+                className="form-control"
+                value={statusModal.status}
+                onChange={e => setStatusModal(prev => ({ ...prev, status: e.target.value }))}
+                style={{ fontSize: '0.85rem', height: '38px', borderRadius: '8px' }}
+                required
+              >
+                <option value="Draft">Draft</option>
+                <option value="Sent">Sent (Delivered to Customer)</option>
+                <option value="Confirmed">Confirmed (Realized Sale)</option>
+                <option value="Cancelled">Cancelled</option>
+                <option value="Expired">Expired</option>
+              </select>
+            </div>
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem', display: 'block' }}>
+                Status Remarks / Customer Notes
+              </label>
+              <textarea
+                className="form-control"
+                rows={3}
+                value={statusModal.remarks}
+                onChange={e => setStatusModal(prev => ({ ...prev, remarks: e.target.value }))}
+                placeholder="Add notes about customer response, discussion, agreed price or feedback..."
+                style={{ fontSize: '0.825rem', borderRadius: '8px' }}
+              />
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div className="floating-toast-container">
+          <div className={`floating-toast ${toastType === 'error' ? 'danger' : 'success'}`}>
+            {toastType === 'error' ? (
+              <AlertCircle size={16} style={{ color: '#dc2626' }} />
+            ) : (
+              <CheckCircle2 size={16} style={{ color: '#16a34a' }} />
+            )}
+            <span>{toastMessage}</span>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
 
 export default QuotationDetails;
+

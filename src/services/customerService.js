@@ -121,21 +121,46 @@ export const getCustomerById = async (id) => {
   throw new Error('Customer not found');
 };
 
+const mapCustomerType = (type) => {
+  if (!type) return 'RETAIL';
+  const t = String(type).trim().toUpperCase();
+  if (t.includes('BUILDER') || t.includes('DEALER')) return 'DEALER';
+  if (t.includes('CONTRACTOR') || t.includes('ARCHITECT') || t.includes('TILING')) return 'CONTRACTOR';
+  if (t.includes('PLUMB')) return 'PLUMBER';
+  if (t === 'OTHER') return 'OTHER';
+  return 'RETAIL';
+};
+
+const formatCustomerPayload = (customerData) => {
+  const name = (customerData.customerName || customerData.name || '').trim();
+  const mobile = String(customerData.mobile || '').trim();
+  const altMobile = customerData.alternateNumber || customerData.altMobile;
+  const email = customerData.email;
+  const billing = customerData.billingAddress;
+  const shipping = customerData.shippingAddress;
+  const city = customerData.city;
+  const state = customerData.state;
+  const gst = customerData.gstNumber;
+  const notes = customerData.notes;
+
+  return {
+    customerName: name,
+    mobile: mobile,
+    alternateNumber: altMobile && String(altMobile).trim() ? String(altMobile).trim() : null,
+    email: email && String(email).trim() ? String(email).trim().toLowerCase() : null,
+    billingAddress: billing && String(billing).trim() ? String(billing).trim() : null,
+    shippingAddress: shipping && String(shipping).trim() ? String(shipping).trim() : null,
+    city: city && String(city).trim() ? String(city).trim() : null,
+    state: state && String(state).trim() ? String(state).trim() : null,
+    gstNumber: gst && String(gst).trim() ? String(gst).trim().toUpperCase() : null,
+    customerType: mapCustomerType(customerData.customerType),
+    notes: notes && String(notes).trim() ? String(notes).trim() : null
+  };
+};
+
 // POST /customers - Create a new customer profile
 export const createCustomer = async (customerData) => {
-  const payload = {
-    customerName: customerData.name || customerData.customerName,
-    mobile: customerData.mobile,
-    alternateNumber: customerData.altMobile || customerData.alternateNumber,
-    email: customerData.email,
-    billingAddress: customerData.billingAddress,
-    shippingAddress: customerData.shippingAddress,
-    city: customerData.city || 'Ahmedabad',
-    state: customerData.state || 'Gujarat',
-    gstNumber: customerData.gstNumber,
-    customerType: customerData.customerType || 'RETAIL',
-    notes: customerData.notes
-  };
+  const payload = formatCustomerPayload(customerData);
 
   const newId = `CUST-${Date.now()}`;
   const localCustomer = normalizeCustomer({ id: newId, _id: newId, ...payload, ...customerData });
@@ -156,11 +181,12 @@ export const createCustomer = async (customerData) => {
         duplicateWarning: data?.duplicateWarning || null
       };
     } catch (err) {
-      console.warn('POST /customers live call failed, persisting locally:', err.message);
+      console.warn('POST /customers live call error:', err.response?.data || err.message);
+      throw new Error(err.response?.data?.message || err.message || 'Failed to create customer on server.');
     }
   }
 
-  // Fallback to local storage
+  // Fallback to local storage if offline
   const current = getStoredCustomers();
   current.unshift(localCustomer);
   saveStoredCustomers(current);
@@ -173,26 +199,13 @@ export const createCustomer = async (customerData) => {
 
 // PUT /customers/{id} - Update customer profile
 export const updateCustomer = async (id, customerData) => {
-  const payload = {
-    customerName: customerData.name || customerData.customerName,
-    mobile: customerData.mobile,
-    alternateNumber: customerData.altMobile || customerData.alternateNumber,
-    email: customerData.email,
-    billingAddress: customerData.billingAddress,
-    shippingAddress: customerData.shippingAddress,
-    city: customerData.city,
-    state: customerData.state,
-    gstNumber: customerData.gstNumber,
-    customerType: customerData.customerType,
-    notes: customerData.notes
-  };
-
+  const payload = formatCustomerPayload(customerData);
   const isMongoId = (val) => typeof val === 'string' && /^[0-9a-fA-F]{24}$/.test(val.trim());
 
   if (hasRealJwtToken() && isMongoId(id)) {
     try {
       const res = await api.put(`/customers/${id}`, payload);
-      const updated = normalizeCustomer(res.data?.data || res.data || { id, ...customerData });
+      const updated = normalizeCustomer(res.data?.data?.customer || res.data?.data || res.data || { id, ...customerData });
 
       const current = getStoredCustomers();
       const idx = current.findIndex(c => String(c.id) === String(id) || String(c._id) === String(id));
@@ -203,21 +216,22 @@ export const updateCustomer = async (id, customerData) => {
 
       return updated;
     } catch (err) {
-      console.warn('PUT /customers/:id live call failed, persisting locally:', err.message);
+      console.warn(`PUT /customers/${id} live call error:`, err.response?.data || err.message);
+      throw new Error(err.response?.data?.message || err.message || 'Failed to update customer on server.');
     }
   }
 
-  const updatedLocal = normalizeCustomer({ id, _id: id, ...customerData, ...payload });
+  // Fallback local update
   const current = getStoredCustomers();
   const idx = current.findIndex(c => String(c.id) === String(id) || String(c._id) === String(id));
+  const updated = normalizeCustomer({ id, ...customerData });
   if (idx !== -1) {
-    current[idx] = { ...current[idx], ...updatedLocal };
-    saveStoredCustomers(current);
+    current[idx] = { ...current[idx], ...updated };
   } else {
-    current.unshift(updatedLocal);
-    saveStoredCustomers(current);
+    current.unshift(updated);
   }
-  return updatedLocal;
+  saveStoredCustomers(current);
+  return updated;
 };
 
 // DELETE /customers/{id} - Deactivate / Soft-delete customer profile permanently from view

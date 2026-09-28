@@ -27,20 +27,26 @@ export const InvoiceDetails = () => {
   }
   if (!invoice) return <div style={{ padding: '2rem', color: '#dc2626' }}>Invoice not found.</div>;
 
+  const targetCustId = invoice?.customerId || invoice?.customer?._id || invoice?.customer?.id || (typeof invoice?.customer === 'string' && invoice?.customer.length > 5 ? invoice?.customer : '');
+  const backLink = targetCustId ? `/customers/${targetCustId}?tab=invoices` : '/customers';
+  const payLink = targetCustId 
+    ? `/payments/entry?customerId=${targetCustId}&invoiceId=${invoice.id || invoice._id}`
+    : `/payments/entry?invoiceId=${invoice.id || invoice._id}`;
+
   return (
-    <div style={{ maxWidth: '900px' }}>
+    <div style={{ maxWidth: '900px', margin: '0 auto', width: '100%' }}>
       
       {/* Top Action Bar */}
       <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-        <Link to="/invoices" className="btn btn-secondary btn-sm">
+        <Link to={backLink} className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
           <ArrowLeft size={16} />
-          <span>Back to Invoices</span>
+          <span>Back to Customer Invoices</span>
         </Link>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>
             <Printer size={16} /> Print Tax Invoice
           </button>
-          <Link to="/payments/entry" className="btn btn-primary btn-sm">
+          <Link to={payLink} className="btn btn-primary btn-sm">
             <CreditCard size={16} /> Record Payment Receipt
           </Link>
         </div>

@@ -10,11 +10,21 @@ import {
   getTaxPresets, createTaxPreset, updateTaxPreset, deleteTaxPreset, deactivateTaxPreset
 } from '../services/masterService';
 import StatusBadge from '../components/StatusBadge';
+import ConfirmModal from '../components/ConfirmModal';
 
 export const Settings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') || 'company';
   const [activeTab, setActiveTab] = useState(initialTab);
+
+  // Confirm Modal state
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    type: '', // 'unit' | 'tax'
+    item: null,
+    title: '',
+    message: ''
+  });
 
   // Synchronize active tab with URL query parameter
   const switchTab = (tab) => {
@@ -143,19 +153,18 @@ export const Settings = () => {
       showToast(`Unit "${unit.unitCode}" marked as ${newStatus}.`);
       loadUnits();
     } catch (err) {
-      alert('Failed to update status.');
+      showToast('Failed to update unit status.');
     }
   };
 
-  const handleDeleteUnit = async (unit) => {
-    if (!window.confirm(`Are you sure you want to delete unit "${unit.unitCode}"?`)) return;
-    try {
-      await deleteUnit(unit.id);
-      showToast(`Unit "${unit.unitCode}" deleted.`);
-      loadUnits();
-    } catch (err) {
-      alert('Failed to delete unit.');
-    }
+  const handleDeleteUnit = (unit) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'unit',
+      item: unit,
+      title: 'Delete Measurement Unit',
+      message: `Are you sure you want to delete unit "${unit.unitCode}"?`
+    });
   };
 
   // --- Tax Master State ---
@@ -267,18 +276,37 @@ export const Settings = () => {
       showToast(`Tax preset "${preset.name}" marked as ${newStatus}.`);
       loadTaxes();
     } catch (err) {
-      alert('Failed to update status.');
+      showToast('Failed to update tax preset status.');
     }
   };
 
-  const handleDeleteTax = async (preset) => {
-    if (!window.confirm(`Are you sure you want to delete tax preset "${preset.name}"?`)) return;
+  const handleDeleteTax = (preset) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'tax',
+      item: preset,
+      title: 'Delete Tax Preset',
+      message: `Are you sure you want to delete tax preset "${preset.name}"?`
+    });
+  };
+
+  const handleConfirmModalDelete = async () => {
+    const { type, item } = confirmModal;
+    setConfirmModal({ isOpen: false, type: '', item: null, title: '', message: '' });
+    if (!item) return;
+
     try {
-      await deleteTaxPreset(preset.id);
-      showToast(`Tax preset "${preset.name}" deleted.`);
-      loadTaxes();
+      if (type === 'unit') {
+        await deleteUnit(item.id);
+        showToast(`Unit "${item.unitCode}" deleted.`);
+        loadUnits();
+      } else if (type === 'tax') {
+        await deleteTaxPreset(item.id);
+        showToast(`Tax preset "${item.name}" deleted.`);
+        loadTaxes();
+      }
     } catch (err) {
-      alert('Failed to delete tax preset.');
+      showToast(`Failed to delete ${type}: ${err.message}`);
     }
   };
 
@@ -1007,6 +1035,16 @@ export const Settings = () => {
         </div>
       )}
 
+      {/* Custom Confirm Modal for Settings */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel="Yes, Delete"
+        onConfirm={handleConfirmModalDelete}
+        onCancel={() => setConfirmModal({ isOpen: false, type: '', item: null, title: '', message: '' })}
+        danger={true}
+      />
     </div>
   );
 };

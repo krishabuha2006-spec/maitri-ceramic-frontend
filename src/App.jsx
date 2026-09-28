@@ -36,6 +36,7 @@ import Users from './pages/Users';
 import Settings from './pages/Settings';
 
 import Companies from './pages/Companies';
+import Vendors from './pages/Vendors';
 import ProductGroups from './pages/ProductGroups';
 import QuotationFormats from './pages/QuotationFormats';
 
@@ -122,6 +123,11 @@ export function App() {
             <Route path="companies" element={
               <PermissionRoute moduleId="companies">
                 <Companies />
+              </PermissionRoute>
+            } />
+            <Route path="vendors" element={
+              <PermissionRoute moduleId="vendors">
+                <Vendors />
               </PermissionRoute>
             } />
             <Route path="imports" element={

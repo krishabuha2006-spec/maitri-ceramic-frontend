@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { getCustomers } from '../services/customerService';
 import { getInvoices } from '../services/invoiceService';
 import { createPayment, getInvoicePaymentBalanceDue } from '../services/paymentService';
@@ -22,6 +22,10 @@ import {
 
 export const PaymentEntry = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const customerIdParam = searchParams.get('customerId') || '';
+  const invoiceIdParam = searchParams.get('invoiceId') || '';
+
   const [customers, setCustomers] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [paymentModes, setPaymentModes] = useState([]);
@@ -69,6 +73,18 @@ export const PaymentEntry = () => {
         if (modes.length > 0 && !formData.paymentModeId) {
           setFormData(prev => ({ ...prev, paymentModeId: modes[0]._id || modes[0].id }));
         }
+
+        if (customerIdParam) {
+          const matchedCust = custs.find(c => String(c.id) === String(customerIdParam) || String(c._id) === String(customerIdParam));
+          if (matchedCust) {
+            setFormData(prev => ({
+              ...prev,
+              customerId: matchedCust._id || matchedCust.id,
+              customerName: matchedCust.name || matchedCust.customerName || ''
+            }));
+            await buildAllocationsForCustomer(matchedCust._id || matchedCust.id, invoiceIdParam, invs);
+          }
+        }
       } catch (err) {
         console.error('Error initializing payment form:', err);
       } finally {
@@ -78,10 +94,10 @@ export const PaymentEntry = () => {
 
     loadInitialData();
     return () => { isMounted = false; };
-  }, []);
+  }, [customerIdParam, invoiceIdParam]);
 
   // Sync allocations and calculate live real-time balance due from backend
-  const buildAllocationsForCustomer = async (custId, targetInvoiceId = null) => {
+  const buildAllocationsForCustomer = async (custId, targetInvoiceId = null, invoicesSource = null) => {
     if (!custId) {
       setAllocations([]);
       return;
@@ -89,7 +105,8 @@ export const PaymentEntry = () => {
 
     setFetchingDues(true);
     try {
-      const custInvs = invoices.filter(i => 
+      const sourceList = invoicesSource || invoices;
+      const custInvs = sourceList.filter(i => 
         String(i.customerId) === String(custId) || 
         String(i.customer?._id) === String(custId) ||
         String(i.customer?.id) === String(custId)
@@ -212,8 +229,23 @@ export const PaymentEntry = () => {
     });
   };
 
+  const handleNumberKeyDown = (e) => {
+    if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+      e.preventDefault();
+    }
+  };
+
   const handleAllocatedAmountChange = (idx, value) => {
-    const rawVal = Number(value);
+    let clean = String(value).replace(/[^0-9.]/g, '');
+    const parts = clean.split('.');
+    if (parts.length > 2) {
+      clean = parts[0] + '.' + parts.slice(1).join('');
+    }
+    if (/^0[0-9]/.test(clean)) {
+      clean = clean.replace(/^0+/, '');
+      if (clean === '' || clean.startsWith('.')) clean = '0' + clean;
+    }
+    const rawVal = clean === '' ? 0 : Number(clean);
     setAllocations(prev => {
       const next = [...prev];
       const item = next[idx];
@@ -307,8 +339,9 @@ export const PaymentEntry = () => {
 
       const pmt = await createPayment(payload);
       setSuccessToast(`Payment receipt #${pmt.receiptNumber} recorded successfully!`);
+      const targetCustId = formData.customerId || customerIdParam;
       setTimeout(() => {
-        navigate(`/payments/${pmt.id || pmt._id}`);
+        navigate(targetCustId ? `/customers/${targetCustId}?tab=payments` : '/customers');
       }, 900);
     } catch (err) {
       console.error('Payment create error:', err);
@@ -317,6 +350,10 @@ export const PaymentEntry = () => {
       setSaving(false);
     }
   };
+
+  const backLink = (formData.customerId || customerIdParam)
+    ? `/customers/${formData.customerId || customerIdParam}?tab=payments`
+    : '/customers';
 
   // Filter invoices for the quick dropdown
   const filteredDropdownInvoices = formData.customerId
@@ -352,7 +389,7 @@ export const PaymentEntry = () => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.75rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <Link 
-            to="/payments" 
+            to={backLink} 
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -369,7 +406,7 @@ export const PaymentEntry = () => {
             }}
           >
             <ArrowLeft size={18} />
-            <span>Back to Payments</span>
+            <span>Back to Customer Payments</span>
           </Link>
           <div>
             <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>
@@ -617,11 +654,24 @@ export const PaymentEntry = () => {
                 )}
               </label>
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 className="form-control"
                 value={formData.totalAmount}
-                onChange={(e) => setFormData({ ...formData, totalAmount: Number(e.target.value) })}
+                onChange={(e) => {
+                  let clean = String(e.target.value).replace(/[^0-9.]/g, '');
+                  const parts = clean.split('.');
+                  if (parts.length > 2) {
+                    clean = parts[0] + '.' + parts.slice(1).join('');
+                  }
+                  if (/^0[0-9]/.test(clean)) {
+                    clean = clean.replace(/^0+/, '');
+                    if (clean === '' || clean.startsWith('.')) clean = '0' + clean;
+                  }
+                  setFormData(f => ({ ...f, totalAmount: clean === '' ? '' : clean }));
+                }}
+                onKeyDown={handleNumberKeyDown}
+                onFocus={(e) => e.target.select()}
                 required
                 placeholder="0.00"
                 style={{
@@ -933,7 +983,7 @@ export const PaymentEntry = () => {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <Link 
-              to="/payments" 
+              to={backLink} 
               style={{
                 borderRadius: '10px',
                 height: '44px',

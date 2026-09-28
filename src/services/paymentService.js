@@ -3,25 +3,7 @@ import { numberToWords } from '../utils/formatters';
 
 const STORAGE_KEY = 'maitri_payments_list';
 
-let MOCK_PAYMENTS = [
-  {
-    id: 'RCT-2026-001',
-    _id: '6aa9a89092ab3c10a4023930',
-    receiptNumber: 'RCT-2026-001',
-    date: '2026-03-08',
-    customerId: 'CUST-001',
-    customerName: 'Rajesh Sharma Construction',
-    invoiceNumber: 'INV-2026-001',
-    paymentMode: 'Bank Transfer',
-    amount: 100000.00,
-    referenceNumber: 'HDFC-NEFT-99201',
-    bankAccount: 'HDFC Bank - Current A/C 50200012345678',
-    remarks: 'Advance partial payment for site tiles',
-    status: 'ACTIVE',
-    amountInWords: numberToWords(100000.00),
-    authorizedSignatory: 'For Maitri Ceramic'
-  }
-];
+
 
 const extractSafeString = (val, fallback = '') => {
   if (val === null || val === undefined) return fallback;
@@ -108,20 +90,32 @@ export const getPaymentById = async (id) => {
   throw new Error('Receipt not found');
 };
 
+import { getPaymentModes } from './masterService';
+
 export const createPayment = async (paymentData) => {
   const totalAmount = Number(paymentData.totalAmount || paymentData.amount || paymentData.amountReceived || 0);
+  const isMongoId = (v) => typeof v === 'string' && /^[0-9a-fA-F]{24}$/.test(v.trim());
 
-  // Map paymentModeId if string passed
-  let modeId = paymentData.paymentModeId;
-  if (!modeId && paymentData.paymentMode) {
-    const s = String(paymentData.paymentMode).toLowerCase();
-    if (s.includes('cash')) modeId = '6aa7c9eb612a410d893bcbbf';
-    else if (s.includes('upi')) modeId = '6aa7c9ec612a410d893bcbc1';
-    else if (s.includes('cheque')) modeId = '6aa7c9ec612a410d893bcbc2';
-    else if (s.includes('card')) modeId = '6aa7c9ec612a410d893bcbc3';
-    else modeId = '6aa7c9ec612a410d893bcbc0';
+  // Dynamically resolve paymentModeId
+  let modeId = isMongoId(paymentData.paymentModeId) ? paymentData.paymentModeId : null;
+  if (!modeId) {
+    try {
+      const modes = await getPaymentModes();
+      const searchStr = (paymentData.paymentMode || paymentData.modeName || '').toLowerCase();
+      const found = modes.find(m => 
+        (m.modeName || '').toLowerCase() === searchStr || 
+        (m.modeCode || '').toLowerCase() === searchStr ||
+        m._id === paymentData.paymentModeId ||
+        m.id === paymentData.paymentModeId
+      );
+      if (found && isMongoId(found._id || found.id)) {
+        modeId = found._id || found.id;
+      } else if (modes.length > 0 && isMongoId(modes[0]._id || modes[0].id)) {
+        modeId = modes[0]._id || modes[0].id;
+      }
+    } catch (e) {}
   }
-  if (!modeId) modeId = '6aa7c9ec612a410d893bcbc0'; // default Bank Transfer
+  if (!modeId) modeId = '6aa7c9ec612a410d893bcbc0';
 
   // Format allocations
   let allocations = [];

@@ -3,51 +3,7 @@ import { numberToWords } from '../utils/formatters';
 
 const STORAGE_KEY = 'maitri_invoices_list';
 
-let MOCK_INVOICES = [
-  {
-    id: 'INV-2026-001',
-    _id: '6aa9a51292ab3c10a4023920',
-    invoiceNumber: 'INV-2026-001',
-    date: '2026-03-08',
-    customerId: 'CUST-001',
-    customerName: 'Rajesh Sharma Construction',
-    customerMobile: '9825012345',
-    buyerBillTo: 'Rajesh Sharma Construction, 402, Royal Residency, CG Road, Ahmedabad. GSTIN: 24AAACR1234F1Z5',
-    consigneeShipTo: 'Site 12, Green Villa Project, SG Highway, Ahmedabad',
-    refNumber: 'QT-2026-001',
-    buyersOrderNo: 'ORD-8821',
-    dispatchDocNo: 'CH-2026-001',
-    deliveryNote: 'Delivered via Eicher 14ft',
-    termsOfPayment: '30% Advance, 70% against delivery',
-    termsOfDelivery: 'FOR Site Ahmedabad',
-    taxableTotal: 118980.00,
-    cgstAmount: 10708.20,
-    sgstAmount: 10708.20,
-    igstAmount: 0.00,
-    totalGst: 21416.40,
-    finalTotal: 140396.40,
-    grandTotal: 140396.40,
-    paidAmount: 100000.00,
-    outstandingAmount: 40396.40,
-    balanceDue: 40396.40,
-    status: 'Partially Paid',
-    items: [
-      {
-        sku: 'VT-60120-GL',
-        productName: 'Glazed Vitrified Tile 600x1200mm Statuario',
-        hsnCode: '69072100',
-        quantity: 1150,
-        unit: 'Sq.Ft',
-        rate: 72.00,
-        discount: 5.0,
-        gstPercent: 18,
-        taxableAmount: 78660.00,
-        gstAmount: 14158.80,
-        amount: 92818.80
-      }
-    ]
-  }
-];
+
 
 export const normalizeInvoice = (inv) => {
   if (!inv) return null;
@@ -167,8 +123,6 @@ export const getInvoiceById = async (id) => {
   } catch (err) {
     console.warn('GET /invoices/:id notice:', err?.response?.data || err.message);
   }
-  const inv = MOCK_INVOICES.find(i => i.id === id || i._id === id || i.invoiceNumber === id);
-  if (inv) return normalizeInvoice(inv);
   throw new Error('Invoice not found');
 };
 

@@ -3,12 +3,13 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { 
   ArrowLeft, Package, Percent, DollarSign, Layers, 
   CheckCircle2, AlertCircle, Save, RefreshCw, Info,
-  UploadCloud, Trash2, Link as LinkIcon, FileImage, Building, Plus, X
+  UploadCloud, Trash2, Link as LinkIcon, FileImage, Building, Plus, X, Truck
 } from 'lucide-react';
 import { 
   getProductById, createProduct, updateProduct, 
   getCompanies, createCompany, 
-  getProductGroups, createProductGroup 
+  getProductGroups, createProductGroup,
+  getVendors, createVendor
 } from '../services/productService';
 import { getUnits } from '../services/masterService';
 
@@ -22,6 +23,8 @@ export const ProductForm = () => {
     productName: '',
     company: '',
     companyId: '',
+    vendor: '',
+    vendorId: '',
     productGroup: '',
     productGroupId: '',
     hsnCode: '69072100',
@@ -71,6 +74,20 @@ export const ProductForm = () => {
     status: 'Active'
   });
 
+  // Dynamic vendor list & quick modal state
+  const [vendors, setVendors] = useState([]);
+  const [showVendorModal, setShowVendorModal] = useState(false);
+  const [savingVendor, setSavingVendor] = useState(false);
+  const [vendorFormError, setVendorFormError] = useState('');
+  const [vendorFormData, setVendorFormData] = useState({
+    vendorName: '',
+    mobile: '',
+    email: '',
+    gstNumber: '',
+    address: '',
+    status: 'Active'
+  });
+
   const [productGroups, setProductGroups] = useState([]);
   const [availableUnits, setAvailableUnits] = useState([]);
   const [showGroupModal, setShowGroupModal] = useState(false);
@@ -80,7 +97,6 @@ export const ProductForm = () => {
     groupName: '',
     groupCode: '',
     description: '',
-    parentGroup: '',
     status: 'Active'
   });
 
@@ -88,21 +104,25 @@ export const ProductForm = () => {
     Promise.all([
       getCompanies(),
       getProductGroups(),
-      getUnits()
-    ]).then(([comps, grps, units]) => {
+      getUnits(),
+      getVendors()
+    ]).then(([comps, grps, units, vends]) => {
       const validComps = Array.isArray(comps) ? comps : [];
       const validGrps = Array.isArray(grps) ? grps : [];
       const validUnits = Array.isArray(units) ? units : [];
+      const validVends = Array.isArray(vends) ? vends : [];
 
       setCompanies(validComps);
       setProductGroups(validGrps);
       setAvailableUnits(validUnits);
+      setVendors(validVends);
 
       if (!isEdit) {
         setFormData(prev => {
           const defaultComp = validComps[0];
           const defaultGrp = validGrps[0];
           const defaultUnit = validUnits[0];
+          const defaultVend = validVends[0];
 
           const compName = prev.company || defaultComp?.companyName || defaultComp?.name || '';
           const compId = prev.companyId || defaultComp?._id || defaultComp?.id || '';
@@ -110,6 +130,8 @@ export const ProductForm = () => {
           const grpId = prev.productGroupId || defaultGrp?._id || defaultGrp?.id || '';
           const unitName = prev.unit || defaultUnit?.unitCode || defaultUnit?.unitName || '';
           const unitId = prev.unitId || defaultUnit?._id || defaultUnit?.id || '';
+          const vendName = prev.vendor || defaultVend?.vendorName || defaultVend?.name || '';
+          const vendId = prev.vendorId || defaultVend?._id || defaultVend?.id || '';
 
           const generatedSku = prev.sku || generateAutoSku(compName, grpName, prev.productName);
 
@@ -121,6 +143,8 @@ export const ProductForm = () => {
             productGroupId: grpId,
             unit: unitName,
             unitId: unitId,
+            vendor: vendName,
+            vendorId: vendId,
             sku: generatedSku
           };
         });
@@ -130,9 +154,113 @@ export const ProductForm = () => {
     });
   }, [isEdit]);
 
+  // Automatic SKU Generator Logic
+  const extractNameCode = (productName) => {
+    if (!productName) return Math.floor(1000 + Math.random() * 9000).toString();
+    const dimMatch = productName.match(/(\d{2,4})\s*[xX*]\s*(\d{2,4})/);
+    if (dimMatch) {
+      return `${dimMatch[1].slice(-2)}${dimMatch[2].slice(-2)}`;
+    }
+    const words = productName.trim().split(/\s+/);
+    const cleanWord = words.find(w => w.length >= 3 && !['glazed', 'vitrified', 'tile', 'tiles'].includes(w.toLowerCase())) || words[0];
+    return cleanWord.replace(/[^a-zA-Z0-9]/g, '').substring(0, 4).toUpperCase() || '1001';
+  };
+
+  const extractGroupCode = (productGroup) => {
+    const groupWords = (productGroup || 'TILE').split(' ');
+    return groupWords.length > 1 
+      ? groupWords.map(w => w[0]).join('').substring(0, 3).toUpperCase()
+      : groupWords[0].substring(0, 3).toUpperCase();
+  };
+
+  const generateAutoSku = (company, productGroup, productName) => {
+    const brandCode = (company || 'GEN').replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'GEN';
+    const groupCode = extractGroupCode(productGroup);
+    const nameCode = extractNameCode(productName);
+    return `${brandCode}-${groupCode}-${nameCode}`;
+  };
+
+  const generateCompanySku = (company, productGroup, productName) => {
+    const brandCode = (company || 'GEN').replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'GEN';
+    const nameCode = extractNameCode(productName);
+    return `${brandCode}-${nameCode}`;
+  };
+
+  const generateVendorSku = (vendor, productGroup, productName) => {
+    const vendorCode = (vendor || 'VND').replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'VND';
+    const groupCode = extractGroupCode(productGroup);
+    const nameCode = extractNameCode(productName);
+    return `${vendorCode}-${groupCode}-${nameCode}`;
+  };
+
+  const handleOpenVendorModal = () => {
+    setVendorFormError('');
+    setVendorFormData({
+      vendorName: '',
+      mobile: '',
+      email: '',
+      gstNumber: '',
+      address: '',
+      status: 'Active'
+    });
+    setShowVendorModal(true);
+  };
+
+  const handleCreateVendorSubmit = async (e) => {
+    e.preventDefault();
+    setVendorFormError('');
+
+    if (!vendorFormData.vendorName.trim()) {
+      setVendorFormError('Please enter Vendor / Supplier Name.');
+      return;
+    }
+
+    if (vendorFormData.mobile && !/^[0-9]{10}$/.test(vendorFormData.mobile.trim())) {
+      setVendorFormError('Mobile number must be a valid 10-digit number.');
+      return;
+    }
+
+    if (vendorFormData.gstNumber && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(vendorFormData.gstNumber.trim().toUpperCase())) {
+      setVendorFormError('Please enter a valid 15-character GSTIN (e.g. 24AAAAA0000A1Z5).');
+      return;
+    }
+
+    setSavingVendor(true);
+    try {
+      const newVend = await createVendor({
+        vendorName: vendorFormData.vendorName.trim(),
+        mobile: vendorFormData.mobile.trim() || undefined,
+        email: vendorFormData.email.trim().toLowerCase() || undefined,
+        gstNumber: vendorFormData.gstNumber.trim().toUpperCase() || undefined,
+        address: vendorFormData.address.trim() || undefined,
+        isActive: vendorFormData.status === 'Active'
+      });
+
+      const addedName = newVend?.vendorName || vendorFormData.vendorName.trim();
+      const addedId = newVend?._id || newVend?.id;
+
+      const refreshedVendors = await getVendors();
+      setVendors(refreshedVendors);
+
+      setFormData(prev => ({
+        ...prev,
+        vendor: addedName,
+        vendorId: addedId || prev.vendorId,
+        vendorSku: generateVendorSku(addedName, prev.productGroup, prev.productName)
+      }));
+      setSuccessToast(`Vendor "${addedName}" created successfully!`);
+      setTimeout(() => setSuccessToast(''), 3000);
+      setShowVendorModal(false);
+    } catch (err) {
+      setVendorFormError(err.message || 'Failed to create vendor.');
+    } finally {
+      setSavingVendor(false);
+    }
+  };
+
   const handleOpenGroupModal = () => {
     setGroupFormError('');
-    setGroupFormData({ groupName: '', groupCode: '', description: '', parentGroup: '', status: 'Active' });
+    setGroupFormData({ groupName: '', groupCode: '', description: '', status: 'Active' });
     setShowGroupModal(true);
   };
 
@@ -162,7 +290,10 @@ export const ProductForm = () => {
       setFormData(prev => ({
         ...prev,
         productGroup: addedName,
-        productGroupId: addedId || prev.productGroupId
+        productGroupId: addedId || prev.productGroupId,
+        sku: !isSkuManuallyEdited ? generateAutoSku(prev.company, addedName, prev.productName) : prev.sku,
+        companySku: generateCompanySku(prev.company, addedName, prev.productName),
+        vendorSku: generateVendorSku(prev.vendor, addedName, prev.productName)
       }));
       setShowGroupModal(false);
       setSuccessToast(`Product Group "${addedName}" added.`);
@@ -206,7 +337,10 @@ export const ProductForm = () => {
       setFormData(prev => ({
         ...prev,
         company: addedName,
-        companyId: addedId || prev.companyId
+        companyId: addedId || prev.companyId,
+        sku: !isSkuManuallyEdited ? generateAutoSku(addedName, prev.productGroup, prev.productName) : prev.sku,
+        companySku: generateCompanySku(addedName, prev.productGroup, prev.productName),
+        vendorSku: generateVendorSku(prev.vendor, prev.productGroup, prev.productName)
       }));
       setSuccessToast(`Company / Brand "${addedName}" created successfully!`);
       setTimeout(() => setSuccessToast(''), 3000);
@@ -218,41 +352,21 @@ export const ProductForm = () => {
     }
   };
 
-  // Automatic SKU Generator Logic
-  const generateAutoSku = (company, productGroup, productName) => {
-    const brandCode = (company || 'GEN').substring(0, 3).toUpperCase();
-    
-    const groupWords = (productGroup || 'TILE').split(' ');
-    const groupCode = groupWords.length > 1 
-      ? groupWords.map(w => w[0]).join('').substring(0, 3).toUpperCase()
-      : groupWords[0].substring(0, 3).toUpperCase();
-
-    let nameCode = '';
-    if (productName) {
-      const dimMatch = productName.match(/(\d{2,4})\s*[xX*]\s*(\d{2,4})/);
-      if (dimMatch) {
-        nameCode = `${dimMatch[1].slice(-2)}${dimMatch[2].slice(-2)}`;
-      } else {
-        const words = productName.trim().split(/\s+/);
-        const cleanWord = words.find(w => w.length >= 3 && !['glazed', 'vitrified', 'tile', 'tiles'].includes(w.toLowerCase())) || words[0];
-        nameCode = cleanWord.substring(0, 4).toUpperCase();
-      }
-    }
-
-    if (!nameCode) {
-      nameCode = Math.floor(1000 + Math.random() * 9000).toString();
-    }
-
-    return `${brandCode}-${groupCode}-${nameCode}`;
-  };
-
-  // Real-time Auto SKU Update when Brand, Product Group, or Product Name changes
+  // Real-time Auto SKU, Company SKU & Vendor SKU Update when Brand, Vendor, Product Group, or Product Name changes
   useEffect(() => {
-    if (!isEdit && !isSkuManuallyEdited) {
+    if (!isEdit) {
       const autoSku = generateAutoSku(formData.company, formData.productGroup, formData.productName);
-      setFormData(prev => ({ ...prev, sku: autoSku }));
+      const autoCompanySku = generateCompanySku(formData.company, formData.productGroup, formData.productName);
+      const autoVendorSku = generateVendorSku(formData.vendor, formData.productGroup, formData.productName);
+
+      setFormData(prev => ({
+        ...prev,
+        sku: !isSkuManuallyEdited ? autoSku : prev.sku,
+        companySku: autoCompanySku,
+        vendorSku: autoVendorSku
+      }));
     }
-  }, [formData.company, formData.productGroup, formData.productName, isEdit, isSkuManuallyEdited]);
+  }, [formData.company, formData.vendor, formData.productGroup, formData.productName, isEdit, isSkuManuallyEdited]);
 
   useEffect(() => {
     if (isEdit) {
@@ -260,9 +374,18 @@ export const ProductForm = () => {
       getProductById(id)
         .then(data => {
           if (data) {
+            const loadedVendor = typeof data.vendor === 'object' && data.vendor !== null
+              ? (data.vendor.vendorName || data.vendor.name || '')
+              : (data.vendorName || data.vendor || '');
+            const loadedVendorId = typeof data.vendor === 'object' && data.vendor !== null
+              ? (data.vendor._id || data.vendor.id || '')
+              : (data.vendorId || (typeof data.vendor === 'string' && data.vendor.length === 24 ? data.vendor : ''));
+
             setFormData(prev => ({
               ...prev,
               ...data,
+              vendor: loadedVendor || prev.vendor,
+              vendorId: loadedVendorId || prev.vendorId,
               companyId: data.companyId || prev.companyId,
               productGroupId: data.productGroupId || prev.productGroupId,
               unitId: data.unitId || prev.unitId,
@@ -373,7 +496,7 @@ export const ProductForm = () => {
       case 'sku':
         if (!value || !value.toString().trim()) {
           err = 'System SKU is required.';
-        } else if (!/^[A-Za-z0-9\-_/.]+$/.test(value.toString().trim())) {
+        } else if (!/^[A-Za-z0-9\-_/. &@#+]+$/.test(value.toString().trim())) {
           err = 'SKU contains invalid characters. Use letters, numbers, hyphens, or slashes.';
         }
         break;
@@ -458,9 +581,41 @@ export const ProductForm = () => {
     return newErrors;
   };
 
+  const NUMERIC_FIELDS = [
+    'gstPercent', 'cessPercent', 'mrp', 'purchaseRate', 'costRate',
+    'salePrice', 'saleDiscount', 'openingStock', 'openingStockValue',
+    'defaultQty', 'reorderLevel', 'alertStockQty'
+  ];
+
+  const handleNumberKeyDown = (e) => {
+    // Completely disallow minus sign (-), exponential (e/E), plus (+)
+    if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+      e.preventDefault();
+    }
+  };
+
+  const handleNumberFocus = (e) => {
+    if (e.target) e.target.select();
+  };
+
   const handleChange = (e) => {
     const { name, value, type } = e.target;
-    const parsedVal = type === 'number' ? (value === '' ? '' : Number(value)) : value;
+    let parsedVal = value;
+
+    if (NUMERIC_FIELDS.includes(name) || type === 'number') {
+      // Disallow minus sign, alphabets, and symbols; allow only digits and single decimal dot
+      let clean = String(value).replace(/[^0-9.]/g, '');
+      const parts = clean.split('.');
+      if (parts.length > 2) {
+        clean = parts[0] + '.' + parts.slice(1).join('');
+      }
+      // Strip leading zeros before digits (e.g. "05" -> "5", but keep "0.5" or "0")
+      if (/^0[0-9]/.test(clean)) {
+        clean = clean.replace(/^0+/, '');
+        if (clean === '' || clean.startsWith('.')) clean = '0' + clean;
+      }
+      parsedVal = clean;
+    }
 
     setFormData(prev => {
       const updated = { ...prev, [name]: parsedVal };
@@ -480,9 +635,9 @@ export const ProductForm = () => {
 
       // Auto Opening Stock Value calculation
       if (name === 'openingStock' || name === 'costRate' || name === 'purchaseRate') {
-        const qty = name === 'openingStock' ? Number(parsedVal) : Number(prev.openingStock || 0);
-        const rate = name === 'costRate' ? Number(parsedVal) : Number(updated.costRate || updated.purchaseRate || 0);
-        updated.openingStockValue = Number((qty * rate).toFixed(2));
+        const qty = name === 'openingStock' ? Number(parsedVal || 0) : Number(prev.openingStock || 0);
+        const rate = name === 'costRate' ? Number(parsedVal || 0) : Number(updated.costRate || updated.purchaseRate || 0);
+        updated.openingStockValue = (qty * rate).toFixed(2);
       }
 
       // Re-validate current field in real time
@@ -514,11 +669,27 @@ export const ProductForm = () => {
     setTouched(allTouched);
 
     const validationErrors = validateAll();
-    const hasError = Object.values(validationErrors).some(err => err);
+    const firstErrorKey = Object.keys(validationErrors).find(key => validationErrors[key]);
 
-    if (hasError) {
+    if (firstErrorKey) {
       setFormErrorSummary('Please correct the highlighted errors in the form before saving.');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Auto-focus and auto-scroll directly to the first error field
+      setTimeout(() => {
+        const errorInput = document.querySelector(`[name="${firstErrorKey}"]`) || document.querySelector(`#${firstErrorKey}`);
+        if (errorInput) {
+          errorInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if (typeof errorInput.focus === 'function') {
+            errorInput.focus();
+          }
+        } else {
+          const banner = document.querySelector('.error-summary-banner') || document.querySelector('[role="alert"]');
+          if (banner) {
+            banner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }
+      }, 50);
       return;
     }
 
@@ -528,16 +699,37 @@ export const ProductForm = () => {
       const matchedCompany = companies.find(c => (c.companyName || c.name) === formData.company || c.id === formData.company || c._id === formData.company);
       const matchedGroup = productGroups.find(g => (g.groupName || g.name) === formData.productGroup || g.id === formData.productGroup || g._id === formData.productGroup);
       const matchedUnit = availableUnits.find(u => (u.unitCode || u.unitName) === formData.unit || u.id === formData.unit || u._id === formData.unit);
+      const matchedVendor = vendors.find(v => (v.vendorName || v.name) === formData.vendor || v.id === formData.vendor || v._id === formData.vendor);
 
       const resolvedCompanyId = isMongoId(matchedCompany?._id) ? matchedCompany._id : (isMongoId(matchedCompany?.id) ? matchedCompany.id : (isMongoId(formData.companyId) ? formData.companyId : undefined));
       const resolvedGroupId = isMongoId(matchedGroup?._id) ? matchedGroup._id : (isMongoId(matchedGroup?.id) ? matchedGroup.id : (isMongoId(formData.productGroupId) ? formData.productGroupId : undefined));
       const resolvedUnitId = isMongoId(matchedUnit?._id) ? matchedUnit._id : (isMongoId(matchedUnit?.id) ? matchedUnit.id : (isMongoId(formData.unitId) ? formData.unitId : undefined));
+      const resolvedVendorId = isMongoId(matchedVendor?._id) ? matchedVendor._id : (isMongoId(matchedVendor?.id) ? matchedVendor.id : (isMongoId(formData.vendorId) ? formData.vendorId : (isMongoId(formData.vendor) ? formData.vendor : undefined)));
+
+      const numOrZero = (val) => (val === '' || val === null || val === undefined ? 0 : Number(val) || 0);
 
       const submissionData = {
         ...formData,
+        gstPercent: numOrZero(formData.gstPercent),
+        igstPercent: numOrZero(formData.igstPercent),
+        cgstPercent: numOrZero(formData.cgstPercent),
+        sgstPercent: numOrZero(formData.sgstPercent),
+        cessPercent: numOrZero(formData.cessPercent),
+        mrp: numOrZero(formData.mrp),
+        purchaseRate: numOrZero(formData.purchaseRate),
+        costRate: numOrZero(formData.costRate),
+        salePrice: numOrZero(formData.salePrice),
+        saleDiscount: numOrZero(formData.saleDiscount),
+        openingStock: numOrZero(formData.openingStock),
+        openingStockValue: numOrZero(formData.openingStockValue),
+        defaultQty: numOrZero(formData.defaultQty) || 1,
+        reorderLevel: numOrZero(formData.reorderLevel) || 10,
+        alertStockQty: numOrZero(formData.alertStockQty) || 10,
         companyId: resolvedCompanyId,
         productGroupId: resolvedGroupId,
-        unitId: resolvedUnitId
+        unitId: resolvedUnitId,
+        vendorId: resolvedVendorId,
+        vendor: resolvedVendorId
       };
 
       if (isEdit) {
@@ -553,7 +745,11 @@ export const ProductForm = () => {
       }, 900);
     } catch (err) {
       console.error(err);
-      setFormErrorSummary(err.message || 'Failed to save product. Please try again.');
+      const msg = err?.response?.data?.message || err?.message || 'Failed to save product. Please try again.';
+      setFormErrorSummary(msg);
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 50);
     } finally {
       setSaving(false);
     }
@@ -853,10 +1049,17 @@ export const ProductForm = () => {
                   } else {
                     const selectedName = e.target.value;
                     const found = companies.find(c => (c.companyName || c.name) === selectedName || (c._id || c.id) === selectedName);
+                    const autoSku = !isSkuManuallyEdited ? generateAutoSku(selectedName, formData.productGroup, formData.productName) : formData.sku;
+                    const autoCompSku = generateCompanySku(selectedName, formData.productGroup, formData.productName);
+                    const autoVendSku = generateVendorSku(formData.vendor, formData.productGroup, formData.productName);
+
                     setFormData(prev => ({
                       ...prev,
                       company: selectedName,
-                      companyId: found?._id || found?.id || prev.companyId
+                      companyId: found?._id || found?.id || prev.companyId,
+                      sku: autoSku,
+                      companySku: autoCompSku,
+                      vendorSku: autoVendSku
                     }));
                   }
                 }}
@@ -875,7 +1078,7 @@ export const ProductForm = () => {
 
             {/* Product Group */}
             <div className="form-group" style={{ gridColumn: 'span 4' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
                 <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155', margin: 0 }}>
                   Product Group <span style={{ color: '#dc2626' }}>*</span>
                 </label>
@@ -883,16 +1086,16 @@ export const ProductForm = () => {
                   type="button"
                   onClick={handleOpenGroupModal}
                   style={{
-                    border: 'none',
-                    background: 'none',
+                    border: '1px solid #bfdbfe',
+                    backgroundColor: '#eff6ff',
                     color: '#2563eb',
-                    fontSize: '0.775rem',
-                    fontWeight: 600,
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '0.2rem',
-                    padding: '0.15rem 0.4rem',
+                    gap: '0.25rem',
+                    padding: '0.2rem 0.55rem',
                     borderRadius: '6px',
                     lineHeight: 1
                   }}
@@ -912,10 +1115,17 @@ export const ProductForm = () => {
                   } else {
                     const selectedName = e.target.value;
                     const found = productGroups.find(g => (g.groupName || g.name) === selectedName || (g._id || g.id) === selectedName);
+                    const autoSku = !isSkuManuallyEdited ? generateAutoSku(formData.company, selectedName, formData.productName) : formData.sku;
+                    const autoCompSku = generateCompanySku(formData.company, selectedName, formData.productName);
+                    const autoVendSku = generateVendorSku(formData.vendor, selectedName, formData.productName);
+
                     setFormData(prev => ({
                       ...prev,
                       productGroup: selectedName,
-                      productGroupId: found?._id || found?.id || prev.productGroupId
+                      productGroupId: found?._id || found?.id || prev.productGroupId,
+                      sku: autoSku,
+                      companySku: autoCompSku,
+                      vendorSku: autoVendSku
                     }));
                   }
                 }}
@@ -930,8 +1140,69 @@ export const ProductForm = () => {
               </select>
             </div>
 
-            {/* HSN Code */}
+            {/* Vendor / Supplier */}
             <div className="form-group" style={{ gridColumn: 'span 4' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155', margin: 0 }}>
+                  Primary Vendor
+                </label>
+                <button
+                  type="button"
+                  onClick={handleOpenVendorModal}
+                  style={{
+                    border: '1px solid #bfdbfe',
+                    backgroundColor: '#eff6ff',
+                    color: '#2563eb',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    padding: '0.2rem 0.55rem',
+                    borderRadius: '6px',
+                    lineHeight: 1
+                  }}
+                  title="Create New Vendor Record"
+                >
+                  <Plus size={13} />
+                  <span>Create Vendor</span>
+                </button>
+              </div>
+              <select
+                name="vendor"
+                className="form-control"
+                value={formData.vendor}
+                onChange={(e) => {
+                  if (e.target.value === '__ADD_NEW_VENDOR__') {
+                    handleOpenVendorModal();
+                  } else {
+                    const selectedName = e.target.value;
+                    const found = vendors.find(v => (v.vendorName || v.name) === selectedName || (v._id || v.id) === selectedName);
+                    const autoVendSku = generateVendorSku(selectedName, formData.productGroup, formData.productName);
+
+                    setFormData(prev => ({
+                      ...prev,
+                      vendor: selectedName,
+                      vendorId: found?._id || found?.id || prev.vendorId,
+                      vendorSku: autoVendSku
+                    }));
+                  }
+                }}
+                style={{ height: '46px', borderRadius: '10px' }}
+              >
+                {vendors.length === 0 && <option value="">Loading live vendors...</option>}
+                {vendors.map(v => (
+                  <option key={v._id || v.id || v.vendorName} value={v.vendorName || v.name}>
+                    {v.vendorName || v.name}
+                  </option>
+                ))}
+                <option value="__ADD_NEW_VENDOR__" style={{ fontWeight: 700, color: '#2563eb' }}>+ Add New Vendor...</option>
+              </select>
+            </div>
+
+            {/* HSN Code */}
+            <div className="form-group" style={{ gridColumn: 'span 3' }}>
               <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
                 HSN Code
               </label>
@@ -956,40 +1227,8 @@ export const ProductForm = () => {
               )}
             </div>
 
-            {/* Vendor SKU */}
-            <div className="form-group" style={{ gridColumn: 'span 4' }}>
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                Vendor SKU
-              </label>
-              <input
-                type="text"
-                name="vendorSku"
-                className="form-control"
-                placeholder="Vendor item code"
-                value={formData.vendorSku}
-                onChange={handleChange}
-                style={{ height: '46px', borderRadius: '10px' }}
-              />
-            </div>
-
-            {/* Company SKU */}
-            <div className="form-group" style={{ gridColumn: 'span 4' }}>
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                Company SKU
-              </label>
-              <input
-                type="text"
-                name="companySku"
-                className="form-control"
-                placeholder="Brand catalog code"
-                value={formData.companySku}
-                onChange={handleChange}
-                style={{ height: '46px', borderRadius: '10px' }}
-              />
-            </div>
-
             {/* Measurement Unit */}
-            <div className="form-group" style={{ gridColumn: 'span 4' }}>
+            <div className="form-group" style={{ gridColumn: 'span 3' }}>
               <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
                 Measurement Unit <span style={{ color: '#dc2626' }}>*</span>
               </label>
@@ -1018,6 +1257,106 @@ export const ProductForm = () => {
                   <option value="">Loading live units...</option>
                 )}
               </select>
+            </div>
+
+            {/* Vendor SKU */}
+            <div className="form-group" style={{ gridColumn: 'span 3' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155', margin: 0 }}>
+                  Vendor SKU
+                </label>
+              </div>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  name="vendorSku"
+                  className="form-control"
+                  placeholder="e.g. SHR-TILE-1001"
+                  value={formData.vendorSku}
+                  onChange={handleChange}
+                  style={{
+                    height: '46px',
+                    borderRadius: '10px',
+                    fontFamily: 'monospace',
+                    fontWeight: 600,
+                    letterSpacing: '0.02em',
+                    paddingRight: '2.5rem'
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const autoVendSku = generateVendorSku(formData.vendor, formData.productGroup, formData.productName);
+                    setFormData(prev => ({ ...prev, vendorSku: autoVendSku }));
+                  }}
+                  title="Re-generate Vendor SKU"
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    border: 'none',
+                    background: 'none',
+                    color: '#2563eb',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  <RefreshCw size={15} />
+                </button>
+              </div>
+            </div>
+
+            {/* Company SKU */}
+            <div className="form-group" style={{ gridColumn: 'span 3' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155', margin: 0 }}>
+                  Company SKU
+                </label>
+              </div>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  name="companySku"
+                  className="form-control"
+                  placeholder="e.g. KJR-1001"
+                  value={formData.companySku}
+                  onChange={handleChange}
+                  style={{
+                    height: '46px',
+                    borderRadius: '10px',
+                    fontFamily: 'monospace',
+                    fontWeight: 600,
+                    letterSpacing: '0.02em',
+                    paddingRight: '2.5rem'
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const autoCompSku = generateCompanySku(formData.company, formData.productGroup, formData.productName);
+                    setFormData(prev => ({ ...prev, companySku: autoCompSku }));
+                  }}
+                  title="Re-generate Company SKU"
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    border: 'none',
+                    background: 'none',
+                    color: '#2563eb',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  <RefreshCw size={15} />
+                </button>
+              </div>
             </div>
 
             {/* Product Image Uploader (File Upload / Drag & Drop / Image URL) */}
@@ -1262,11 +1601,15 @@ export const ProductForm = () => {
                 GST % <span style={{ color: '#dc2626' }}>*</span>
               </label>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 name="gstPercent"
                 className="form-control"
+                placeholder="18"
                 value={formData.gstPercent}
                 onChange={handleChange}
+                onKeyDown={handleNumberKeyDown}
+                onFocus={handleNumberFocus}
                 onBlur={handleBlur}
                 style={{
                   height: '46px',
@@ -1283,7 +1626,7 @@ export const ProductForm = () => {
                 IGST %
               </label>
               <input
-                type="number"
+                type="text"
                 name="igstPercent"
                 className="form-control"
                 value={formData.igstPercent}
@@ -1298,7 +1641,7 @@ export const ProductForm = () => {
                 CGST %
               </label>
               <input
-                type="number"
+                type="text"
                 name="cgstPercent"
                 className="form-control"
                 value={formData.cgstPercent}
@@ -1313,7 +1656,7 @@ export const ProductForm = () => {
                 SGST %
               </label>
               <input
-                type="number"
+                type="text"
                 name="sgstPercent"
                 className="form-control"
                 value={formData.sgstPercent}
@@ -1328,11 +1671,15 @@ export const ProductForm = () => {
                 CESS %
               </label>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 name="cessPercent"
                 className="form-control"
+                placeholder="0"
                 value={formData.cessPercent}
                 onChange={handleChange}
+                onKeyDown={handleNumberKeyDown}
+                onFocus={handleNumberFocus}
                 style={{ height: '46px', borderRadius: '10px' }}
               />
             </div>
@@ -1394,13 +1741,15 @@ export const ProductForm = () => {
                 MRP (₹)
               </label>
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 name="mrp"
                 className="form-control"
                 placeholder="0.00"
                 value={formData.mrp}
                 onChange={handleChange}
+                onKeyDown={handleNumberKeyDown}
+                onFocus={handleNumberFocus}
                 onBlur={handleBlur}
                 style={{
                   height: '46px',
@@ -1416,13 +1765,15 @@ export const ProductForm = () => {
                 Purchase Rate (₹)
               </label>
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 name="purchaseRate"
                 className="form-control"
                 placeholder="0.00"
                 value={formData.purchaseRate}
                 onChange={handleChange}
+                onKeyDown={handleNumberKeyDown}
+                onFocus={handleNumberFocus}
                 onBlur={handleBlur}
                 style={{ height: '46px', borderRadius: '10px' }}
               />
@@ -1434,13 +1785,15 @@ export const ProductForm = () => {
                 Cost Rate (₹)
               </label>
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 name="costRate"
                 className="form-control"
                 placeholder="0.00"
                 value={formData.costRate}
                 onChange={handleChange}
+                onKeyDown={handleNumberKeyDown}
+                onFocus={handleNumberFocus}
                 onBlur={handleBlur}
                 style={{ height: '46px', borderRadius: '10px' }}
               />
@@ -1452,13 +1805,15 @@ export const ProductForm = () => {
                 Sale Price (₹) <span style={{ color: '#dc2626' }}>*</span>
               </label>
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 name="salePrice"
                 className="form-control"
                 placeholder="0.00"
                 value={formData.salePrice}
                 onChange={handleChange}
+                onKeyDown={handleNumberKeyDown}
+                onFocus={handleNumberFocus}
                 onBlur={handleBlur}
                 style={{
                   height: '46px',
@@ -1475,13 +1830,15 @@ export const ProductForm = () => {
                 Discount %
               </label>
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 name="saleDiscount"
                 className="form-control"
                 placeholder="0.0"
                 value={formData.saleDiscount}
                 onChange={handleChange}
+                onKeyDown={handleNumberKeyDown}
+                onFocus={handleNumberFocus}
                 style={{ height: '46px', borderRadius: '10px' }}
               />
             </div>
@@ -1548,12 +1905,15 @@ export const ProductForm = () => {
                 Opening Stock
               </label>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 name="openingStock"
                 className="form-control"
                 placeholder="0"
                 value={formData.openingStock}
                 onChange={handleChange}
+                onKeyDown={handleNumberKeyDown}
+                onFocus={handleNumberFocus}
                 style={{ height: '46px', borderRadius: '10px' }}
               />
             </div>
@@ -1564,13 +1924,15 @@ export const ProductForm = () => {
                 Stock Value (₹)
               </label>
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 name="openingStockValue"
                 className="form-control"
                 placeholder="0.00"
                 value={formData.openingStockValue}
                 onChange={handleChange}
+                onKeyDown={handleNumberKeyDown}
+                onFocus={handleNumberFocus}
                 style={{ height: '46px', borderRadius: '10px' }}
               />
             </div>
@@ -1581,12 +1943,15 @@ export const ProductForm = () => {
                 Default Qty
               </label>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 name="defaultQty"
                 className="form-control"
                 placeholder="1"
                 value={formData.defaultQty}
                 onChange={handleChange}
+                onKeyDown={handleNumberKeyDown}
+                onFocus={handleNumberFocus}
                 style={{ height: '46px', borderRadius: '10px' }}
               />
             </div>
@@ -1597,12 +1962,15 @@ export const ProductForm = () => {
                 Reorder Level
               </label>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 name="reorderLevel"
                 className="form-control"
                 placeholder="100"
                 value={formData.reorderLevel}
                 onChange={handleChange}
+                onKeyDown={handleNumberKeyDown}
+                onFocus={handleNumberFocus}
                 style={{ height: '46px', borderRadius: '10px' }}
               />
             </div>
@@ -1613,12 +1981,15 @@ export const ProductForm = () => {
                 Alert Stock Qty
               </label>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 name="alertStockQty"
                 className="form-control"
                 placeholder="50"
                 value={formData.alertStockQty}
                 onChange={handleChange}
+                onKeyDown={handleNumberKeyDown}
+                onFocus={handleNumberFocus}
                 style={{ height: '46px', borderRadius: '10px' }}
               />
             </div>
@@ -2026,24 +2397,6 @@ export const ProductForm = () => {
                   />
                 </div>
 
-                {/* Parent Group */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
-                    Parent Group (Hierarchical Category)
-                  </label>
-                  <select
-                    className="form-control"
-                    value={groupFormData.parentGroup}
-                    onChange={(e) => setGroupFormData(prev => ({ ...prev, parentGroup: e.target.value }))}
-                    style={{ height: '42px', borderRadius: '8px' }}
-                  >
-                    <option value="">None (Top-Level Category)</option>
-                    {productGroups.map(g => (
-                      <option key={g.id || g.groupName} value={g.groupName}>{g.groupName}</option>
-                    ))}
-                  </select>
-                </div>
-
                 {/* Status */}
                 <div>
                   <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
@@ -2102,6 +2455,251 @@ export const ProductForm = () => {
                     <>
                       <Save size={15} />
                       <span>Save & Select Group</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create New Vendor Modal Dialog */}
+      {showVendorModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.55)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1rem'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            width: '100%',
+            maxWidth: '560px',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '1.25rem 1.5rem',
+              borderBottom: '1px solid #f1f5f9',
+              backgroundColor: '#f8fafc',
+              position: 'sticky',
+              top: 0,
+              zIndex: 1
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div style={{
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '8px',
+                  backgroundColor: '#eff6ff',
+                  color: '#2563eb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Truck size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                    Create New Vendor / Supplier
+                  </h3>
+                  <p style={{ fontSize: '0.785rem', color: '#64748b', margin: 0 }}>
+                    Add a supplier or vendor master record
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowVendorModal(false)}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: '0.25rem',
+                  borderRadius: '6px'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Form Body */}
+            <form onSubmit={handleCreateVendorSubmit}>
+              <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+                {vendorFormError && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    backgroundColor: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    color: '#991b1b',
+                    padding: '0.75rem 1rem',
+                    borderRadius: '8px',
+                    fontSize: '0.825rem'
+                  }}>
+                    <AlertCircle size={16} style={{ flexShrink: 0, color: '#dc2626' }} />
+                    <span>{vendorFormError}</span>
+                  </div>
+                )}
+
+                {/* Vendor Name */}
+                <div>
+                  <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                    Vendor / Supplier Name <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. Morbi Ceramics Supplier Ltd."
+                    value={vendorFormData.vendorName}
+                    onChange={(e) => setVendorFormData({ ...vendorFormData, vendorName: e.target.value })}
+                    autoFocus
+                    required
+                    style={{ height: '42px', borderRadius: '8px' }}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  {/* Mobile */}
+                  <div>
+                    <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                      Mobile Number
+                    </label>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      className="form-control"
+                      placeholder="10-digit mobile"
+                      value={vendorFormData.mobile}
+                      onChange={(e) => setVendorFormData({ ...vendorFormData, mobile: e.target.value.replace(/\D/g, '') })}
+                      style={{ height: '42px', borderRadius: '8px' }}
+                    />
+                  </div>
+
+                  {/* Email */}
+                  <div>
+                    <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      className="form-control"
+                      placeholder="vendor@supplier.com"
+                      value={vendorFormData.email}
+                      onChange={(e) => setVendorFormData({ ...vendorFormData, email: e.target.value })}
+                      style={{ height: '42px', borderRadius: '8px' }}
+                    />
+                  </div>
+                </div>
+
+                {/* GSTIN */}
+                <div>
+                  <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                    GSTIN Number
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={15}
+                    className="form-control"
+                    placeholder="e.g. 24AAAAA0000A1Z5"
+                    value={vendorFormData.gstNumber}
+                    onChange={(e) => setVendorFormData({ ...vendorFormData, gstNumber: e.target.value.toUpperCase() })}
+                    style={{ height: '42px', borderRadius: '8px', fontFamily: 'monospace', textTransform: 'uppercase' }}
+                  />
+                </div>
+
+                {/* Address */}
+                <div>
+                  <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                    Address
+                  </label>
+                  <textarea
+                    rows={2}
+                    className="form-control"
+                    placeholder="Factory / Office Address, City, State"
+                    value={vendorFormData.address}
+                    onChange={(e) => setVendorFormData({ ...vendorFormData, address: e.target.value })}
+                    style={{ borderRadius: '8px', resize: 'vertical' }}
+                  />
+                </div>
+
+                {/* Account Status */}
+                <div>
+                  <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                    Status
+                  </label>
+                  <select
+                    className="form-control"
+                    value={vendorFormData.status}
+                    onChange={(e) => setVendorFormData({ ...vendorFormData, status: e.target.value })}
+                    style={{ height: '42px', borderRadius: '8px', fontWeight: 600 }}
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: '0.75rem',
+                padding: '1rem 1.5rem',
+                borderTop: '1px solid #f1f5f9',
+                backgroundColor: '#f8fafc',
+                position: 'sticky',
+                bottom: 0
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setShowVendorModal(false)}
+                  className="btn btn-secondary"
+                  style={{ padding: '0.55rem 1.25rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingVendor}
+                  className="btn btn-primary"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.55rem 1.35rem',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700
+                  }}
+                >
+                  {savingVendor ? (
+                    <>
+                      <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save size={15} />
+                      <span>Save & Select Vendor</span>
                     </>
                   )}
                 </button>

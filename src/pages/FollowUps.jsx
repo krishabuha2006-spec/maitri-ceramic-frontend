@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams, useLocation, Link } from 'react-router-dom';
 import {
   getFollowUps,
   createFollowUp,
@@ -40,6 +41,10 @@ import {
 } from 'lucide-react';
 
 export const FollowUps = () => {
+  const [searchParams] = useSearchParams();
+  const customerIdParam = searchParams.get('customerId') || '';
+  const location = useLocation();
+
   // Main data states
   const [followUps, setFollowUps] = useState([]);
   const [quotations, setQuotations] = useState([]);
@@ -167,8 +172,27 @@ export const FollowUps = () => {
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    const init = async () => {
+      await loadData();
+      const qIdFromUrl = searchParams.get('quotationId');
+      const routeQuotation = location.state?.quotation;
+      if (routeQuotation) {
+        handleOpenAddForm(routeQuotation);
+      } else if (qIdFromUrl) {
+        try {
+          const qtRes = await getQuotations({ limit: 100 });
+          const qtList = Array.isArray(qtRes?.data) ? qtRes.data : (Array.isArray(qtRes) ? qtRes : []);
+          const found = qtList.find(q => String(q.id) === String(qIdFromUrl) || String(q._id) === String(qIdFromUrl) || q.quotationNumber === qIdFromUrl);
+          if (found) {
+            handleOpenAddForm(found);
+          }
+        } catch (e) {
+          console.error('Error fetching quotation for follow-up prefill:', e);
+        }
+      }
+    };
+    init();
+  }, [searchParams, location.state]);
 
   // Handle Export to Excel
   const handleExport = async () => {
@@ -222,11 +246,19 @@ export const FollowUps = () => {
     }
   };
 
+  const handleNumberFocus = (e) => {
+    if (e.target) e.target.select();
+  };
+
   const handleInputChange = (e) => {
     const { name, value, type } = e.target;
+    let val = value;
+    if (type === 'number') {
+      val = String(val).replace(/^0+(?=\d)/, '');
+    }
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'number' ? (value === '' ? '' : Number(value)) : value
+      [name]: val
     }));
     if (formError) setFormError('');
   };
@@ -235,12 +267,13 @@ export const FollowUps = () => {
   const handleOpenAddForm = (initialQuotation = null) => {
     setFormError('');
     setEditingId(null);
+    setShowForm(true);
     if (initialQuotation) {
       const qVal = initialQuotation.quotationAmount || initialQuotation.grandTotal || 0;
       setFormData({
         quotationId: initialQuotation.quotationId || initialQuotation.id || initialQuotation._id || '',
         quotationNumber: initialQuotation.quotationNumber || '',
-        customerName: initialQuotation.customerName || 'Customer',
+        customerName: initialQuotation.customerName || (initialQuotation.customer && initialQuotation.customer.customerName) || 'Customer',
         quotationAmount: qVal,
         followUpDate: new Date().toISOString().split('T')[0],
         nextFollowUpDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -250,7 +283,7 @@ export const FollowUps = () => {
         remarks: '',
         expectedOrderValue: qVal,
         nextAction: '',
-        salesperson: 'Vikram Mehta'
+        salesperson: initialQuotation.salesperson || 'Vikram Mehta'
       });
     } else {
       setFormData({
@@ -396,9 +429,29 @@ export const FollowUps = () => {
     }
   };
 
+  // Filtered available quotations for form dropdown strictly by selected customer if customerIdParam exists
+  const availableQuotations = useMemo(() => {
+    if (!customerIdParam) return quotations;
+    return quotations.filter(q => {
+      const qCustId = String(q.customerId || q.customer?._id || q.customer?.id || (typeof q.customer === 'string' ? q.customer : ''));
+      return qCustId === String(customerIdParam);
+    });
+  }, [quotations, customerIdParam]);
+
   // Filtered records
   const filteredFollowUps = useMemo(() => {
     let list = followUps;
+
+    // Filter by customer when customerId is specified in URL
+    if (customerIdParam) {
+      list = list.filter(f => {
+        const fCustId = String(f.customerId || f.customer?._id || f.customer?.id || '');
+        const fQuotCustId = String(f.quotation?.customerId || f.quotation?.customer?._id || f.quotation?.customer?.id || '');
+        const matchQuot = quotations.find(q => String(q.id || q._id) === String(f.quotationId));
+        const matchCustId = String(matchQuot?.customerId || matchQuot?.customer?._id || matchQuot?.customer?.id || '');
+        return fCustId === String(customerIdParam) || fQuotCustId === String(customerIdParam) || matchCustId === String(customerIdParam);
+      });
+    }
 
     // Filter by Status dropdown
     if (statusFilter !== 'ALL') {
@@ -423,7 +476,7 @@ export const FollowUps = () => {
     }
 
     return list;
-  }, [followUps, statusFilter, commTypeFilter, searchQuery]);
+  }, [followUps, quotations, customerIdParam, statusFilter, commTypeFilter, searchQuery]);
 
   // Communication Type Badge renderer
   const renderCommTypeBadge = (type) => {
@@ -577,7 +630,7 @@ export const FollowUps = () => {
                   style={{ height: '42px', borderRadius: '8px' }}
                 >
                   <option value="">-- Choose Quotation --</option>
-                  {quotations.map(q => {
+                  {availableQuotations.map(q => {
                     const qId = q.id || q._id;
                     const qVal = q.quotationAmount || q.grandTotal || 0;
                     return (
@@ -706,6 +759,7 @@ export const FollowUps = () => {
                   className="form-control"
                   value={formData.expectedOrderValue}
                   onChange={handleInputChange}
+                  onFocus={handleNumberFocus}
                   placeholder="0.00"
                   style={{ height: '42px', borderRadius: '8px' }}
                 />
@@ -787,23 +841,11 @@ export const FollowUps = () => {
     <div style={{ fontFamily: 'var(--font-family)', paddingBottom: '2.5rem' }}>
       {/* Toast Notification */}
       {successToast && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.75rem',
-          backgroundColor: '#16a34a',
-          color: '#ffffff',
-          padding: '0.85rem 1.35rem',
-          borderRadius: '12px',
-          boxShadow: '0 10px 25px rgba(22, 163, 74, 0.3)',
-          fontWeight: 600
-        }}>
-          <CheckCircle2 size={20} />
-          <span>{successToast}</span>
+        <div className="floating-toast-container">
+          <div className="floating-toast">
+            <CheckCircle2 size={16} />
+            <span>{successToast}</span>
+          </div>
         </div>
       )}
 
@@ -816,16 +858,37 @@ export const FollowUps = () => {
         gap: '1rem',
         marginBottom: '1.25rem'
       }}>
-        <div>
-          <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-            Quotation Follow-Ups
-          </h1>
-          <p style={{ fontSize: '0.825rem', color: '#64748b', margin: '0.15rem 0 0 0' }}>
-            Sales follow-up logging and quotation status tracking
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          {customerIdParam && (
+            <Link 
+              to={`/customers/${customerIdParam}?tab=follow-ups`} 
+              className="btn btn-secondary btn-sm"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', borderRadius: '8px', padding: '0.45rem 0.85rem' }}
+            >
+              <ArrowLeft size={16} />
+              <span>Back to Customer Hub</span>
+            </Link>
+          )}
+          <div>
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+              Quotation Follow-Ups
+            </h1>
+            <p style={{ fontSize: '0.825rem', color: '#64748b', margin: '0.15rem 0 0 0' }}>
+              {customerIdParam ? 'Showing follow-up records scoped to this customer' : 'Sales follow-up logging and quotation status tracking'}
+            </p>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+          {customerIdParam && (
+            <Link
+              to="/follow-ups"
+              className="btn btn-secondary btn-sm"
+              style={{ borderRadius: '8px', fontSize: '0.8rem', color: '#64748b' }}
+            >
+              View All Follow-Ups
+            </Link>
+          )}
           {/* Export to Excel */}
           <button
             type="button"
@@ -983,19 +1046,19 @@ export const FollowUps = () => {
       </div>
 
       {/* Clean Follow-Ups Data Table */}
-      <div className="table-container" style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#ffffff', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)' }}>
-        <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '980px', fontSize: '0.8rem' }}>
+      <div className="table-container" style={{ overflowX: 'hidden', borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#ffffff', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)' }}>
+        <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
           <thead>
             <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
-              <th style={{ padding: '0.7rem 0.8rem', whiteSpace: 'nowrap', fontWeight: 700, width: '120px' }}>Quotation No.</th>
-              <th style={{ padding: '0.7rem 0.8rem', whiteSpace: 'nowrap', fontWeight: 700, width: '160px' }}>Customer</th>
-              <th style={{ padding: '0.7rem 0.8rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'right', width: '120px' }}>Quotation Val</th>
-              <th style={{ padding: '0.7rem 0.8rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center', width: '95px' }}>Channel</th>
-              <th style={{ padding: '0.7rem 0.8rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center', width: '105px' }}>Follow-Up Date</th>
-              <th style={{ padding: '0.7rem 0.8rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center', width: '115px' }}>Next Follow-Up</th>
-              <th style={{ padding: '0.7rem 0.8rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center', width: '135px' }}>Status</th>
-              <th style={{ padding: '0.7rem 0.8rem', whiteSpace: 'nowrap', fontWeight: 700, minWidth: '190px' }}>Notes & Action</th>
-              <th style={{ padding: '0.7rem 0.8rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center', width: '135px' }}>Actions</th>
+              <th style={{ padding: '0.65rem 0.6rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center' }}>Quotation No.</th>
+              <th style={{ padding: '0.65rem 0.6rem', whiteSpace: 'nowrap', fontWeight: 700 }}>Customer</th>
+              <th style={{ padding: '0.65rem 0.6rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'right' }}>Quotation Val</th>
+              <th style={{ padding: '0.65rem 0.6rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center' }}>Channel</th>
+              <th style={{ padding: '0.65rem 0.6rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center' }}>Follow-Up Date</th>
+              <th style={{ padding: '0.65rem 0.6rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center' }}>Next Follow-Up</th>
+              <th style={{ padding: '0.65rem 0.6rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center' }}>Status</th>
+              <th style={{ padding: '0.65rem 0.6rem', fontWeight: 700 }}>Notes & Action</th>
+              <th style={{ padding: '0.65rem 0.6rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -1036,7 +1099,7 @@ export const FollowUps = () => {
                     }}
                   >
                     {/* Quotation No */}
-                    <td style={{ padding: '0.65rem 0.8rem', fontWeight: 700, whiteSpace: 'nowrap', color: '#0f172a' }}>
+                    <td style={{ padding: '0.65rem 0.8rem', fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'center', verticalAlign: 'middle', color: '#0f172a' }}>
                       <span style={{
                         backgroundColor: '#f1f5f9',
                         padding: '0.2rem 0.45rem',
@@ -1151,6 +1214,7 @@ export const FollowUps = () => {
                           type="button"
                           className="action-btn action-btn-view"
                           onClick={() => handleOpenAddForm(f)}
+                          data-tooltip="Log Next Follow-Up"
                           title="Log Another Follow-Up"
                         >
                           <PhoneCall size={14} style={{ color: '#2563eb' }} />
@@ -1161,6 +1225,7 @@ export const FollowUps = () => {
                           type="button"
                           className="action-btn"
                           onClick={() => handleOpenTimeline(f)}
+                          data-tooltip="Timeline History"
                           title="Timeline History"
                         >
                           <History size={14} style={{ color: '#475569' }} />
@@ -1171,6 +1236,7 @@ export const FollowUps = () => {
                           type="button"
                           className="action-btn action-btn-edit"
                           onClick={() => handleOpenEditForm(f)}
+                          data-tooltip="Edit Follow-Up"
                           title="Edit Follow-Up"
                         >
                           <Edit3 size={14} style={{ color: '#d97706' }} />
@@ -1181,6 +1247,7 @@ export const FollowUps = () => {
                           type="button"
                           className="action-btn action-btn-delete"
                           onClick={() => handleDeleteClick(f)}
+                          data-tooltip="Delete Record"
                           title="Delete Follow-Up"
                         >
                           <Trash2 size={14} style={{ color: '#dc2626' }} />

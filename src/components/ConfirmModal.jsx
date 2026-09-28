@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { AlertTriangle, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Trash2, CheckCircle2, X } from 'lucide-react';
 
 /**
  * Premium ConfirmModal — replaces browser window.confirm()
@@ -19,7 +19,7 @@ const ConfirmModal = ({
   message = 'Are you sure you want to proceed?',
   onConfirm,
   onCancel,
-  confirmLabel = 'Delete',
+  confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   danger = true
 }) => {
@@ -45,8 +45,8 @@ const ConfirmModal = ({
     >
       <div className="confirm-modal-box">
         {/* Icon */}
-        <div className={`confirm-modal-icon ${danger ? 'confirm-modal-icon--danger' : 'confirm-modal-icon--info'}`}>
-          {danger ? <AlertTriangle size={26} /> : <AlertTriangle size={26} />}
+        <div className={`confirm-modal-icon ${danger ? 'confirm-modal-icon--danger' : 'confirm-modal-icon--info'}`} style={!danger ? { backgroundColor: '#f0fdf4', color: '#16a34a', borderColor: '#86efac' } : {}}>
+          {danger ? <AlertTriangle size={26} /> : <CheckCircle2 size={26} />}
         </div>
 
         {/* Close X */}
@@ -63,7 +63,7 @@ const ConfirmModal = ({
         <h2 id="confirm-modal-title" className="confirm-modal-title">
           {title}
         </h2>
-        <p className="confirm-modal-message">{message}</p>
+        <p className="confirm-modal-message" style={{ whiteSpace: 'pre-line' }}>{message}</p>
 
         {/* Actions */}
         <div className="confirm-modal-actions">
@@ -77,10 +77,11 @@ const ConfirmModal = ({
           <button
             type="button"
             className={`btn confirm-modal-confirm-btn ${danger ? 'confirm-modal-confirm-btn--danger' : 'confirm-modal-confirm-btn--primary'}`}
+            style={!danger ? { backgroundColor: '#16a34a', borderColor: '#16a34a', color: '#ffffff', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' } : { display: 'inline-flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' }}
             onClick={onConfirm}
             autoFocus
           >
-            {danger && <Trash2 size={15} />}
+            {danger ? <Trash2 size={15} /> : <CheckCircle2 size={15} />}
             <span>{confirmLabel}</span>
           </button>
         </div>

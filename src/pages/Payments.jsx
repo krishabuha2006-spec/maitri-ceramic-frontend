@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { getPayments } from '../services/paymentService';
 import { formatCurrency, formatDate } from '../utils/formatters';
-import { Plus, Search, Eye, Printer, CreditCard, RefreshCw } from 'lucide-react';
+import { Pagination } from '../components/Pagination';
+import { Plus, Search, Eye, Printer, CreditCard, RefreshCw, Download } from 'lucide-react';
 
 const renderSafeText = (val, fallback = '') => {
   if (val === null || val === undefined) return fallback;
@@ -23,6 +24,8 @@ export const Payments = () => {
   const [payments, setPayments] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const loadPayments = async () => {
     setLoading(true);
@@ -37,8 +40,15 @@ export const Payments = () => {
   };
 
   useEffect(() => {
+    setCurrentPage(1);
     loadPayments();
   }, [search]);
+
+  // Paginated records for table view
+  const paginatedPayments = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return payments.slice(start, start + pageSize);
+  }, [payments, currentPage, pageSize]);
 
   return (
     <div>
@@ -61,7 +71,7 @@ export const Payments = () => {
             }}
             style={{ borderRadius: '8px', padding: '0.5rem 0.95rem', fontWeight: 600, fontSize: '0.825rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', backgroundColor: '#ffffff', border: '1px solid #cbd5e1' }}
           >
-            <span style={{ color: '#16a34a', display: 'inline-flex' }}>📊</span>
+            <Download size={15} style={{ color: '#0f172a' }} />
             <span>Export Excel</span>
           </button>
           <Link to="/payments/entry" className="btn btn-primary" style={{ borderRadius: '8px', padding: '0.525rem 1.15rem', fontWeight: 700, fontSize: '0.85rem' }}>
@@ -112,8 +122,8 @@ export const Payments = () => {
             ) : payments.length === 0 ? (
               <tr><td colSpan="8" style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b' }}>No receipts recorded.</td></tr>
             ) : (
-              payments.map(p => (
-                <tr key={p.id}>
+              paginatedPayments.map(p => (
+                <tr key={p.id || p._id}>
                   <td style={{ fontWeight: 600 }}>{p.receiptNumber}</td>
                   <td>{formatDate(p.date)}</td>
                   <td>{p.customerName}</td>
@@ -127,7 +137,7 @@ export const Payments = () => {
                   <td style={{ fontSize: '0.825rem', color: '#64748b' }}>{p.referenceNumber || '-'}</td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
-                      <Link to={`/payments/${p.id}`} className="btn btn-secondary btn-sm" title="View & Print Receipt">
+                      <Link to={`/payments/${p.id || p._id}`} className="btn btn-secondary btn-sm" title="View & Print Receipt">
                         <Eye size={14} /> Receipt
                       </Link>
                     </div>
@@ -137,9 +147,22 @@ export const Payments = () => {
             )}
           </tbody>
         </table>
+
+        {/* Reusable Pagination Control */}
+        {!loading && payments.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalItems={payments.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            pageSizeOptions={[10, 25, 50, 100]}
+          />
+        )}
       </div>
     </div>
   );
 };
 
 export default Payments;
+

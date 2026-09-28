@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 /**
  * Reusable Pagination component for table listings.
@@ -114,58 +114,35 @@ export const Pagination = ({
       </div>
 
       {/* Right: Page Navigation Controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-        {/* First Page */}
-        <button
-          type="button"
-          disabled={currentPage === 1}
-          onClick={() => handlePageClick(1)}
-          title="First Page"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '28px',
-            height: '28px',
-            borderRadius: '6px',
-            border: '1px solid #cbd5e1',
-            backgroundColor: currentPage === 1 ? '#f1f5f9' : '#ffffff',
-            color: currentPage === 1 ? '#94a3b8' : '#334155',
-            cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-            transition: 'all 0.15s ease'
-          }}
-        >
-          <ChevronsLeft size={15} />
-        </button>
-
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
         {/* Previous Page */}
         <button
           type="button"
           disabled={currentPage === 1}
           onClick={() => handlePageClick(currentPage - 1)}
-          title="Previous Page"
+          data-tooltip="Previous Page"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: '28px',
-            height: '28px',
+            width: '32px',
+            height: '32px',
             borderRadius: '6px',
             border: '1px solid #cbd5e1',
-            backgroundColor: currentPage === 1 ? '#f1f5f9' : '#ffffff',
+            backgroundColor: currentPage === 1 ? '#f8fafc' : '#ffffff',
             color: currentPage === 1 ? '#94a3b8' : '#334155',
             cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
             transition: 'all 0.15s ease'
           }}
         >
-          <ChevronLeft size={15} />
+          <ChevronLeft size={16} />
         </button>
 
         {/* Page Numbers */}
         {getPageNumbers().map((p, idx) => {
           if (p === '...') {
             return (
-              <span key={`ellipsis-${idx}`} style={{ padding: '0 0.25rem', color: '#94a3b8' }}>
+              <span key={`ellipsis-${idx}`} style={{ padding: '0 0.35rem', color: '#94a3b8' }}>
                 ...
               </span>
             );
@@ -178,9 +155,9 @@ export const Pagination = ({
               type="button"
               onClick={() => handlePageClick(p)}
               style={{
-                minWidth: '28px',
-                height: '28px',
-                padding: '0 0.4rem',
+                minWidth: '32px',
+                height: '32px',
+                padding: '0 0.5rem',
                 borderRadius: '6px',
                 border: isActive ? '1px solid #2563eb' : '1px solid #cbd5e1',
                 backgroundColor: isActive ? '#2563eb' : '#ffffff',
@@ -201,45 +178,22 @@ export const Pagination = ({
           type="button"
           disabled={currentPage === totalPages}
           onClick={() => handlePageClick(currentPage + 1)}
-          title="Next Page"
+          data-tooltip="Next Page"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: '28px',
-            height: '28px',
+            width: '32px',
+            height: '32px',
             borderRadius: '6px',
             border: '1px solid #cbd5e1',
-            backgroundColor: currentPage === totalPages ? '#f1f5f9' : '#ffffff',
+            backgroundColor: currentPage === totalPages ? '#f8fafc' : '#ffffff',
             color: currentPage === totalPages ? '#94a3b8' : '#334155',
             cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
             transition: 'all 0.15s ease'
           }}
         >
-          <ChevronRight size={15} />
-        </button>
-
-        {/* Last Page */}
-        <button
-          type="button"
-          disabled={currentPage === totalPages}
-          onClick={() => handlePageClick(totalPages)}
-          title="Last Page"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '28px',
-            height: '28px',
-            borderRadius: '6px',
-            border: '1px solid #cbd5e1',
-            backgroundColor: currentPage === totalPages ? '#f1f5f9' : '#ffffff',
-            color: currentPage === totalPages ? '#94a3b8' : '#334155',
-            cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-            transition: 'all 0.15s ease'
-          }}
-        >
-          <ChevronsRight size={15} />
+          <ChevronRight size={16} />
         </button>
       </div>
     </div>

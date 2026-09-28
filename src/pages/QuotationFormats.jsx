@@ -13,6 +13,7 @@ import {
   DEFAULT_8_FORMATS 
 } from '../services/quotationFormatService';
 import StatusBadge from '../components/StatusBadge';
+import ConfirmModal from '../components/ConfirmModal';
 import { usePermissions } from '../utils/permissions';
 
 export const QuotationFormats = () => {
@@ -24,6 +25,13 @@ export const QuotationFormats = () => {
   const [successToast, setSuccessToast] = useState('');
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Confirm Modal state
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    id: null,
+    name: ''
+  });
 
   // Form View State: false = Directory Table, true = Form view
   const [showForm, setShowForm] = useState(false);
@@ -109,8 +117,19 @@ export const QuotationFormats = () => {
     }
   };
 
-  const handleDelete = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to delete quotation format "${name}"?`)) return;
+  const handleDelete = (id, name) => {
+    setConfirmModal({
+      isOpen: true,
+      id,
+      name
+    });
+  };
+
+  const handleConfirmDelete = async () => {
+    const { id, name } = confirmModal;
+    setConfirmModal({ isOpen: false, id: null, name: '' });
+    if (!id) return;
+
     try {
       await deleteQuotationFormat(id);
       setFormats(prev => prev.filter(f => String(f.id) !== String(id)));
@@ -590,6 +609,17 @@ export const QuotationFormats = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Custom Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title="Delete Quotation Format"
+        message={`Are you sure you want to delete quotation format "${confirmModal.name}"?`}
+        confirmLabel="Yes, Delete Format"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmModal({ isOpen: false, id: null, name: '' })}
+        danger={true}
+      />
     </div>
   );
 };

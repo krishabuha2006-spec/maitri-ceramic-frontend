@@ -19,6 +19,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
     { id: 'products', path: '/products', label: 'Products', icon: Package },
     { id: 'product-groups', path: '/product-groups', label: 'Product Groups', icon: FolderTree },
     { id: 'companies', path: '/companies', label: 'Companies', icon: Building2 },
+    { id: 'vendors', path: '/vendors', label: 'Vendors', icon: Truck },
     { id: 'customers', path: '/customers', label: 'Customers', icon: Users },
     { id: 'quotations', path: '/quotations', label: 'Quotations', icon: FileText },
     { id: 'follow-ups', path: '/follow-ups', label: 'Follow-Ups', icon: PhoneCall },
@@ -48,10 +49,11 @@ export const Sidebar = ({ isOpen, onClose }) => {
           padding: '1.1rem 1rem', 
           display: 'flex', 
           alignItems: 'center', 
-          justifyContent: 'space-between',
+          justifyContent: 'center',
           backgroundColor: '#ffffff',
           borderBottom: '1px solid #e2e8f0',
-          minHeight: '70px'
+          minHeight: '70px',
+          position: 'relative'
         }}
       >
         <img 
@@ -64,7 +66,8 @@ export const Sidebar = ({ isOpen, onClose }) => {
             height: 'auto',
             objectFit: 'contain',
             filter: 'brightness(0)',
-            display: 'block' 
+            display: 'block',
+            margin: '0 auto' 
           }} 
         />
         <button 
@@ -77,7 +80,11 @@ export const Sidebar = ({ isOpen, onClose }) => {
             cursor: 'pointer',
             padding: '0.25rem',
             color: '#64748b',
-            display: 'none'
+            display: 'none',
+            position: 'absolute',
+            right: '0.75rem',
+            top: '50%',
+            transform: 'translateY(-50%)'
           }}
         >
           <X size={22} />

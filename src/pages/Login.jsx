@@ -112,7 +112,7 @@ export const Login = () => {
       >
         <div style={{ width: '100%', maxWidth: '450px' }}>
           {/* Header & Logo */}
-          <div style={{ textAlign: 'center', marginBottom: '2.25rem' }}>
+          <div style={{ textAlign: 'center', marginBottom: '2.25rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <img 
               src="/Maitri-Ceramic-logo.png" 
               alt="Maitri Ceramic Logo" 
@@ -122,10 +122,11 @@ export const Login = () => {
                 maxWidth: '260px',
                 objectFit: 'contain',
                 filter: 'brightness(0)',
-                marginBottom: '0.85rem'
+                margin: '0 auto 0.85rem auto',
+                display: 'block'
               }} 
             />
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', margin: 0, textAlign: 'center' }}>
               Sign In to System
             </h2>
           </div>
@@ -159,6 +160,9 @@ export const Login = () => {
               <div style={{ position: 'relative' }}>
                 <input 
                   type="text" 
+                  id="login-identifier"
+                  name="username"
+                  autoComplete="username"
                   className="form-control" 
                   placeholder="Enter mobile number or email"
                   value={identifier} 
@@ -185,12 +189,15 @@ export const Login = () => {
 
             {/* Password Input */}
             <div className="form-group" style={{ marginBottom: '2rem' }}>
-              <label style={{ fontWeight: 600, fontSize: '0.92rem', color: '#334155', marginBottom: '0.5rem', display: 'block' }}>
+              <label htmlFor="login-password" style={{ fontWeight: 600, fontSize: '0.92rem', color: '#334155', marginBottom: '0.5rem', display: 'block' }}>
                 Password <span style={{ color: '#dc2626' }}>*</span>
               </label>
               <div style={{ position: 'relative' }}>
                 <input 
                   type={showPassword ? 'text' : 'password'} 
+                  id="login-password"
+                  name="password"
+                  autoComplete="current-password"
                   className="form-control" 
                   placeholder="Enter password"
                   value={password} 
@@ -256,44 +263,6 @@ export const Login = () => {
               <LogIn size={20} />
               <span>{loading ? 'Signing In...' : 'Sign In'}</span>
             </button>
-
-            {/* Live Backend Super Admin Quick Fill */}
-            <div style={{
-              marginTop: '1.25rem',
-              padding: '0.75rem 1rem',
-              backgroundColor: '#f8fafc',
-              border: '1px solid #e2e8f0',
-              borderRadius: '10px',
-              fontSize: '0.82rem',
-              color: '#475569'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                <strong style={{ color: '#0f172a' }}>Live Backend Super Admin:</strong>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIdentifier('9825702369');
-                    setPassword('Laksh@2508');
-                    setValidationErrors({});
-                  }}
-                  style={{
-                    border: '1px solid #bfdbfe',
-                    background: '#eff6ff',
-                    color: '#2563eb',
-                    fontWeight: 700,
-                    padding: '0.2rem 0.6rem',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem'
-                  }}
-                >
-                  Autofill
-                </button>
-              </div>
-              <div style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: '#64748b' }}>
-                Mobile: <strong>9825702369</strong> &bull; Pass: <strong>Laksh@2508</strong>
-              </div>
-            </div>
           </form>
 
           {/* Footer Security Badge */}

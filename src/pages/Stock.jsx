@@ -12,6 +12,7 @@ import {
 } from '../services/stockService';
 import { formatDate } from '../utils/formatters';
 import StatusBadge from '../components/StatusBadge';
+import { Pagination } from '../components/Pagination';
 import { 
   Plus, 
   Boxes, 
@@ -40,6 +41,15 @@ export const Stock = () => {
   const [search, setSearch] = useState('');
   const [directionFilter, setDirectionFilter] = useState('ALL');
   const [toastMessage, setToastMessage] = useState('');
+
+  // Custom Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Reset page to 1 when tab or filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, search, directionFilter]);
 
   // Product History Modal State
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -150,27 +160,55 @@ export const Stock = () => {
     });
   }, [entries, search, directionFilter]);
 
+  const filteredLowStock = useMemo(() => {
+    if (!search.trim()) return lowStock;
+    const q = search.toLowerCase();
+    return lowStock.filter(p =>
+      (p.sku && p.sku.toLowerCase().includes(q)) ||
+      (p.productName && p.productName.toLowerCase().includes(q)) ||
+      (p.company && p.company.toLowerCase().includes(q))
+    );
+  }, [lowStock, search]);
+
+  const filteredPurchaseAlerts = useMemo(() => {
+    if (!search.trim()) return purchaseAlerts;
+    const q = search.toLowerCase();
+    return purchaseAlerts.filter(a =>
+      (a.sku && a.sku.toLowerCase().includes(q)) ||
+      (a.productName && a.productName.toLowerCase().includes(q))
+    );
+  }, [purchaseAlerts, search]);
+
+  // Paginated Slices for all 4 tabs
+  const paginatedProducts = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredProducts.slice(start, start + pageSize);
+  }, [filteredProducts, currentPage, pageSize]);
+
+  const paginatedEntries = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredEntries.slice(start, start + pageSize);
+  }, [filteredEntries, currentPage, pageSize]);
+
+  const paginatedLowStock = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredLowStock.slice(start, start + pageSize);
+  }, [filteredLowStock, currentPage, pageSize]);
+
+  const paginatedPurchaseAlerts = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredPurchaseAlerts.slice(start, start + pageSize);
+  }, [filteredPurchaseAlerts, currentPage, pageSize]);
+
   return (
     <div style={{ fontFamily: 'var(--font-family)', paddingBottom: '2.5rem' }}>
       {/* Toast Notification */}
       {toastMessage && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.75rem',
-          backgroundColor: '#16a34a',
-          color: '#ffffff',
-          padding: '1rem 1.5rem',
-          borderRadius: '12px',
-          boxShadow: '0 10px 25px rgba(22, 163, 74, 0.3)',
-          fontWeight: 600
-        }}>
-          <CheckCircle2 size={22} />
-          <span>{toastMessage}</span>
+        <div className="floating-toast-container">
+          <div className="floating-toast">
+            <CheckCircle2 size={16} />
+            <span>{toastMessage}</span>
+          </div>
         </div>
       )}
 
@@ -186,12 +224,18 @@ export const Stock = () => {
             className="btn btn-secondary"
             onClick={handleExport}
             disabled={exporting}
+            data-tooltip="Export Stock Report to Excel"
             style={{ borderRadius: '8px', padding: '0.5rem 0.95rem', fontWeight: 600, fontSize: '0.825rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
           >
             <FileSpreadsheet size={15} style={{ color: '#16a34a' }} />
             <span>{exporting ? 'Exporting...' : 'Export Excel'}</span>
           </button>
-          <Link to="/stock/entry" className="btn btn-primary" style={{ borderRadius: '8px', padding: '0.525rem 1.15rem', fontWeight: 700, fontSize: '0.85rem' }}>
+          <Link 
+            to="/stock/entry" 
+            className="btn btn-primary" 
+            data-tooltip="Record New Stock In / Out"
+            style={{ borderRadius: '8px', padding: '0.525rem 1.15rem', fontWeight: 700, fontSize: '0.85rem' }}
+          >
             <Plus size={16} />
             <span>Stock Entry (In / Out)</span>
           </Link>
@@ -269,285 +313,343 @@ export const Stock = () => {
       </div>
 
       {/* Tab Content */}
-      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflowX: 'auto', backgroundColor: '#ffffff' }}>
+      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflowX: 'hidden', backgroundColor: '#ffffff' }}>
         {activeTab === 'inventory' && (
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '950px', fontSize: '0.785rem' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '120px' }}>SKU</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '220px' }}>Product Description</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '140px' }}>Company</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '130px' }}>Group</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '100px' }}>Actual Stock</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '110px' }}>Mgmt Stock</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '100px' }}>Available</th>
-                <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', minWidth: '140px' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Loading inventory records...</td></tr>
-              ) : filteredProducts.length === 0 ? (
-                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No products found.</td></tr>
-              ) : (
-                filteredProducts.map(p => {
-                  const actual = Number(p.actualStock || 0);
-                  const mgmt = Number(p.managementStock || 0);
-                  const avail = Math.max(0, actual - mgmt);
-                  const isReconciling = reconcilingId === (p._id || p.id);
+          <>
+            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.785rem' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>SKU</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Product Description</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Company</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Group</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Actual Stock</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Mgmt Stock</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Available</th>
+                  <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', whiteSpace: 'nowrap' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Loading inventory records...</td></tr>
+                ) : filteredProducts.length === 0 ? (
+                  <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No products found.</td></tr>
+                ) : (
+                  paginatedProducts.map(p => {
+                    const actual = Number(p.actualStock || 0);
+                    const mgmt = Number(p.managementStock || 0);
+                    const avail = Math.max(0, actual - mgmt);
+                    const isReconciling = reconcilingId === (p._id || p.id);
 
-                  return (
-                    <tr key={p._id || p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, fontFamily: 'monospace', color: '#0f172a' }}>
-                        {p.sku}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', color: '#1e293b' }}>
-                        {p.productName}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569' }}>
-                        {p.company || '-'}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569' }}>
-                        {p.productGroup || '-'}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: actual < 50 ? '#dc2626' : '#0f172a', textAlign: 'center' }}>
-                        {actual} {p.unit || 'Sq.Ft'}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 600, color: '#d97706', textAlign: 'center' }}>
-                        {mgmt} {p.unit || 'Sq.Ft'}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: '#16a34a', textAlign: 'center' }}>
-                        {avail} {p.unit || 'Sq.Ft'}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenHistoryModal(p)}
-                            style={{
-                              padding: '0.25rem 0.5rem',
-                              fontSize: '0.725rem',
-                              fontWeight: 600,
-                              borderRadius: '6px',
-                              border: '1px solid #cbd5e1',
-                              background: '#f8fafc',
-                              color: '#334155',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            Ledger
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleReconcile(p)}
-                            disabled={isReconciling}
-                            title="Reconcile product stock against ledger entries (Safety Net)"
-                            style={{
-                              padding: '0.25rem 0.5rem',
-                              fontSize: '0.725rem',
-                              fontWeight: 600,
-                              borderRadius: '6px',
-                              border: '1px solid #dbeafe',
-                              background: '#eff6ff',
-                              color: '#2563eb',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {isReconciling ? '...' : 'Reconcile'}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                    return (
+                      <tr key={p._id || p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, fontFamily: 'monospace', color: '#0f172a' }}>
+                          {p.sku}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', color: '#1e293b' }}>
+                          {p.productName}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569' }}>
+                          {p.company || '-'}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569' }}>
+                          {p.productGroup || '-'}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: actual < 50 ? '#dc2626' : '#0f172a', textAlign: 'center' }}>
+                          {actual} {p.unit || 'Sq.Ft'}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 600, color: '#d97706', textAlign: 'center' }}>
+                          {mgmt} {p.unit || 'Sq.Ft'}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: '#16a34a', textAlign: 'center' }}>
+                          {avail} {p.unit || 'Sq.Ft'}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenHistoryModal(p)}
+                              data-tooltip="View Stock Movement History"
+                              style={{
+                                padding: '0.25rem 0.5rem',
+                                fontSize: '0.725rem',
+                                fontWeight: 600,
+                                borderRadius: '6px',
+                                border: '1px solid #cbd5e1',
+                                background: '#f8fafc',
+                                color: '#334155',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem'
+                              }}
+                            >
+                              <History size={12} />
+                              <span>Ledger</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReconcile(p)}
+                              disabled={isReconciling}
+                              data-tooltip="Reconcile Product Stock Cache"
+                              title="Reconcile product stock against ledger entries (Safety Net)"
+                              style={{
+                                padding: '0.25rem 0.5rem',
+                                fontSize: '0.725rem',
+                                fontWeight: 600,
+                                borderRadius: '6px',
+                                border: '1px solid #dbeafe',
+                                background: '#eff6ff',
+                                color: '#2563eb',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem'
+                              }}
+                            >
+                              <ShieldCheck size={12} />
+                              <span>{isReconciling ? '...' : 'Reconcile'}</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+            {!loading && filteredProducts.length > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                totalItems={filteredProducts.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+                pageSizeOptions={[10, 25, 50, 100]}
+              />
+            )}
+          </>
         )}
 
         {activeTab === 'movements' && (
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '950px', fontSize: '0.785rem' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '120px' }}>Entry No</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '100px' }}>Date</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '110px' }}>Direction</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '120px' }}>SKU</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '220px' }}>Product Description</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '90px' }}>Qty</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '150px' }}>Ledger Reason</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '140px' }}>Ref Doc</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Loading movement ledger...</td></tr>
-              ) : filteredEntries.length === 0 ? (
-                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No ledger entries found.</td></tr>
-              ) : (
-                filteredEntries.map(e => {
-                  const isOut = e.direction === 'OUT';
-                  return (
-                    <tr key={e.id || e._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
-                        {e.entryNumber}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569' }}>
-                        {formatDate(e.date)}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.25rem',
-                          padding: '0.2rem 0.5rem',
-                          borderRadius: '6px',
-                          fontSize: '0.725rem',
-                          fontWeight: 700,
-                          backgroundColor: isOut ? '#fef2f2' : '#f0fdf4',
-                          color: isOut ? '#dc2626' : '#16a34a'
-                        }}>
-                          {isOut ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
-                          {isOut ? 'Stock OUT' : 'Stock IN'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', fontFamily: 'monospace', fontWeight: 600 }}>
-                        {e.sku}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#1e293b' }}>
-                        {e.productName}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: isOut ? '#dc2626' : '#16a34a', textAlign: 'center' }}>
-                        {isOut ? `-${e.quantity}` : `+${e.quantity}`} {e.unit}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569' }}>
-                        {e.reason}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#64748b' }}>
-                        {e.referenceDoc}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+          <>
+            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.785rem' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>Entry No</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>Date</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>Direction</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>SKU</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Product Description</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Qty</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Ledger Reason</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>Ref Doc</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Loading movement ledger...</td></tr>
+                ) : filteredEntries.length === 0 ? (
+                  <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No ledger entries found.</td></tr>
+                ) : (
+                  paginatedEntries.map(e => {
+                    const isOut = e.direction === 'OUT';
+                    return (
+                      <tr key={e.id || e._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
+                          {e.entryNumber}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569' }}>
+                          {formatDate(e.date)}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
+                            padding: '0.2rem 0.5rem',
+                            borderRadius: '6px',
+                            fontSize: '0.725rem',
+                            fontWeight: 700,
+                            backgroundColor: isOut ? '#fef2f2' : '#f0fdf4',
+                            color: isOut ? '#dc2626' : '#16a34a'
+                          }}>
+                            {isOut ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
+                            {isOut ? 'Stock OUT' : 'Stock IN'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', fontFamily: 'monospace', fontWeight: 600 }}>
+                          {e.sku}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#1e293b' }}>
+                          {e.productName}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: isOut ? '#dc2626' : '#16a34a', textAlign: 'center' }}>
+                          {isOut ? `-${e.quantity}` : `+${e.quantity}`} {e.unit}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569' }}>
+                          {e.reason}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#64748b' }}>
+                          {e.referenceDoc}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+            {!loading && filteredEntries.length > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                totalItems={filteredEntries.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+                pageSizeOptions={[10, 25, 50, 100]}
+              />
+            )}
+          </>
         )}
 
         {activeTab === 'lowStock' && (
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '950px', fontSize: '0.785rem' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '120px' }}>SKU</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '240px' }}>Product Description</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '150px' }}>Company</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '110px' }}>Current Stock</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '110px' }}>Reorder Level</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '100px' }}>Shortfall</th>
-                <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', minWidth: '100px' }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Loading low stock report...</td></tr>
-              ) : lowStock.length === 0 ? (
-                <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: '#16a34a', fontWeight: 600 }}>All products have sufficient stock levels!</td></tr>
-              ) : (
-                lowStock.map(p => {
-                  const current = Number(p.actualStock || p.currentStock || 0);
-                  const reorder = Number(p.reorderPoint || p.reorderAlertQty || 50);
-                  const shortfall = Math.max(0, reorder - current);
+          <>
+            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.785rem' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>SKU</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Product Description</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Company</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Current Stock</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Reorder Level</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Shortfall</th>
+                  <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', whiteSpace: 'nowrap' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Loading low stock report...</td></tr>
+                ) : filteredLowStock.length === 0 ? (
+                  <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: '#16a34a', fontWeight: 600 }}>All products have sufficient stock levels!</td></tr>
+                ) : (
+                  paginatedLowStock.map(p => {
+                    const current = Number(p.actualStock || p.currentStock || 0);
+                    const reorder = Number(p.reorderPoint || p.reorderAlertQty || 50);
+                    const shortfall = Math.max(0, reorder - current);
 
-                  return (
-                    <tr key={p._id || p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, fontFamily: 'monospace', color: '#0f172a' }}>
-                        {p.sku}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', color: '#1e293b' }}>
-                        {p.productName}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569' }}>
-                        {p.company || '-'}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: '#dc2626', textAlign: 'center' }}>
-                        {current} {p.unit || 'Sq.Ft'}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 600, color: '#334155', textAlign: 'center' }}>
-                        {reorder} {p.unit || 'Sq.Ft'}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 800, color: '#ea580c', textAlign: 'center' }}>
-                        {shortfall} {p.unit || 'Sq.Ft'}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center' }}>
-                        <span style={{ padding: '0.2rem 0.5rem', borderRadius: '6px', fontSize: '0.725rem', fontWeight: 700, backgroundColor: '#fef2f2', color: '#dc2626' }}>
-                          REORDER REQUIRED
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                    return (
+                      <tr key={p._id || p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, fontFamily: 'monospace', color: '#0f172a' }}>
+                          {p.sku}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', color: '#1e293b' }}>
+                          {p.productName}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569' }}>
+                          {p.company || '-'}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: '#dc2626', textAlign: 'center' }}>
+                          {current} {p.unit || 'Sq.Ft'}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 600, color: '#334155', textAlign: 'center' }}>
+                          {reorder} {p.unit || 'Sq.Ft'}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 800, color: '#ea580c', textAlign: 'center' }}>
+                          {shortfall} {p.unit || 'Sq.Ft'}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center' }}>
+                          <span style={{ padding: '0.2rem 0.5rem', borderRadius: '6px', fontSize: '0.725rem', fontWeight: 700, backgroundColor: '#fef2f2', color: '#dc2626' }}>
+                            REORDER REQUIRED
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+            {!loading && filteredLowStock.length > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                totalItems={filteredLowStock.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+                pageSizeOptions={[10, 25, 50, 100]}
+              />
+            )}
+          </>
         )}
 
         {activeTab === 'purchaseAlerts' && (
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '950px', fontSize: '0.785rem' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '120px' }}>SKU</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '240px' }}>Product Description</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '120px' }}>Confirmed Quoted</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '120px' }}>Physical Stock</th>
-                <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '120px' }}>Net Shortfall</th>
-                <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', minWidth: '120px' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Calculating purchase alerts...</td></tr>
-              ) : purchaseAlerts.length === 0 ? (
-                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: '#16a34a', fontWeight: 600 }}>No stock shortfalls against confirmed orders.</td></tr>
-              ) : (
-                purchaseAlerts.map((a, idx) => (
-                  <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, fontFamily: 'monospace', color: '#0f172a' }}>
-                      {a.sku}
-                    </td>
-                    <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', color: '#1e293b' }}>
-                      {a.productName}
-                    </td>
-                    <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 600, color: '#0f172a', textAlign: 'center' }}>
-                      {a.confirmedQty || 0} {a.unit || 'Sq.Ft'}
-                    </td>
-                    <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 600, color: '#64748b', textAlign: 'center' }}>
-                      {a.actualStock || 0} {a.unit || 'Sq.Ft'}
-                    </td>
-                    <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 800, color: '#dc2626', textAlign: 'center' }}>
-                      {a.shortfall || 0} {a.unit || 'Sq.Ft'}
-                    </td>
-                    <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center' }}>
-                      <Link
-                        to="/stock/entry"
-                        style={{
-                          padding: '0.25rem 0.6rem',
-                          fontSize: '0.725rem',
-                          fontWeight: 700,
-                          borderRadius: '6px',
-                          backgroundColor: '#eff6ff',
-                          color: '#2563eb',
-                          textDecoration: 'none',
-                          border: '1px solid #bfdbfe'
-                        }}
-                      >
-                        Purchase In
-                      </Link>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          <>
+            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.785rem' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>SKU</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Product Description</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Confirmed Quoted</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Physical Stock</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Net Shortfall</th>
+                  <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', whiteSpace: 'nowrap' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Calculating purchase alerts...</td></tr>
+                ) : filteredPurchaseAlerts.length === 0 ? (
+                  <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: '#16a34a', fontWeight: 600 }}>No stock shortfalls against confirmed orders.</td></tr>
+                ) : (
+                  paginatedPurchaseAlerts.map((a, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, fontFamily: 'monospace', color: '#0f172a' }}>
+                        {a.sku}
+                      </td>
+                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', color: '#1e293b' }}>
+                        {a.productName}
+                      </td>
+                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 600, color: '#0f172a', textAlign: 'center' }}>
+                        {a.confirmedQty || 0} {a.unit || 'Sq.Ft'}
+                      </td>
+                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 600, color: '#64748b', textAlign: 'center' }}>
+                        {a.actualStock || 0} {a.unit || 'Sq.Ft'}
+                      </td>
+                      <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 800, color: '#dc2626', textAlign: 'center' }}>
+                        {a.shortfall || 0} {a.unit || 'Sq.Ft'}
+                      </td>
+                      <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center' }}>
+                        <Link
+                          to="/stock/entry"
+                          style={{
+                            padding: '0.25rem 0.6rem',
+                            fontSize: '0.725rem',
+                            fontWeight: 700,
+                            borderRadius: '6px',
+                            backgroundColor: '#eff6ff',
+                            color: '#2563eb',
+                            textDecoration: 'none',
+                            border: '1px solid #bfdbfe'
+                          }}
+                        >
+                          Purchase In
+                        </Link>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+            {!loading && filteredPurchaseAlerts.length > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                totalItems={filteredPurchaseAlerts.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+                pageSizeOptions={[10, 25, 50, 100]}
+              />
+            )}
+          </>
         )}
       </div>
 

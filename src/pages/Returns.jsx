@@ -7,8 +7,12 @@ import {
   cancelReturn, 
   exportReturns 
 } from '../services/returnService';
+import { getCompanies, getProducts } from '../services/productService';
+import { getVendors } from '../services/masterService';
+import { getCustomers } from '../services/customerService';
 import { formatDate } from '../utils/formatters';
 import StatusBadge from '../components/StatusBadge';
+import ConfirmModal from '../components/ConfirmModal';
 import * as XLSX from 'xlsx';
 import { 
   Plus, 
@@ -20,7 +24,7 @@ import {
   CheckCircle2, 
   RefreshCw, 
   Check, 
-  X,
+  X, 
   FileText
 } from 'lucide-react';
 
@@ -33,6 +37,24 @@ export const Returns = () => {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
+
+  // Dropdown master data
+  const [companies, setCompanies] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [selectedProductId, setSelectedProductId] = useState('');
+
+  // Confirm Modal state
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    type: '', // 'confirm' | 'cancel'
+    item: null,
+    title: '',
+    message: '',
+    confirmLabel: '',
+    danger: false
+  });
 
   const [formData, setFormData] = useState({
     returnNoteNumber: '',
@@ -49,11 +71,30 @@ export const Returns = () => {
     returnReason: 'Quality inspection rejection / Damage',
     remarks: 'Approved by warehouse manager'
   });
+  const [validationErrors, setValidationErrors] = useState({});
 
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 3500);
   };
+
+  // Load masters for cascading dropdowns
+  useEffect(() => {
+    Promise.all([
+      getCompanies().catch(() => []),
+      getCustomers().catch(() => []),
+      getProducts({ limit: 500 }).catch(() => []),
+      getVendors().catch(() => ({ data: [] }))
+    ]).then(([compList, custList, prodRes, vendRes]) => {
+      setCompanies(Array.isArray(compList) ? compList : []);
+      const cData = Array.isArray(custList?.data) ? custList.data : (Array.isArray(custList) ? custList : []);
+      setCustomers(cData);
+      const pData = Array.isArray(prodRes?.data) ? prodRes.data : (Array.isArray(prodRes) ? prodRes : []);
+      setProducts(pData);
+      const vData = Array.isArray(vendRes?.data) ? vendRes.data : (Array.isArray(vendRes) ? vendRes : []);
+      setVendors(vData);
+    });
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -72,6 +113,118 @@ export const Returns = () => {
     loadData();
   }, [activeTab]);
 
+  // Filter external vendors purely from /vendors API
+  const vendorList = useMemo(() => {
+    const seen = new Set();
+    const unique = [];
+    vendors.forEach(v => {
+      const name = (v.vendorName || v.name || v.supplierName || '').trim();
+      const id = v._id || v.id;
+      if (name && id && !seen.has(String(id).toLowerCase())) {
+        seen.add(String(id).toLowerCase());
+        unique.push({
+          id: String(id),
+          name,
+          mobile: v.mobile || '',
+          city: v.city || ''
+        });
+      }
+    });
+    return unique;
+  }, [vendors]);
+
+  // Unique Customer list
+  const customerList = useMemo(() => {
+    const seen = new Set();
+    const uniqueCustomers = [];
+    customers.forEach(c => {
+      const name = (c.customerName || c.name || '').trim();
+      const id = c._id || c.id;
+      if (name && id && !seen.has(String(id).toLowerCase())) {
+        seen.add(String(id).toLowerCase());
+        uniqueCustomers.push({
+          id: String(id),
+          name,
+          mobile: c.mobile || ''
+        });
+      }
+    });
+    return uniqueCustomers;
+  }, [customers]);
+
+  // Filter products matching selected vendor
+  const availableProducts = useMemo(() => {
+    if (activeTab === 'purchase') {
+      if (!formData.vendorId) return [];
+      const selectedVId = String(formData.vendorId).toLowerCase();
+      const selectedVName = String(formData.vendor || '').toLowerCase().trim();
+
+      return products.filter(p => {
+        const pVendId = String(p.vendorId || p.vendor?._id || (typeof p.vendor === 'string' && /^[0-9a-fA-F]{24}$/.test(p.vendor) ? p.vendor : '') || '').toLowerCase();
+        const pVendName = String(p.vendor?.vendorName || (typeof p.vendor === 'string' ? p.vendor : '') || '').toLowerCase().trim();
+
+        const matchById = selectedVId && pVendId && pVendId === selectedVId;
+        const matchByName = selectedVName && pVendName && (pVendName === selectedVName || pVendName.includes(selectedVName));
+
+        return matchById || matchByName;
+      });
+    }
+    return products;
+  }, [products, activeTab, formData.vendorId, formData.vendor]);
+
+  const handleVendorChange = (e) => {
+    const vId = e.target.value;
+    const selectedV = vendorList.find(v => String(v.id) === String(vId));
+    setFormData(prev => ({
+      ...prev,
+      vendorId: vId,
+      vendor: selectedV?.name || '',
+      productId: '',
+      sku: '',
+      productName: '',
+      unit: 'Sq.Ft'
+    }));
+    setSelectedProductId('');
+    if (validationErrors.vendorId) setValidationErrors(prev => ({ ...prev, vendorId: '' }));
+  };
+
+  const handleCustomerChange = (e) => {
+    const cId = e.target.value;
+    const selectedC = customerList.find(c => String(c.id) === String(cId));
+    setFormData(prev => ({
+      ...prev,
+      customerId: cId,
+      customerName: selectedC?.name || ''
+    }));
+    if (validationErrors.customerId) setValidationErrors(prev => ({ ...prev, customerId: '' }));
+  };
+
+  const handleProductSelect = (e) => {
+    const pId = e.target.value;
+    setSelectedProductId(pId);
+    const prd = products.find(p => String(p._id || p.id) === String(pId));
+    if (prd) {
+      setFormData(prev => ({
+        ...prev,
+        productId: prd._id || prd.id,
+        sku: prd.sku || '',
+        productName: prd.productName || '',
+        unit: prd.unit || 'Sq.Ft'
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        productId: '',
+        sku: '',
+        productName: '',
+        unit: 'Sq.Ft'
+      }));
+    }
+    if (validationErrors.productId || validationErrors.sku || validationErrors.productName) {
+      setValidationErrors(prev => ({ ...prev, productId: '', sku: '', productName: '' }));
+    }
+  };
+
   const filteredReturns = useMemo(() => {
     if (!searchQuery.trim()) return returnsList;
     const q = searchQuery.toLowerCase();
@@ -89,22 +242,28 @@ export const Returns = () => {
   const handleOpenForm = (tabType) => {
     setActiveTab(tabType);
     setFormError('');
-    const randomNum = Math.floor(Math.random() * 900) + 100;
+    setValidationErrors({});
+    setSelectedProductId('');
+
     setFormData({
-      returnNoteNumber: tabType === 'purchase' ? `PRN-2026-${randomNum}` : `SRN-2026-${randomNum}`,
+      returnNoteNumber: tabType === 'purchase' ? `PRN-${Date.now().toString().slice(-6)}` : `SRN-${Date.now().toString().slice(-6)}`,
       date: new Date().toISOString().split('T')[0],
-      vendor: tabType === 'purchase' ? 'Kajaria Ceramics Ltd' : '',
-      customerName: tabType === 'sales' ? 'Rajesh Sharma Construction' : '',
-      purchaseRef: tabType === 'purchase' ? 'PO-KJ-8821' : '',
-      invoiceNumber: tabType === 'sales' ? 'INV-2026-001' : '',
-      challanNumber: tabType === 'sales' ? 'CH-2026-001' : '',
-      sku: 'VT-60120-GL',
-      productName: 'Glazed Vitrified Tile 600x1200mm Statuario',
-      quantity: 10,
+      vendorId: '',
+      vendor: '',
+      customerId: '',
+      customerName: '',
+      purchaseRef: '',
+      invoiceNumber: '',
+      challanNumber: '',
+      productId: '',
+      sku: '',
+      productName: '',
+      quantity: 1,
       unit: 'Sq.Ft',
       returnReason: 'Quality inspection rejection / Damage',
-      remarks: 'Approved by warehouse manager'
+      remarks: ''
     });
+
     setShowForm(true);
   };
 
@@ -112,24 +271,59 @@ export const Returns = () => {
     e.preventDefault();
     setFormError('');
 
-    if (!formData.productName.trim() || !formData.sku.trim()) {
-      setFormError('Please fill in product SKU and product name.');
+    const errors = {};
+    if (activeTab === 'purchase' && !formData.vendorId) {
+      errors.vendorId = 'Vendor / Supplier selection is required.';
+    }
+
+    if (activeTab === 'sales' && !formData.customerId) {
+      errors.customerId = 'Customer selection is required.';
+    }
+
+    if (!formData.sku || !formData.sku.trim()) {
+      errors.sku = 'Product SKU is required.';
+    }
+
+    if (!formData.productName || !formData.productName.trim()) {
+      errors.productName = 'Product description is required.';
+    }
+
+    if (!formData.quantity || Number(formData.quantity) <= 0) {
+      errors.quantity = 'Valid quantity greater than 0 is required.';
+    }
+
+    if (!formData.returnReason || !formData.returnReason.trim()) {
+      errors.returnReason = 'Reason for return is required.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
       return;
     }
 
-    if (!formData.quantity || formData.quantity <= 0) {
-      setFormError('Please enter a valid return quantity greater than zero.');
-      return;
-    }
+    setValidationErrors({});
+
+    const returnPayload = {
+      vendorId: formData.vendorId,
+      customerId: formData.customerId,
+      productId: formData.productId,
+      quantity: Number(formData.quantity),
+      purchaseReferenceNote: formData.purchaseRef,
+      invoiceNumber: formData.invoiceNumber,
+      challanNumber: formData.challanNumber,
+      returnReason: formData.returnReason,
+      remarks: formData.remarks,
+      returnDate: formData.date
+    };
 
     setSaving(true);
     try {
       if (activeTab === 'purchase') {
-        await createPurchaseReturn(formData);
-        showToast(`Purchase Return ${formData.returnNoteNumber} recorded successfully!`);
+        const saved = await createPurchaseReturn(returnPayload);
+        showToast(`Purchase Return #${saved?.returnNoteNumber || formData.returnNoteNumber} recorded successfully!`);
       } else {
-        await createSalesReturn(formData);
-        showToast(`Sales Return ${formData.returnNoteNumber} recorded successfully!`);
+        const saved = await createSalesReturn(returnPayload);
+        showToast(`Sales Return #${saved?.returnNoteNumber || formData.returnNoteNumber} recorded successfully!`);
       }
       setShowForm(false);
       loadData();
@@ -141,26 +335,47 @@ export const Returns = () => {
     }
   };
 
-  const handleConfirm = async (item) => {
-    const id = item.id || item._id;
-    try {
-      await confirmReturn(id);
-      showToast(`Return ${item.returnNoteNumber} confirmed! Physical stock updated.`);
-      loadData();
-    } catch (err) {
-      showToast(`Error confirming return: ${err.message}`);
-    }
+  const handleConfirm = (item) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'confirm',
+      item,
+      title: 'Confirm Goods Return',
+      message: `Confirm Return Note #${item.returnNoteNumber}?\n\nThis will adjust inventory physical stock ledger automatically.`,
+      confirmLabel: 'Yes, Confirm Return',
+      danger: false
+    });
   };
 
-  const handleCancel = async (item) => {
-    if (!window.confirm(`Are you sure you want to cancel return ${item.returnNoteNumber}?`)) return;
+  const handleCancel = (item) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'cancel',
+      item,
+      title: 'Cancel Return Note',
+      message: `Are you sure you want to cancel return #${item.returnNoteNumber}? This action cannot be undone.`,
+      confirmLabel: 'Yes, Cancel Return',
+      danger: true
+    });
+  };
+
+  const handleConfirmAction = async () => {
+    const { type, item } = confirmModal;
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    if (!item) return;
+
     const id = item.id || item._id;
     try {
-      await cancelReturn(id, 'Cancelled by user');
-      showToast(`Return ${item.returnNoteNumber} cancelled.`);
+      if (type === 'confirm') {
+        await confirmReturn(id);
+        showToast(`Return ${item.returnNoteNumber} confirmed! Physical stock updated.`);
+      } else if (type === 'cancel') {
+        await cancelReturn(id, 'Cancelled by user');
+        showToast(`Return ${item.returnNoteNumber} cancelled.`);
+      }
       loadData();
     } catch (err) {
-      showToast(`Error cancelling return: ${err.message}`);
+      showToast(`Error processing return: ${err.message}`);
     }
   };
 
@@ -277,7 +492,7 @@ export const Returns = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <div className="card" style={{ padding: '1.75rem', marginBottom: '1.5rem' }}>
             <div style={{
               display: 'flex',
@@ -320,7 +535,6 @@ export const Returns = () => {
                   value={formData.returnNoteNumber}
                   onChange={(e) => setFormData({ ...formData, returnNoteNumber: e.target.value })}
                   style={{ height: '42px', borderRadius: '8px', fontWeight: 700 }}
-                  required
                 />
               </div>
 
@@ -333,7 +547,6 @@ export const Returns = () => {
                   className="form-control"
                   value={formData.date}
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  required
                   style={{ height: '42px', borderRadius: '8px' }}
                 />
               </div>
@@ -342,17 +555,32 @@ export const Returns = () => {
                 <>
                   <div style={{ gridColumn: 'span 6' }}>
                     <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
-                      Vendor Name <span style={{ color: '#dc2626' }}>*</span>
+                      Vendor / Supplier <span style={{ color: '#dc2626' }}>*</span>
                     </label>
-                    <input
-                      type="text"
+                    <select
                       className="form-control"
-                      value={formData.vendor}
-                      onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
-                      placeholder="e.g. Kajaria Ceramics Ltd"
-                      required
-                      style={{ height: '42px', borderRadius: '8px' }}
-                    />
+                      value={formData.vendorId}
+                      onChange={handleVendorChange}
+                      style={{
+                        height: '42px',
+                        borderRadius: '8px',
+                        fontWeight: 600,
+                        borderColor: validationErrors.vendorId ? '#dc2626' : '#cbd5e1',
+                        backgroundColor: validationErrors.vendorId ? '#fef2f2' : '#ffffff'
+                      }}
+                    >
+                      <option value="">-- Select Vendor / Supplier --</option>
+                      {vendorList.map(v => (
+                        <option key={v.id} value={v.id}>
+                          {v.name}
+                        </option>
+                      ))}
+                    </select>
+                    {validationErrors.vendorId && (
+                      <div style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.3rem', fontWeight: 500 }}>
+                        {validationErrors.vendorId}
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ gridColumn: 'span 6' }}>
@@ -375,15 +603,30 @@ export const Returns = () => {
                     <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
                       Customer Name <span style={{ color: '#dc2626' }}>*</span>
                     </label>
-                    <input
-                      type="text"
+                    <select
                       className="form-control"
-                      value={formData.customerName}
-                      onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
-                      placeholder="e.g. Rajesh Sharma Construction"
-                      required
-                      style={{ height: '42px', borderRadius: '8px' }}
-                    />
+                      value={formData.customerId}
+                      onChange={handleCustomerChange}
+                      style={{
+                        height: '42px',
+                        borderRadius: '8px',
+                        fontWeight: 600,
+                        borderColor: validationErrors.customerId ? '#dc2626' : '#cbd5e1',
+                        backgroundColor: validationErrors.customerId ? '#fef2f2' : '#ffffff'
+                      }}
+                    >
+                      <option value="">-- Select Customer --</option>
+                      {customerList.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} {c.mobile ? `(${c.mobile})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {validationErrors.customerId && (
+                      <div style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.3rem', fontWeight: 500 }}>
+                        {validationErrors.customerId}
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ gridColumn: 'span 6' }}>
@@ -402,6 +645,56 @@ export const Returns = () => {
                 </>
               )}
 
+              {/* Cascading Product Selector */}
+              <div style={{ gridColumn: 'span 12' }}>
+                <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                  Select Product to Return (Cascading from {activeTab === 'purchase' ? 'Vendor' : 'Catalog'}) <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <select
+                  className="form-control"
+                  value={selectedProductId}
+                  onChange={handleProductSelect}
+                  style={{
+                    height: '42px',
+                    borderRadius: '8px',
+                    fontWeight: 600,
+                    borderColor: validationErrors.productId ? '#dc2626' : '#cbd5e1',
+                    backgroundColor: validationErrors.productId ? '#fef2f2' : '#f8fafc'
+                  }}
+                >
+                  {activeTab === 'purchase' && !formData.vendorId ? (
+                    <option value="">-- Please select a Vendor first to see their products --</option>
+                  ) : availableProducts.length === 0 ? (
+                    <option value="">-- No products linked to this vendor --</option>
+                  ) : (
+                    <option value="">-- Choose Product (Auto-fills SKU, Name & Unit) --</option>
+                  )}
+                  {availableProducts.map(p => (
+                    <option key={p._id || p.id || p.sku} value={p._id || p.id}>
+                      [{p.sku}] {p.productName} ({p.unit || 'Sq.Ft'})
+                    </option>
+                  ))}
+                </select>
+                {validationErrors.productId && (
+                  <div style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.3rem', fontWeight: 500 }}>
+                    {validationErrors.productId}
+                  </div>
+                )}
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
+                  {activeTab === 'purchase' ? (
+                    formData.vendorId ? (
+                      availableProducts.length > 0
+                        ? `Showing ${availableProducts.length} product(s) belonging to "${formData.vendor || 'selected vendor'}"`
+                        : `No products found for "${formData.vendor}".`
+                    ) : (
+                      `Select a Vendor above to view and filter their specific products.`
+                    )
+                  ) : (
+                    `Showing ${availableProducts.length} product(s) available in catalog.`
+                  )}
+                </div>
+              </div>
+
               <div style={{ gridColumn: 'span 6' }}>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
                   Product SKU <span style={{ color: '#dc2626' }}>*</span>
@@ -410,11 +703,24 @@ export const Returns = () => {
                   type="text"
                   className="form-control"
                   value={formData.sku}
-                  onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, sku: e.target.value });
+                    if (validationErrors.sku) setValidationErrors(prev => ({ ...prev, sku: '' }));
+                  }}
                   placeholder="e.g. VT-60120-GL"
-                  required
-                  style={{ height: '42px', borderRadius: '8px' }}
+                  style={{
+                    height: '42px',
+                    borderRadius: '8px',
+                    fontWeight: 600,
+                    borderColor: validationErrors.sku ? '#dc2626' : undefined,
+                    backgroundColor: validationErrors.sku ? '#fef2f2' : undefined
+                  }}
                 />
+                {validationErrors.sku && (
+                  <div style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.3rem', fontWeight: 500 }}>
+                    {validationErrors.sku}
+                  </div>
+                )}
               </div>
 
               <div style={{ gridColumn: 'span 6' }}>
@@ -425,11 +731,23 @@ export const Returns = () => {
                   type="text"
                   className="form-control"
                   value={formData.productName}
-                  onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, productName: e.target.value });
+                    if (validationErrors.productName) setValidationErrors(prev => ({ ...prev, productName: '' }));
+                  }}
                   placeholder="e.g. Glazed Vitrified Tile Statuario"
-                  required
-                  style={{ height: '42px', borderRadius: '8px' }}
+                  style={{
+                    height: '42px',
+                    borderRadius: '8px',
+                    borderColor: validationErrors.productName ? '#dc2626' : undefined,
+                    backgroundColor: validationErrors.productName ? '#fef2f2' : undefined
+                  }}
                 />
+                {validationErrors.productName && (
+                  <div style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.3rem', fontWeight: 500 }}>
+                    {validationErrors.productName}
+                  </div>
+                )}
               </div>
 
               <div style={{ gridColumn: 'span 6' }}>
@@ -437,14 +755,35 @@ export const Returns = () => {
                   Quantity Returned <span style={{ color: '#dc2626' }}>*</span>
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   className="form-control"
                   value={formData.quantity}
-                  onChange={(e) => setFormData({ ...formData, quantity: Number(e.target.value) })}
-                  required
-                  min="1"
-                  style={{ height: '42px', borderRadius: '8px', fontWeight: 700 }}
+                  onFocus={(e) => e.target.select()}
+                  onKeyDown={(e) => {
+                    if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault();
+                  }}
+                  onChange={(e) => {
+                    let val = e.target.value.replace(/[^0-9.]/g, '');
+                    const parts = val.split('.');
+                    if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+                    val = val.replace(/^0+(?=\d)/, '');
+                    setFormData({ ...formData, quantity: val === '' ? '' : val });
+                    if (validationErrors.quantity) setValidationErrors(prev => ({ ...prev, quantity: '' }));
+                  }}
+                  style={{
+                    height: '42px',
+                    borderRadius: '8px',
+                    fontWeight: 700,
+                    borderColor: validationErrors.quantity ? '#dc2626' : undefined,
+                    backgroundColor: validationErrors.quantity ? '#fef2f2' : undefined
+                  }}
                 />
+                {validationErrors.quantity && (
+                  <div style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.3rem', fontWeight: 500 }}>
+                    {validationErrors.quantity}
+                  </div>
+                )}
               </div>
 
               <div style={{ gridColumn: 'span 6' }}>
@@ -469,11 +808,23 @@ export const Returns = () => {
                   type="text"
                   className="form-control"
                   value={formData.returnReason}
-                  onChange={(e) => setFormData({ ...formData, returnReason: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, returnReason: e.target.value });
+                    if (validationErrors.returnReason) setValidationErrors(prev => ({ ...prev, returnReason: '' }));
+                  }}
                   placeholder="e.g. Broken tiles / Excess stock from construction site"
-                  required
-                  style={{ height: '42px', borderRadius: '8px' }}
+                  style={{
+                    height: '42px',
+                    borderRadius: '8px',
+                    borderColor: validationErrors.returnReason ? '#dc2626' : undefined,
+                    backgroundColor: validationErrors.returnReason ? '#fef2f2' : undefined
+                  }}
                 />
+                {validationErrors.returnReason && (
+                  <div style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.3rem', fontWeight: 500 }}>
+                    {validationErrors.returnReason}
+                  </div>
+                )}
               </div>
 
               <div style={{ gridColumn: 'span 12' }}>
@@ -639,19 +990,19 @@ export const Returns = () => {
       </div>
 
       {/* Table */}
-      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflowX: 'auto', backgroundColor: '#ffffff' }}>
-        <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '950px', fontSize: '0.785rem' }}>
+      <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflowX: 'hidden', backgroundColor: '#ffffff' }}>
+        <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.785rem' }}>
           <thead>
             <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '130px' }}>Return Note</th>
-              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '100px' }}>Date</th>
-              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '160px' }}>{activeTab === 'purchase' ? 'Vendor' : 'Customer'}</th>
-              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '130px' }}>{activeTab === 'purchase' ? 'PO Ref' : 'Invoice / Challan'}</th>
-              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '120px' }}>SKU</th>
-              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', minWidth: '200px' }}>Product Description</th>
-              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', minWidth: '90px' }}>Qty</th>
-              <th style={{ padding: '0.6rem 0.5rem', textAlign: 'center', minWidth: '100px' }}>Status</th>
-              <th style={{ padding: '0.6rem 0.75rem', textAlign: 'center', minWidth: '120px' }}>Actions</th>
+              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>Return Note</th>
+              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>Date</th>
+              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569' }}>{activeTab === 'purchase' ? 'Vendor' : 'Customer'}</th>
+              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>{activeTab === 'purchase' ? 'PO Ref' : 'Invoice / Challan'}</th>
+              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>SKU</th>
+              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569' }}>Product Description</th>
+              <th style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Qty</th>
+              <th style={{ padding: '0.6rem 0.5rem', textAlign: 'center', whiteSpace: 'nowrap' }}>Status</th>
+              <th style={{ padding: '0.6rem 0.75rem', textAlign: 'center', whiteSpace: 'nowrap' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -745,6 +1096,17 @@ export const Returns = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Custom Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel}
+        onConfirm={handleConfirmAction}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        danger={confirmModal.danger}
+      />
     </div>
   );
 };

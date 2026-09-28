@@ -7,11 +7,14 @@ import * as XLSX from 'xlsx';
  */
 export const normalizeChallan = (c) => {
   if (!c) return null;
-  const cust = c.customer || {};
+  const cust = typeof c.customer === 'object' && c.customer !== null ? c.customer : {};
+  const custId = typeof c.customer === 'string' ? c.customer : (cust._id || cust.id || c.customerId || '');
+  const custName = cust.customerName || cust.name || c.customerName || 'Customer';
   const statusStr = (c.status || (c.isFinalized ? 'FINALIZED' : 'DRAFT')).toUpperCase();
   const salespersonName = typeof c.salesperson === 'object' ? (c.salesperson?.name || 'Lax Savani') : (c.salesperson || 'Vikram Mehta');
-  const quotNo = c.quotation?.quotationNumber || c.quotationNumber || c.refQuotationNo || (typeof c.quotation === 'string' ? c.quotation : '—');
-  const confId = c.confirmation?._id || c.confirmation || c.confirmationId || '';
+  const quotNo = c.quotation?.quotationNumber || c.quotationNumber || c.refQuotationNo || (typeof c.quotation === 'string' && !/^[0-9a-fA-F]{24}$/.test(c.quotation) ? c.quotation : '—');
+  const quotId = typeof c.quotation === 'object' && c.quotation !== null ? (c.quotation._id || c.quotation.id) : (typeof c.quotation === 'string' ? c.quotation : (c.quotationId || ''));
+  const confId = typeof c.confirmation === 'object' && c.confirmation !== null ? (c.confirmation._id || c.confirmation.id) : (typeof c.confirmation === 'string' ? c.confirmation : (c.confirmationId || ''));
 
   return {
     id: c._id || c.id || `CH-${Date.now()}`,
@@ -19,15 +22,15 @@ export const normalizeChallan = (c) => {
     challanNumber: c.challanNumber || (c._id ? `CH-${c._id.slice(-6).toUpperCase()}` : 'CH-2026'),
     date: c.challanDate ? c.challanDate.split('T')[0] : (c.date ? c.date.split('T')[0] : new Date().toISOString().split('T')[0]),
     challanDate: c.challanDate || c.date || new Date().toISOString(),
-    customerId: cust._id || cust.id || c.customerId || '',
-    customerName: cust.customerName || c.customerName || 'Customer',
+    customerId: custId,
+    customerName: custName,
     customerContact: c.customerContact || cust.mobile || cust.contactNumber || '',
     customerAddress: c.customerAddress || cust.shippingAddress || cust.billingAddress || cust.siteAddress || cust.address || '',
     customerCity: cust.city || '',
     customerType: cust.customerType || '',
     customerGst: cust.gstNumber || 'N/A',
     refQuotationNo: quotNo,
-    quotationId: c.quotation?._id || c.quotation || '',
+    quotationId: quotId,
     confirmationId: confId,
     salesperson: salespersonName,
     salespersonMobile: c.salesperson?.mobile || '',

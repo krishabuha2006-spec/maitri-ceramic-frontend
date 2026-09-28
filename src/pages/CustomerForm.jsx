@@ -217,7 +217,7 @@ export const CustomerForm = () => {
     city: 'Ahmedabad',
     state: 'Gujarat',
     gstNumber: '',
-    customerType: 'Retail Individual',
+    customerType: 'RETAIL',
     notes: ''
   });
 
@@ -341,9 +341,20 @@ export const CustomerForm = () => {
     setTouched(allTouched);
 
     const valErrors = validateAll();
-    if (Object.values(valErrors).some(err => err)) {
+    const firstErrorKey = Object.keys(valErrors).find(k => valErrors[k]);
+    if (firstErrorKey) {
       setFormErrorSummary('Please fix highlighted errors before saving.');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => {
+        const errorInput = document.querySelector(`[name="${firstErrorKey}"]`) || document.querySelector(`#${firstErrorKey}`);
+        if (errorInput) {
+          errorInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if (typeof errorInput.focus === 'function') {
+            errorInput.focus();
+          }
+        } else {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      }, 50);
       return;
     }
 
@@ -813,11 +824,11 @@ export const CustomerForm = () => {
                 onChange={handleChange}
                 style={{ height: '46px', borderRadius: '10px' }}
               >
-                <option value="Retail Individual">Retail Individual</option>
-                <option value="Builder / Developer">Builder / Developer</option>
-                <option value="Architect / Interior Designer">Architect / Interior Designer</option>
-                <option value="Plumbing Contractor">Plumbing Contractor</option>
-                <option value="Tiling Contractor">Tiling Contractor</option>
+                <option value="RETAIL">Retail Individual (RETAIL)</option>
+                <option value="DEALER">Builder / Developer (DEALER)</option>
+                <option value="CONTRACTOR">Contractor / Architect (CONTRACTOR)</option>
+                <option value="PLUMBER">Plumbing Contractor (PLUMBER)</option>
+                <option value="OTHER">Other Category (OTHER)</option>
               </select>
             </div>
 

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { getCustomers, getCustomerById } from '../services/customerService';
 import { getConfirmations, getConfirmationById } from '../services/confirmationService';
 import { createChallan, finalizeChallan } from '../services/challanService';
 import { 
@@ -16,16 +17,23 @@ import {
   Phone, 
   ShieldCheck,
   CheckSquare,
-  Square
+  Square,
+  Plus
 } from 'lucide-react';
 
 export const CreateChallan = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const customerIdParam = searchParams.get('customerId') || '';
+  const quotationIdParam = searchParams.get('quotationId') || '';
   const preselectedConfirmationId = searchParams.get('confirmationId') || '';
 
+  const [customers, setCustomers] = useState([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState(customerIdParam);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+
   const [confirmations, setConfirmations] = useState([]);
-  const [loadingConfirmations, setLoadingConfirmations] = useState(true);
+  const [loadingData, setLoadingData] = useState(true);
   const [selectedConfirmationId, setSelectedConfirmationId] = useState(preselectedConfirmationId);
   const [selectedConfirmation, setSelectedConfirmation] = useState(null);
 
@@ -42,33 +50,92 @@ export const CreateChallan = () => {
   const [formError, setFormError] = useState('');
   const [successToast, setSuccessToast] = useState('');
 
-  // Fetch all active quotation confirmations from backend Module 7
+  // Fetch all customers & active quotation confirmations from backend
   useEffect(() => {
-    const fetchConfirmations = async () => {
-      setLoadingConfirmations(true);
+    const fetchData = async () => {
+      setLoadingData(true);
       try {
-        const res = await getConfirmations({ limit: 100 });
-        const list = Array.isArray(res?.data) ? res.data : [];
-        // Filter confirmations that are not fully delivered
-        const activeList = list.filter(c => !c.isFullyDelivered && (c.isActive !== false));
-        setConfirmations(activeList);
+        const [cRes, confRes] = await Promise.all([
+          getCustomers({ limit: 1000 }),
+          getConfirmations({ limit: 1000 })
+        ]);
+
+        const custList = cRes.data || (Array.isArray(cRes) ? cRes : []);
+        const confList = Array.isArray(confRes?.data) ? confRes.data : [];
+        const activeConfList = confList.filter(c => !c.isFullyDelivered && (c.isActive !== false));
+
+        setCustomers(custList);
+        setConfirmations(activeConfList);
+
+        let initialCustId = customerIdParam;
+        let matchedConf = null;
 
         if (preselectedConfirmationId) {
-          const found = list.find(c => String(c._id) === String(preselectedConfirmationId) || String(c.id) === String(preselectedConfirmationId));
-          if (found) {
-            setSelectedConfirmationId(found._id || found.id);
-            setupConfirmationData(found);
+          matchedConf = activeConfList.find(c => String(c._id) === String(preselectedConfirmationId) || String(c.id) === String(preselectedConfirmationId));
+        } else if (quotationIdParam) {
+          matchedConf = activeConfList.find(c => {
+            const qId = c.quotation?._id || c.quotation?.id || c.quotation || c.quotationId;
+            return String(qId) === String(quotationIdParam);
+          });
+        }
+
+        if (matchedConf) {
+          const cId = matchedConf.customer?._id || matchedConf.customer?.id || matchedConf.customer || matchedConf.customerId || matchedConf.quotation?.customer?._id || matchedConf.quotation?.customer?.id || matchedConf.quotation?.customer;
+          if (cId) initialCustId = String(cId);
+        }
+
+        if (initialCustId) {
+          setSelectedCustomerId(String(initialCustId));
+          const cust = custList.find(c => String(c.id || c._id) === String(initialCustId));
+          if (cust) {
+            setSelectedCustomer(cust);
+          } else {
+            try {
+              const fetched = await getCustomerById(initialCustId);
+              if (fetched) setSelectedCustomer(fetched);
+            } catch (e) {
+              console.warn('Could not fetch customer by ID:', e);
+            }
+          }
+
+          // Auto-match confirmation for this customer
+          if (!matchedConf) {
+            const custConfs = activeConfList.filter(c => {
+              const cId = c.customer?._id || c.customer?.id || c.customer || c.customerId || c.quotation?.customer?._id || c.quotation?.customer?.id || c.quotation?.customer;
+              return String(cId) === String(initialCustId);
+            });
+            if (custConfs.length === 1) {
+              matchedConf = custConfs[0];
+            }
           }
         }
+
+        if (matchedConf) {
+          setSelectedConfirmationId(matchedConf._id || matchedConf.id);
+          setupConfirmationData(matchedConf);
+        }
       } catch (err) {
-        console.error('Failed to fetch confirmations:', err);
+        console.error('Failed to fetch initial data for challan:', err);
       } finally {
-        setLoadingConfirmations(false);
+        setLoadingData(false);
       }
     };
 
-    fetchConfirmations();
-  }, [preselectedConfirmationId]);
+    fetchData();
+  }, [preselectedConfirmationId, quotationIdParam, customerIdParam]);
+
+  // Filter available confirmations strictly by the selected customer
+  const availableConfirmations = useMemo(() => {
+    if (!selectedCustomerId) return confirmations;
+    const targetCust = customers.find(c => String(c.id || c._id) === String(selectedCustomerId));
+    const targetName = (targetCust?.name || targetCust?.customerName || '').toLowerCase().trim();
+
+    return confirmations.filter(c => {
+      const cCustId = String(c.customer?._id || c.customer?.id || c.customer || c.customerId || c.quotation?.customer?._id || c.quotation?.customer?.id || c.quotation?.customer || '');
+      const cCustName = (c.quotation?.customer?.customerName || c.quotation?.customer?.name || c.customer?.customerName || c.customer?.name || '').toLowerCase().trim();
+      return (cCustId && cCustId === String(selectedCustomerId)) || (targetName && cCustName && cCustName === targetName);
+    });
+  }, [confirmations, selectedCustomerId, customers]);
 
   const setupConfirmationData = (conf) => {
     setSelectedConfirmation(conf);
@@ -100,10 +167,38 @@ export const CreateChallan = () => {
     setItems(mapped);
 
     // Suggest default delivery details if available from customer shipping address
-    const cust = conf.quotation?.customer || conf.customer || {};
+    const cust = conf.quotation?.customer || conf.customer || selectedCustomer || {};
     const shipping = cust.shippingAddress || cust.billingAddress || '';
     if (!deliveryDetails && shipping) {
       setDeliveryDetails(`Site Delivery: ${shipping}`);
+    }
+  };
+
+  const handleCustomerChange = (e) => {
+    const custId = e.target.value;
+    setSelectedCustomerId(custId);
+    setSelectedConfirmationId('');
+    setSelectedConfirmation(null);
+    setItems([]);
+    setFormError('');
+
+    if (!custId) {
+      setSelectedCustomer(null);
+      return;
+    }
+
+    const custObj = customers.find(c => String(c.id || c._id) === String(custId));
+    setSelectedCustomer(custObj || null);
+
+    // If customer has exactly 1 active confirmation, auto-select it
+    const custConfs = confirmations.filter(c => {
+      const cId = c.customer?._id || c.customer?.id || c.customer || c.customerId || c.quotation?.customer?._id || c.quotation?.customer?.id || c.quotation?.customer;
+      return String(cId) === String(custId);
+    });
+
+    if (custConfs.length === 1) {
+      setSelectedConfirmationId(custConfs[0]._id || custConfs[0].id);
+      setupConfirmationData(custConfs[0]);
     }
   };
 
@@ -149,8 +244,13 @@ export const CreateChallan = () => {
   const handleSubmit = async (andFinalize = false) => {
     setFormError('');
 
+    if (!selectedCustomerId) {
+      setFormError('Please select a customer first.');
+      return;
+    }
+
     if (!selectedConfirmationId) {
-      setFormError('Please select a Quotation Confirmation to create a Delivery Challan against.');
+      setFormError('Please select an active Quotation Confirmation to create a Delivery Challan against.');
       return;
     }
 
@@ -207,9 +307,10 @@ export const CreateChallan = () => {
         setSuccessToast(`Delivery Challan ${created.challanNumber} created as DRAFT.`);
       }
 
+      const targetCustId = selectedCustomerId || customerIdParam || created?.customerId || (typeof created?.customer === 'string' ? created.customer : (created?.customer?._id || created?.customer?.id)) || customerObj?._id || customerObj?.id || '';
       setTimeout(() => {
-        navigate('/challans');
-      }, 1000);
+        navigate(targetCustId ? `/customers/${targetCustId}?tab=challans` : '/customers');
+      }, 900);
     } catch (err) {
       console.error('Error creating challan:', err);
       setFormError(err.response?.data?.message || err.message || 'Error generating delivery challan from backend.');
@@ -218,8 +319,9 @@ export const CreateChallan = () => {
     }
   };
 
-  const customerObj = selectedConfirmation?.quotation?.customer || selectedConfirmation?.customer || {};
+  const customerObj = selectedCustomer || selectedConfirmation?.quotation?.customer || selectedConfirmation?.customer || {};
   const quotationObj = selectedConfirmation?.quotation || {};
+  const activeCustomerId = selectedCustomerId || customerIdParam || customerObj?._id || customerObj?.id || '';
 
   return (
     <div style={{ maxWidth: '1080px', margin: '0 auto', paddingBottom: '3.5rem', fontFamily: 'var(--font-family)' }}>
@@ -249,7 +351,7 @@ export const CreateChallan = () => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <Link 
-            to="/challans" 
+            to={activeCustomerId ? `/customers/${activeCustomerId}?tab=challans` : '/customers'} 
             className="btn btn-secondary"
             style={{
               display: 'inline-flex',
@@ -262,14 +364,14 @@ export const CreateChallan = () => {
             }}
           >
             <ArrowLeft size={16} />
-            <span>Back to Challans</span>
+            <span>{activeCustomerId ? 'Back to Customer Challans' : 'Back to Customer Hub'}</span>
           </Link>
           <div>
             <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
               Create Delivery Challan
             </h1>
             <p style={{ color: '#64748b', fontSize: '0.825rem', margin: '0.2rem 0 0 0' }}>
-              Module 9: Multi-challan dispatch against Quotation Confirmation & Dual-Write Stock Deduction
+              Multi-challan dispatch against Customer Confirmed Quotation Orders
             </p>
           </div>
         </div>
@@ -293,7 +395,7 @@ export const CreateChallan = () => {
         </div>
       )}
 
-      {/* Step 1: Confirmation Selection */}
+      {/* Step 1: Customer & Quotation Order Selection */}
       <div style={{
         backgroundColor: '#ffffff',
         borderRadius: '12px',
@@ -317,55 +419,123 @@ export const CreateChallan = () => {
           </div>
           <div>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-              1. Select Confirmed Quotation / Order
+              1. Select Customer & Confirmed Order
             </h3>
             <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
-              Delivery Challans are dispatched directly against active Quotation Confirmations
+              Choose the customer to filter their active confirmed quotation orders ready for delivery
             </p>
           </div>
         </div>
 
-        <div>
-          <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.4rem' }}>
-            Active Quotation Confirmation <span style={{ color: '#dc2626' }}>*</span>
-          </label>
-          <select
-            className="form-control"
-            value={selectedConfirmationId}
-            onChange={handleConfirmationChange}
-            disabled={loadingConfirmations}
-            style={{
-              height: '44px',
-              borderRadius: '8px',
-              borderColor: '#cbd5e1',
-              backgroundColor: '#ffffff',
-              fontSize: '0.9rem',
-              fontWeight: 500
-            }}
-          >
-            <option value="">-- Choose active confirmation --</option>
-            {confirmations.map(c => {
-              const qNum = c.quotation?.quotationNumber || 'Quotation';
-              const cName = c.quotation?.customer?.customerName || c.customer?.customerName || 'Customer';
-              const pendingItemsCount = (c.confirmedItems || []).filter(i => {
-                const total = (i.confirmedQuantity || 0) + (i.extraQuantity || 0);
-                return total > (i.deliveredQuantity || 0);
-              }).length;
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '1.25rem' }}>
+          {/* Customer Selection */}
+          <div>
+            <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.4rem' }}>
+              Target Customer <span style={{ color: '#dc2626' }}>*</span>
+            </label>
+            <select
+              className="form-control"
+              value={selectedCustomerId}
+              onChange={handleCustomerChange}
+              disabled={loadingData}
+              style={{
+                height: '44px',
+                borderRadius: '8px',
+                borderColor: '#cbd5e1',
+                backgroundColor: '#ffffff',
+                fontSize: '0.9rem',
+                fontWeight: 500
+              }}
+            >
+              <option value="">-- Choose Customer --</option>
+              {customers.map(c => {
+                const cId = c.id || c._id;
+                const cName = c.name || c.customerName;
+                const cCode = c.customerCode || c.code;
+                return (
+                  <option key={cId} value={cId}>
+                    {cName} {cCode ? `(${cCode})` : ''} - {c.mobile || ''}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
 
-              return (
-                <option key={c._id || c.id} value={c._id || c.id}>
-                  {qNum} - {cName} ({pendingItemsCount} items ready for dispatch)
-                </option>
-              );
-            })}
-          </select>
+          {/* Quotation Order Selection (Filtered strictly by selected customer) */}
+          <div>
+            <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.4rem' }}>
+              Confirmed Quotation / Order <span style={{ color: '#dc2626' }}>*</span>
+            </label>
+            <select
+              className="form-control"
+              value={selectedConfirmationId}
+              onChange={handleConfirmationChange}
+              disabled={loadingData || !selectedCustomerId || availableConfirmations.length === 0}
+              style={{
+                height: '44px',
+                borderRadius: '8px',
+                borderColor: '#cbd5e1',
+                backgroundColor: !selectedCustomerId ? '#f8fafc' : '#ffffff',
+                fontSize: '0.9rem',
+                fontWeight: 500
+              }}
+            >
+              <option value="">
+                {!selectedCustomerId 
+                  ? '-- Select customer above first --' 
+                  : availableConfirmations.length === 0 
+                  ? '-- No active orders for this customer --' 
+                  : `-- Choose confirmed order (${availableConfirmations.length} available) --`}
+              </option>
+              {availableConfirmations.map(c => {
+                const qNum = c.quotation?.quotationNumber || 'Quotation';
+                const cName = c.quotation?.customer?.customerName || c.customer?.customerName || 'Customer';
+                const pendingItemsCount = (c.confirmedItems || []).filter(i => {
+                  const total = (i.confirmedQuantity || 0) + (i.extraQuantity || 0);
+                  return total > (i.deliveredQuantity || 0);
+                }).length;
 
-          {confirmations.length === 0 && !loadingConfirmations && (
-            <div style={{ marginTop: '0.75rem', padding: '0.75rem 1rem', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.825rem', color: '#64748b' }}>
-              No active undelivered confirmations found. Go to <strong>Quotations</strong> to confirm an order before creating a delivery challan.
-            </div>
-          )}
+                return (
+                  <option key={c._id || c.id} value={c._id || c.id}>
+                    {qNum} - {cName} ({pendingItemsCount} items ready for dispatch)
+                  </option>
+                );
+              })}
+            </select>
+          </div>
         </div>
+
+        {/* Notice if no confirmations for selected customer */}
+        {selectedCustomerId && availableConfirmations.length === 0 && !loadingData && (
+          <div style={{
+            marginTop: '0.75rem',
+            padding: '1rem 1.25rem',
+            backgroundColor: '#fffbeb',
+            borderRadius: '10px',
+            border: '1px solid #fef3c7',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.75rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#92400e', fontSize: '0.85rem' }}>
+              <AlertCircle size={18} style={{ color: '#d97706', flexShrink: 0 }} />
+              <span>
+                No active confirmed orders found for <strong>{customerObj.name || customerObj.customerName || 'this customer'}</strong>. 
+                Confirm an order in Quotations first to generate delivery challans.
+              </span>
+            </div>
+            <Link 
+              to={`/quotations/create?customerId=${selectedCustomerId}`}
+              className="btn btn-primary btn-sm"
+              style={{ borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+            >
+              <Plus size={14} />
+              <span>New Quotation</span>
+            </Link>
+          </div>
+        )}
 
         {/* Customer & Quotation Summary Card */}
         {selectedConfirmation && (
@@ -384,7 +554,7 @@ export const CreateChallan = () => {
               <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', display: 'block', marginBottom: '0.2rem' }}>
                 Customer Name
               </span>
-              <strong style={{ color: '#0f172a', fontSize: '0.95rem' }}>{customerObj.customerName || 'Customer'}</strong>
+              <strong style={{ color: '#0f172a', fontSize: '0.95rem' }}>{customerObj.name || customerObj.customerName || 'Customer'}</strong>
               <div style={{ color: '#475569', fontSize: '0.8rem', marginTop: '0.2rem' }}>
                 <Phone size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
                 {customerObj.mobile || 'N/A'}
@@ -399,7 +569,7 @@ export const CreateChallan = () => {
                 {quotationObj.quotationNumber || 'N/A'}
               </strong>
               <div style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '0.2rem' }}>
-                Salesperson: {selectedConfirmation.confirmedBy?.name || quotationObj.salesperson?.name || 'Maitri Sales'}
+                Salesperson: {selectedConfirmation.confirmedBy?.name || quotationObj.salesperson?.name || quotationObj.salesperson || 'Maitri Sales'}
               </div>
             </div>
 
@@ -661,7 +831,7 @@ export const CreateChallan = () => {
           boxShadow: '0 2px 10px rgba(0, 0, 0, 0.03)'
         }}>
           <Link
-            to="/challans"
+            to={activeCustomerId ? `/customers/${activeCustomerId}?tab=challans` : '/challans'}
             className="btn btn-secondary"
             style={{ borderRadius: '8px', padding: '0.65rem 1.25rem', fontWeight: 600, fontSize: '0.875rem' }}
           >

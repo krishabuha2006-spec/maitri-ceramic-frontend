@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { getCustomers } from '../services/customerService';
+import { getCustomers, getCustomerById } from '../services/customerService';
 import { getInvoiceableChallans, createInvoice } from '../services/invoiceService';
+import { getQuotationById } from '../services/quotationService';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { 
   ArrowLeft, 
@@ -16,20 +17,28 @@ import {
   Building2,
   Phone,
   MapPin,
-  Calendar
+  Calendar,
+  User,
+  ExternalLink,
+  Plus,
+  Receipt
 } from 'lucide-react';
 
 export const CreateInvoice = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const preselectedCustomerId = searchParams.get('customerId') || '';
+  const preselectedQuotationId = searchParams.get('quotationId') || '';
   const preselectedChallanId = searchParams.get('challanId') || '';
 
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState([]);
   const [invoiceableChallans, setInvoiceableChallans] = useState([]);
   
-  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState(preselectedCustomerId);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedChallanIds, setSelectedChallanIds] = useState(preselectedChallanId ? [preselectedChallanId] : []);
+  const [isChangingCustomer, setIsChangingCustomer] = useState(false);
 
   const [formData, setFormData] = useState({
     buyerBillTo: '',
@@ -44,43 +53,8 @@ export const CreateInvoice = () => {
   const [formError, setFormError] = useState('');
   const [successToast, setSuccessToast] = useState('');
 
-  // Fetch customers and un-invoiced finalized challans from backend
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [challansRes, customersRes] = await Promise.all([
-          getInvoiceableChallans(),
-          getCustomers({ limit: 1000 })
-        ]);
-
-        const challanList = Array.isArray(challansRes) ? challansRes : [];
-        setInvoiceableChallans(challanList);
-        setCustomers(customersRes.data || []);
-
-        // If preselected challan ID provided, select customer and challan
-        if (preselectedChallanId) {
-          const matched = challanList.find(c => String(c._id || c.id) === String(preselectedChallanId));
-          if (matched) {
-            const custId = matched.customer?._id || matched.customer?.id || matched.customer || matched.customerId;
-            if (custId) {
-              setSelectedCustomerId(String(custId));
-              setSelectedChallanIds([String(matched._id || matched.id)]);
-              fillCustomerDetails(matched.customer, matched);
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load initial billing data:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [preselectedChallanId]);
-
-  const fillCustomerDetails = (cust, challan) => {
+  // Helper to fill customer bill-to and ship-to
+  const fillCustomerDetails = (cust, challan, quotNum = '') => {
     const c = cust || {};
     const name = c.customerName || c.name || 'Customer';
     const billTo = c.billingAddress 
@@ -92,28 +66,112 @@ export const CreateInvoice = () => {
       ...prev,
       buyerBillTo: billTo,
       consigneeShipTo: shipTo,
-      refNumber: challan?.quotationNumber || challan?.refQuotationNo || prev.refNumber || '',
+      refNumber: quotNum || challan?.quotationNumber || challan?.refQuotationNo || prev.refNumber || '',
       deliveryNote: challan?.deliveryDetails || prev.deliveryNote || ''
     }));
   };
 
-  // Customers that have at least one invoiceable challan
-  const customersWithChallans = useMemo(() => {
-    const custMap = new Map();
-    invoiceableChallans.forEach(ch => {
-      const cust = ch.customer;
-      const cId = cust?._id || cust?.id || ch.customerId;
-      if (cId && !custMap.has(String(cId))) {
-        custMap.set(String(cId), {
-          id: String(cId),
-          name: cust?.customerName || cust?.name || 'Customer',
-          mobile: cust?.mobile || ch.customerContact || '',
-          city: cust?.city || ''
-        });
+  // Initial Data Loading
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [challansRes, customersRes] = await Promise.all([
+          getInvoiceableChallans(),
+          getCustomers({ limit: 1000 })
+        ]);
+
+        const challanList = Array.isArray(challansRes) ? challansRes : [];
+        const customerList = customersRes.data || [];
+        setInvoiceableChallans(challanList);
+        setCustomers(customerList);
+
+        let targetCustId = preselectedCustomerId;
+        let matchedCustomer = null;
+
+        // 1. If preselected customer ID is provided in URL
+        if (targetCustId) {
+          matchedCustomer = customerList.find(c => String(c.id || c._id) === String(targetCustId));
+          if (!matchedCustomer) {
+            try {
+              matchedCustomer = await getCustomerById(targetCustId);
+            } catch (e) {
+              console.warn('Could not fetch preselected customer by ID:', e);
+            }
+          }
+        } 
+        // 2. If preselected challan ID is provided in URL
+        else if (preselectedChallanId) {
+          const matchedChallan = challanList.find(c => String(c._id || c.id) === String(preselectedChallanId));
+          if (matchedChallan) {
+            const custId = matchedChallan.customer?._id || matchedChallan.customer?.id || matchedChallan.customer || matchedChallan.customerId;
+            if (custId) {
+              targetCustId = String(custId);
+              matchedCustomer = matchedChallan.customer || customerList.find(c => String(c.id || c._id) === String(targetCustId));
+            }
+          }
+        }
+
+        // Apply customer selection if resolved
+        if (targetCustId && matchedCustomer) {
+          setSelectedCustomerId(String(targetCustId));
+          setSelectedCustomer(matchedCustomer);
+
+          // Find challans for this customer
+          const custChallans = challanList.filter(ch => {
+            const cId = ch.customer?._id || ch.customer?.id || ch.customerId;
+            return String(cId) === String(targetCustId);
+          });
+
+          // Check for specific quotation / challan matching
+          let quotationRef = '';
+          if (preselectedQuotationId) {
+            try {
+              const qData = await getQuotationById(preselectedQuotationId);
+              if (qData) quotationRef = qData.quotationNumber || '';
+            } catch (err) {
+              console.warn('Quotation lookup notice:', err);
+            }
+          }
+
+          if (preselectedChallanId) {
+            setSelectedChallanIds([String(preselectedChallanId)]);
+            const ch = custChallans.find(c => String(c._id || c.id) === String(preselectedChallanId));
+            fillCustomerDetails(matchedCustomer, ch, quotationRef);
+          } else if (custChallans.length > 0) {
+            // Auto-select all available challans for this customer
+            setSelectedChallanIds(custChallans.map(c => String(c._id || c.id)));
+            fillCustomerDetails(matchedCustomer, custChallans[0], quotationRef);
+          } else {
+            setSelectedChallanIds([]);
+            fillCustomerDetails(matchedCustomer, null, quotationRef);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load initial billing data:', err);
+      } finally {
+        setLoading(false);
       }
+    };
+
+    fetchData();
+  }, [preselectedCustomerId, preselectedChallanId, preselectedQuotationId]);
+
+  // All customers with their eligible challan count
+  const customersWithChallanStats = useMemo(() => {
+    return customers.map(cust => {
+      const cId = String(cust.id || cust._id);
+      const readyChallans = invoiceableChallans.filter(ch => {
+        const challanCustId = String(ch.customer?._id || ch.customer?.id || ch.customerId);
+        return challanCustId === cId;
+      });
+      return {
+        ...cust,
+        cId,
+        challanCount: readyChallans.length
+      };
     });
-    return Array.from(custMap.values());
-  }, [invoiceableChallans]);
+  }, [customers, invoiceableChallans]);
 
   // Challans matching the currently selected customer
   const availableChallansForCustomer = useMemo(() => {
@@ -127,13 +185,18 @@ export const CreateInvoice = () => {
   const handleCustomerChange = (e) => {
     const custId = e.target.value;
     setSelectedCustomerId(custId);
+    setIsChangingCustomer(false);
     setFormError('');
 
     if (!custId) {
+      setSelectedCustomer(null);
       setSelectedChallanIds([]);
       setFormData(prev => ({ ...prev, buyerBillTo: '', consigneeShipTo: '', refNumber: '' }));
       return;
     }
+
+    const custObj = customers.find(c => String(c.id || c._id) === String(custId));
+    setSelectedCustomer(custObj || null);
 
     const matching = invoiceableChallans.filter(ch => {
       const cId = ch.customer?._id || ch.customer?.id || ch.customerId;
@@ -141,13 +204,11 @@ export const CreateInvoice = () => {
     });
 
     if (matching.length > 0) {
-      // By default select all invoiceable challans for this customer (multi-challan consolidation)
       setSelectedChallanIds(matching.map(c => String(c._id || c.id)));
-      fillCustomerDetails(matching[0].customer, matching[0]);
+      fillCustomerDetails(custObj || matching[0].customer, matching[0]);
     } else {
       setSelectedChallanIds([]);
-      const cust = customers.find(c => String(c.id || c._id) === String(custId));
-      if (cust) fillCustomerDetails(cust, null);
+      if (custObj) fillCustomerDetails(custObj, null);
     }
   };
 
@@ -192,12 +253,12 @@ export const CreateInvoice = () => {
     setFormError('');
 
     if (!selectedCustomerId) {
-      setFormError('Please select a customer with eligible delivery challans.');
+      setFormError('Please select a customer.');
       return;
     }
 
     if (selectedChallanIds.length === 0) {
-      setFormError('At least one finalized Delivery Challan is required to generate a Tax Invoice.');
+      setFormError('At least one finalized Delivery Challan is required to issue a Tax Invoice.');
       return;
     }
 
@@ -218,8 +279,8 @@ export const CreateInvoice = () => {
       setSuccessToast(`Tax Invoice ${created?.invoiceNumber || 'INV'} generated & issued successfully!`);
 
       setTimeout(() => {
-        navigate('/invoices');
-      }, 1000);
+        navigate(selectedCustomerId ? `/customers/${selectedCustomerId}?tab=invoices` : '/customers');
+      }, 900);
     } catch (err) {
       console.error('Error generating invoice:', err);
       const msg = err.response?.data?.message || err.message || 'Error generating tax invoice from backend.';
@@ -229,7 +290,8 @@ export const CreateInvoice = () => {
     }
   };
 
-  const selectedCustomerObj = customers.find(c => String(c.id || c._id) === String(selectedCustomerId)) || 
+  const activeCustomerDisplay = selectedCustomer || 
+    customers.find(c => String(c.id || c._id) === String(selectedCustomerId)) || 
     (availableChallansForCustomer[0]?.customer) || null;
 
   return (
@@ -257,10 +319,10 @@ export const CreateInvoice = () => {
       )}
 
       {/* Top Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <Link 
-            to="/invoices" 
+            to={selectedCustomerId ? `/customers/${selectedCustomerId}?tab=invoices` : '/customers'} 
             className="btn btn-secondary"
             style={{
               display: 'inline-flex',
@@ -280,7 +342,7 @@ export const CreateInvoice = () => {
               Generate Tax Invoice
             </h1>
             <p style={{ color: '#64748b', fontSize: '0.825rem', margin: '0.2rem 0 0 0' }}>
-              Module 10: Multi-Challan Consolidation & Server-Computed GST Billing
+              Multi-Challan Consolidation & Server-Computed GST Billing
             </p>
           </div>
         </div>
@@ -305,7 +367,7 @@ export const CreateInvoice = () => {
       )}
 
       <form onSubmit={handleSubmit} noValidate>
-        {/* Card 1: Customer Selection & Eligible Challans */}
+        {/* Card 1: Selected Customer Header & Challans */}
         <div style={{
           backgroundColor: '#ffffff',
           borderRadius: '12px',
@@ -314,118 +376,214 @@ export const CreateInvoice = () => {
           padding: '1.5rem',
           marginBottom: '1.5rem'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{
-              width: '34px',
-              height: '34px',
-              borderRadius: '8px',
-              backgroundColor: '#eff6ff',
-              color: '#2563eb',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Building2 size={18} />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                1. Select Customer & Consolidate Challans
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
-                Only <strong>FINALIZED</strong> delivery challans eligible for billing are shown
-              </p>
-            </div>
-          </div>
-
-          <div style={{ marginBottom: '1.25rem' }}>
-            <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.4rem' }}>
-              Select Customer <span style={{ color: '#dc2626' }}>*</span>
-            </label>
-            <select
-              className="form-control"
-              value={selectedCustomerId}
-              onChange={handleCustomerChange}
-              disabled={loading}
-              style={{
-                height: '44px',
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <div style={{
+                width: '34px',
+                height: '34px',
                 borderRadius: '8px',
-                borderColor: '#cbd5e1',
-                backgroundColor: '#ffffff',
-                fontSize: '0.9rem',
-                fontWeight: 500
-              }}
-            >
-              <option value="">-- Choose customer with un-invoiced challans --</option>
-              {customersWithChallans.map(cust => {
-                const count = invoiceableChallans.filter(c => String(c.customer?._id || c.customer?.id || c.customerId) === String(cust.id)).length;
-                return (
-                  <option key={cust.id} value={cust.id}>
-                    {cust.name} {cust.city ? `(${cust.city})` : ''} - {count} {count === 1 ? 'Challan ready for billing' : 'Challans ready for billing'}
-                  </option>
-                );
-              })}
-            </select>
-
-            {customersWithChallans.length === 0 && !loading && (
-              <div style={{ marginTop: '0.75rem', padding: '0.75rem 1rem', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.825rem', color: '#64748b' }}>
-                No un-invoiced finalized challans found in the backend. Finalize a delivery challan in <strong>Module 9 (Challans)</strong> before generating a Tax Invoice.
+                backgroundColor: '#eff6ff',
+                color: '#2563eb',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Building2 size={18} />
               </div>
+              <div>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                  1. Customer & Delivery Challans
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
+                  Consolidate finalized delivery dispatches into one Tax Invoice
+                </p>
+              </div>
+            </div>
+
+            {activeCustomerDisplay && !isChangingCustomer && (
+              <button 
+                type="button" 
+                onClick={() => setIsChangingCustomer(true)} 
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: '0.75rem', padding: '0.3rem 0.65rem' }}
+              >
+                Change Customer
+              </button>
             )}
           </div>
 
-          {/* Available Challans to Check */}
+          {/* If Customer is selected and user is not in change mode -> Show Clean Preselected Customer Box */}
+          {activeCustomerDisplay && !isChangingCustomer ? (
+            <div style={{
+              backgroundColor: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '10px',
+              padding: '1rem 1.25rem',
+              marginBottom: '1.25rem',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '1rem'
+            }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#2563eb', backgroundColor: '#eff6ff', padding: '0.15rem 0.5rem', borderRadius: '4px', textTransform: 'uppercase' }}>
+                    Selected Customer
+                  </span>
+                  <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                    {activeCustomerDisplay.customerName || activeCustomerDisplay.name}
+                  </h4>
+                </div>
+
+                <div style={{ fontSize: '0.825rem', color: '#64748b', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
+                  <span><strong>Mobile:</strong> {activeCustomerDisplay.mobile || '-'}</span>
+                  <span><strong>City:</strong> {activeCustomerDisplay.city || 'Ahmedabad'}</span>
+                  <span><strong>GSTIN:</strong> {activeCustomerDisplay.gstNumber || 'Unregistered'}</span>
+                </div>
+              </div>
+
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ 
+                  fontSize: '0.8rem', 
+                  fontWeight: 600, 
+                  color: availableChallansForCustomer.length > 0 ? '#16a34a' : '#d97706',
+                  backgroundColor: availableChallansForCustomer.length > 0 ? '#f0fdf4' : '#fffbeb',
+                  border: `1px solid ${availableChallansForCustomer.length > 0 ? '#bbf7d0' : '#fef3c7'}`,
+                  padding: '0.35rem 0.75rem',
+                  borderRadius: '6px',
+                  display: 'inline-block'
+                }}>
+                  {availableChallansForCustomer.length} {availableChallansForCustomer.length === 1 ? 'Challan Ready' : 'Challans Ready'}
+                </span>
+              </div>
+            </div>
+          ) : (
+            /* Otherwise show Customer Dropdown Selector */
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.4rem' }}>
+                Select Customer <span style={{ color: '#dc2626' }}>*</span>
+              </label>
+              <select
+                className="form-control"
+                value={selectedCustomerId}
+                onChange={handleCustomerChange}
+                disabled={loading}
+                style={{
+                  height: '44px',
+                  borderRadius: '8px',
+                  borderColor: '#cbd5e1',
+                  backgroundColor: '#ffffff',
+                  fontSize: '0.9rem',
+                  fontWeight: 500
+                }}
+              >
+                <option value="">-- Choose Customer --</option>
+                {customersWithChallanStats.map(cust => (
+                  <option key={cust.cId} value={cust.cId}>
+                    {cust.name || cust.customerName} {cust.city ? `(${cust.city})` : ''} — {cust.challanCount > 0 ? `${cust.challanCount} Challan(s) Ready` : 'No Challans'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Available Challans Section */}
           {selectedCustomerId && (
             <div>
-              <label style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a', display: 'block', marginBottom: '0.5rem' }}>
-                Select Delivery Challans to Consolidate into this Invoice:
-              </label>
-              <div style={{ display: 'grid', gap: '0.75rem' }}>
-                {availableChallansForCustomer.map(ch => {
-                  const chId = String(ch._id || ch.id);
-                  const isChecked = selectedChallanIds.includes(chId);
-                  const itemsCount = ch.items?.length || 0;
-                  const totalQty = ch.items?.reduce((s, i) => s + Number(i.quantityToIssue || i.quantity || 0), 0) || 0;
+              {availableChallansForCustomer.length > 0 ? (
+                <div>
+                  <label style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a', display: 'block', marginBottom: '0.5rem' }}>
+                    Select Delivery Challans to Consolidate into this Invoice:
+                  </label>
+                  <div style={{ display: 'grid', gap: '0.75rem' }}>
+                    {availableChallansForCustomer.map(ch => {
+                      const chId = String(ch._id || ch.id);
+                      const isChecked = selectedChallanIds.includes(chId);
+                      const itemsCount = ch.items?.length || 0;
+                      const totalQty = ch.items?.reduce((s, i) => s + Number(i.quantityToIssue || i.quantity || 0), 0) || 0;
 
-                  return (
-                    <div 
-                      key={chId}
-                      onClick={() => handleToggleChallan(chId)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '0.85rem 1.15rem',
-                        borderRadius: '8px',
-                        border: isChecked ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                        backgroundColor: isChecked ? '#eff6ff' : '#ffffff',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-                        <div style={{ color: isChecked ? '#2563eb' : '#94a3b8' }}>
-                          {isChecked ? <CheckSquare size={20} /> : <Square size={20} />}
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a' }}>
-                            {ch.challanNumber}
-                            <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', fontWeight: 600, color: '#16a34a', backgroundColor: '#f0fdf4', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
-                              FINALIZED
-                            </span>
+                      return (
+                        <div 
+                          key={chId}
+                          onClick={() => handleToggleChallan(chId)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.85rem 1.15rem',
+                            borderRadius: '8px',
+                            border: isChecked ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                            backgroundColor: isChecked ? '#eff6ff' : '#ffffff',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                            <div style={{ color: isChecked ? '#2563eb' : '#94a3b8' }}>
+                              {isChecked ? <CheckSquare size={20} /> : <Square size={20} />}
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a' }}>
+                                {ch.challanNumber}
+                                <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', fontWeight: 600, color: '#16a34a', backgroundColor: '#f0fdf4', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
+                                  FINALIZED
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '0.785rem', color: '#64748b', marginTop: '0.2rem' }}>
+                                Date: {formatDate(ch.challanDate)} | Ref: {ch.quotationNumber || ch.refQuotationNo || 'Quotation'} | {ch.deliveryDetails || 'Direct Delivery'}
+                              </div>
+                            </div>
                           </div>
-                          <div style={{ fontSize: '0.785rem', color: '#64748b', marginTop: '0.2rem' }}>
-                            Date: {formatDate(ch.challanDate)} | Ref: {ch.quotationNumber || ch.refQuotationNo || 'Quotation'} | {ch.deliveryDetails || 'Direct Delivery'}
+
+                          <div style={{ textAlign: 'right', fontSize: '0.8rem' }}>
+                            <strong style={{ color: '#2563eb' }}>{itemsCount}</strong> items ({totalQty} Qty)
                           </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                /* Prompt if no finalized challans found for this customer */
+                <div style={{
+                  padding: '1.25rem 1.5rem',
+                  backgroundColor: '#fffbeb',
+                  border: '1px solid #fef3c7',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '1rem'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <Truck size={24} style={{ color: '#d97706', flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#92400e' }}>
+                        No Finalized Delivery Challans Found for this Customer
                       </div>
-
-                      <div style={{ textAlign: 'right', fontSize: '0.8rem' }}>
-                        <strong style={{ color: '#2563eb' }}>{itemsCount}</strong> items ({totalQty} Qty)
+                      <div style={{ fontSize: '0.8rem', color: '#b45309', marginTop: '0.15rem' }}>
+                        Invoices are generated against finalized delivery challans (Module 9). Create a delivery challan first.
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+
+                  <Link 
+                    to={`/challans/create?customerId=${selectedCustomerId}${preselectedQuotationId ? `&quotationId=${preselectedQuotationId}` : ''}`}
+                    className="btn btn-primary btn-sm"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      backgroundColor: '#d97706',
+                      borderColor: '#d97706'
+                    }}
+                  >
+                    <Plus size={15} /> Create Delivery Challan
+                  </Link>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -459,7 +617,7 @@ export const CreateInvoice = () => {
                     2. Consolidated Line Items ({aggregatedItems.length})
                   </h3>
                   <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
-                    The backend resolves pricing and computes GST directly from confirmed quotation line items
+                    Backend calculates pricing, discounts and server GST from confirmed order records
                   </p>
                 </div>
               </div>
@@ -623,7 +781,7 @@ export const CreateInvoice = () => {
             boxShadow: '0 2px 10px rgba(0, 0, 0, 0.03)'
           }}>
             <Link
-              to="/invoices"
+              to={selectedCustomerId ? `/customers/${selectedCustomerId}?tab=invoices` : '/invoices'}
               className="btn btn-secondary"
               style={{ borderRadius: '8px', padding: '0.65rem 1.25rem', fontWeight: 600, fontSize: '0.875rem' }}
             >

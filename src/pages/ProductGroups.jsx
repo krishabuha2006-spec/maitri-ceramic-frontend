@@ -37,7 +37,6 @@ export const ProductGroups = () => {
   const [formData, setFormData] = useState({
     groupName: '',
     groupCode: '',
-    parentGroup: '',
     description: '',
     status: 'Active'
   });
@@ -64,7 +63,6 @@ export const ProductGroups = () => {
     setFormData({
       groupName: '',
       groupCode: '',
-      parentGroup: '',
       description: '',
       status: 'Active'
     });
@@ -77,7 +75,6 @@ export const ProductGroups = () => {
     setFormData({
       groupName: group.groupName || '',
       groupCode: group.groupCode || '',
-      parentGroup: group.parentGroup || '',
       description: group.description || '',
       status: group.status || 'Active'
     });
@@ -265,7 +262,7 @@ export const ProductGroups = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1rem' }}>
               
               {/* Group Name */}
-              <div style={{ gridColumn: 'span 8' }}>
+              <div style={{ gridColumn: 'span 6' }}>
                 <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
                   Group Name <span style={{ color: '#dc2626' }}>*</span>
                 </label>
@@ -281,7 +278,7 @@ export const ProductGroups = () => {
               </div>
 
               {/* Group Code */}
-              <div style={{ gridColumn: 'span 4' }}>
+              <div style={{ gridColumn: 'span 3' }}>
                 <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
                   Group Code / Prefix
                 </label>
@@ -295,28 +292,8 @@ export const ProductGroups = () => {
                 />
               </div>
 
-              {/* Parent Group */}
-              <div style={{ gridColumn: 'span 6' }}>
-                <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
-                  Parent Group (Hierarchical Category)
-                </label>
-                <select
-                  className="form-control"
-                  value={formData.parentGroup}
-                  onChange={(e) => setFormData(prev => ({ ...prev, parentGroup: e.target.value }))}
-                  style={{ height: '42px', borderRadius: '8px' }}
-                >
-                  <option value="">None (Top-Level Category)</option>
-                  {groups
-                    .filter(g => String(g.id) !== String(editingId))
-                    .map(g => (
-                      <option key={g.id} value={g.groupName}>{g.groupName}</option>
-                    ))}
-                </select>
-              </div>
-
               {/* Status */}
-              <div style={{ gridColumn: 'span 6' }}>
+              <div style={{ gridColumn: 'span 3' }}>
                 <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
                   Status
                 </label>
@@ -359,99 +336,69 @@ export const ProductGroups = () => {
               </button>
               <button
                 type="submit"
-                disabled={saving}
                 className="btn btn-primary"
-                style={{ padding: '0.5rem 1.25rem', borderRadius: '8px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                disabled={saving}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1.25rem', borderRadius: '8px' }}
               >
-                {saving ? <RefreshCw size={15} className="spin" /> : <Save size={15} />}
-                <span>{editingId ? 'Update Group' : 'Save Product Group'}</span>
+                {saving ? (
+                  <>
+                    <RefreshCw size={15} className="spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save size={15} />
+                    <span>{editingId ? 'Update Group' : 'Save Product Group'}</span>
+                  </>
+                )}
               </button>
             </div>
           </form>
         </div>
       ) : (
-        /* List Directory View */
-        <>
-          {/* Summary Cards */}
+        /* TABLE DIRECTORY VIEW */
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '12px',
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+          overflow: 'hidden'
+        }}>
+          {/* Filter Bar */}
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-            gap: '1rem',
-            marginBottom: '1.25rem'
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '1rem',
+            borderBottom: '1px solid #f1f5f9',
+            flexWrap: 'wrap',
+            gap: '0.75rem'
           }}>
-            <div style={{ backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-              <div style={{ backgroundColor: '#eff6ff', padding: '0.6rem', borderRadius: '8px', color: '#2563eb' }}>
-                <Layers size={20} />
-              </div>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Total Groups</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>{totalCount}</div>
-              </div>
+            {/* Search */}
+            <div style={{ position: 'relative', width: '280px' }}>
+              <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input
+                type="text"
+                placeholder="Search groups..."
+                className="form-control"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setCurrentPage(1);
+                }}
+                style={{ paddingLeft: '32px', height: '38px', borderRadius: '8px', fontSize: '0.825rem' }}
+              />
             </div>
 
-            <div style={{ backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-              <div style={{ backgroundColor: '#f0fdf4', padding: '0.6rem', borderRadius: '8px', color: '#16a34a' }}>
-                <CheckCircle2 size={20} />
-              </div>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Active Groups</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#16a34a' }}>{activeCount}</div>
-              </div>
-            </div>
-
-            <div style={{ backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-              <div style={{ backgroundColor: '#fef2f2', padding: '0.6rem', borderRadius: '8px', color: '#dc2626' }}>
-                <AlertCircle size={20} />
-              </div>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Deactivated</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#dc2626' }}>{inactiveCount}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Table Container */}
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: '12px',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.03)',
-            overflow: 'hidden'
-          }}>
-            {/* Filter Bar */}
-            <div style={{
-              padding: '0.85rem 1.15rem',
-              borderBottom: '1px solid #e2e8f0',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              flexWrap: 'wrap'
-            }}>
-              <div style={{ position: 'relative', minWidth: '220px', flex: 1, maxWidth: '340px' }}>
-                <Search size={15} style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Search Group Name or Code..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  style={{ paddingLeft: '2.25rem', height: '38px', borderRadius: '8px', fontSize: '0.825rem' }}
-                />
-                {search && (
-                  <button
-                    type="button"
-                    onClick={() => setSearch('')}
-                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0 }}
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-
+            {/* Status Filter */}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <select
                 className="form-control"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
                 style={{ width: '130px', height: '38px', borderRadius: '8px', fontSize: '0.825rem' }}
               >
                 <option value="">All Status</option>
@@ -459,129 +406,119 @@ export const ProductGroups = () => {
                 <option value="Inactive">Inactive</option>
               </select>
             </div>
-
-            {/* Table */}
-            <div style={{ overflowX: 'auto', width: '100%' }}>
-              <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
-                    <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, width: '110px' }}>Code</th>
-                    <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700 }}>Product Group Name</th>
-                    <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700 }}>Parent Group</th>
-                    <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700 }}>Description</th>
-                    <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, textAlign: 'center', width: '100px' }}>Status</th>
-                    <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, textAlign: 'center', width: '110px' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', padding: '2.5rem', color: '#64748b' }}>
-                        <RefreshCw size={20} className="spin" style={{ color: '#2563eb', marginBottom: '0.4rem' }} />
-                        <div>Loading Product Groups...</div>
-                      </td>
-                    </tr>
-                  ) : filteredGroups.length === 0 ? (
-                    <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', padding: '2.5rem', color: '#64748b' }}>
-                        No product groups found.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredGroups
-                      .slice((currentPage - 1) * pageSize, currentPage * pageSize)
-                      .map(g => (
-                      <tr key={g.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '0.65rem 0.85rem', verticalAlign: 'middle' }}>
-                          <span style={{
-                            fontFamily: 'monospace',
-                            fontWeight: 700,
-                            fontSize: '0.75rem',
-                            backgroundColor: '#eff6ff',
-                            color: '#1d4ed8',
-                            padding: '0.15rem 0.45rem',
-                            borderRadius: '5px',
-                            border: '1px solid #bfdbfe'
-                          }}>
-                            {g.groupCode || 'PG'}
-                          </span>
-                        </td>
-
-                        <td style={{ padding: '0.65rem 0.85rem', verticalAlign: 'middle', fontWeight: 600, color: '#0f172a' }}>
-                          {g.groupName}
-                        </td>
-
-                        <td style={{ padding: '0.65rem 0.85rem', verticalAlign: 'middle', color: '#64748b' }}>
-                          {g.parentGroup ? (
-                            <span style={{ backgroundColor: '#f8fafc', padding: '0.15rem 0.4rem', borderRadius: '4px', border: '1px solid #e2e8f0', fontSize: '0.75rem' }}>
-                              ↳ {g.parentGroup}
-                            </span>
-                          ) : (
-                            <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>Main Category</span>
-                          )}
-                        </td>
-
-                        <td style={{ padding: '0.65rem 0.85rem', verticalAlign: 'middle', color: '#64748b', fontSize: '0.775rem' }}>
-                          {g.description || '-'}
-                        </td>
-
-                        <td style={{ padding: '0.65rem 0.85rem', verticalAlign: 'middle', textAlign: 'center' }}>
-                          <StatusBadge status={g.status} />
-                        </td>
-
-                        <td style={{ padding: '0.65rem 0.85rem', verticalAlign: 'middle', textAlign: 'center' }}>
-                          <div className="action-btn-group" style={{ justifyContent: 'center' }}>
-                            <button
-                              type="button"
-                              className="action-btn action-btn-edit"
-                              onClick={() => handleEdit(g)}
-                              title="Edit Product Group"
-                            >
-                              <Edit3 size={14} />
-                            </button>
-
-                            <button
-                              type="button"
-                              className="action-btn action-btn-toggle"
-                              onClick={() => handleToggleStatus(g.id, g.groupName)}
-                              title={g.status === 'Active' ? 'Deactivate' : 'Activate'}
-                            >
-                              {g.status === 'Active' ? (
-                                <ToggleRight size={16} style={{ color: '#16a34a' }} />
-                              ) : (
-                                <ToggleLeft size={16} style={{ color: '#94a3b8' }} />
-                              )}
-                            </button>
-
-                            <button
-                              type="button"
-                              className="action-btn action-btn-delete"
-                              onClick={() => handleDelete(g.id, g.groupName)}
-                              title="Delete Product Group"
-                              style={{ color: '#dc2626' }}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination Controls */}
-            <Pagination
-              currentPage={currentPage}
-              totalItems={filteredGroups.length}
-              pageSize={pageSize}
-              onPageChange={setCurrentPage}
-              onPageSizeChange={setPageSize}
-            />
           </div>
-        </>
+
+          {/* Table */}
+          <div style={{ overflowX: 'hidden', width: '100%' }}>
+            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
+                  <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, width: '110px' }}>Code</th>
+                  <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700 }}>Product Group Name</th>
+                  <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700 }}>Description</th>
+                  <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, textAlign: 'center', width: '100px' }}>Status</th>
+                  <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, textAlign: 'center', width: '110px' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: '2.5rem', color: '#64748b' }}>
+                      <RefreshCw size={20} className="spin" style={{ color: '#2563eb', marginBottom: '0.4rem' }} />
+                      <div>Loading Product Groups...</div>
+                    </td>
+                  </tr>
+                ) : filteredGroups.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: '2.5rem', color: '#64748b' }}>
+                      No product groups found.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredGroups
+                    .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                    .map(g => (
+                    <tr key={g.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '0.65rem 0.85rem', verticalAlign: 'middle' }}>
+                        <span style={{
+                          fontFamily: 'monospace',
+                          fontWeight: 700,
+                          fontSize: '0.75rem',
+                          backgroundColor: '#eff6ff',
+                          color: '#1d4ed8',
+                          padding: '0.15rem 0.45rem',
+                          borderRadius: '5px',
+                          border: '1px solid #bfdbfe'
+                        }}>
+                          {g.groupCode || 'PG'}
+                        </span>
+                      </td>
+
+                      <td style={{ padding: '0.65rem 0.85rem', verticalAlign: 'middle', fontWeight: 600, color: '#0f172a' }}>
+                        {g.groupName}
+                      </td>
+
+                      <td style={{ padding: '0.65rem 0.85rem', verticalAlign: 'middle', color: '#64748b', fontSize: '0.775rem' }}>
+                        {g.description || '-'}
+                      </td>
+
+                      <td style={{ padding: '0.65rem 0.85rem', verticalAlign: 'middle', textAlign: 'center' }}>
+                        <StatusBadge status={g.status} />
+                      </td>
+
+                      <td style={{ padding: '0.65rem 0.85rem', verticalAlign: 'middle', textAlign: 'center' }}>
+                        <div className="action-btn-group" style={{ justifyContent: 'center' }}>
+                          <button
+                            type="button"
+                            className="action-btn action-btn-edit"
+                            onClick={() => handleEdit(g)}
+                            data-tooltip="Edit Group"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+
+                          <button
+                            type="button"
+                            className="action-btn action-btn-toggle"
+                            onClick={() => handleToggleStatus(g.id, g.groupName)}
+                            data-tooltip={g.status === 'Active' ? 'Deactivate Group' : 'Activate Group'}
+                          >
+                            {g.status === 'Active' ? (
+                              <ToggleRight size={16} style={{ color: '#16a34a' }} />
+                            ) : (
+                              <ToggleLeft size={16} style={{ color: '#94a3b8' }} />
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="action-btn action-btn-delete"
+                            onClick={() => handleDelete(g.id, g.groupName)}
+                            data-tooltip="Delete Group"
+                            style={{ color: '#dc2626' }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Controls */}
+          <Pagination
+            currentPage={currentPage}
+            totalItems={filteredGroups.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
+        </div>
       )}
+
       {/* Confirm Delete Modal */}
       <ConfirmModal
         isOpen={confirmState.isOpen}

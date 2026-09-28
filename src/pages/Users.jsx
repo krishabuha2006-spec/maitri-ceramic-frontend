@@ -3,6 +3,7 @@ import { getUsers, createUser, updateUser, deleteUser, deactivateUser, resetUser
 import { ROLES, MODULE_LIST, DEFAULT_ROLE_PERMISSIONS, normalizePermissions, getEmptyPermissions, isSuperAdminRole } from '../utils/permissions';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
+import ConfirmModal from '../components/ConfirmModal';
 import {
   Plus, ArrowLeft, ShieldCheck, CheckCircle2, AlertCircle, Save,
   UserCheck, Shield, Lock, CheckSquare, RefreshCcw, User, Edit3, Trash2, Eye, EyeOff, X
@@ -23,6 +24,9 @@ export const Users = () => {
   const [isLiveApi, setIsLiveApi] = useState(false);
   const [formError, setFormError] = useState('');
   const [successToast, setSuccessToast] = useState('');
+
+  // Delete Confirm Modal
+  const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, id: null, name: '' });
 
   // Page mode: false = directory table list, true = full page 1020px form
   const [showForm, setShowForm] = useState(false);
@@ -119,8 +123,15 @@ export const Users = () => {
     setShowForm(true);
   };
 
-  const handleDeleteUser = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to permanently delete "${name}"? This action cannot be undone.`)) return;
+  const handleDeleteUser = (id, name) => {
+    setDeleteConfirm({ isOpen: true, id, name });
+  };
+
+  const handleConfirmDeleteUser = async () => {
+    const { id, name } = deleteConfirm;
+    setDeleteConfirm({ isOpen: false, id: null, name: '' });
+    if (!id) return;
+
     try {
       await deleteUser(id);
       setSuccessToast(`User "${name}" deleted successfully.`);
@@ -266,25 +277,31 @@ export const Users = () => {
     setFormData(prev => ({ ...prev, permissions: clearPerms }));
   };
 
+  const [validationErrors, setValidationErrors] = useState({});
+
   // Submit Form
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
 
+    const errors = {};
     if (!formData.name.trim()) {
-      setFormError('Please enter staff full name.');
-      return;
+      errors.name = 'Staff Full Name is required.';
     }
     if (!formData.mobile.trim()) {
-      setFormError('Please enter mobile contact number.');
-      return;
+      errors.mobile = 'Mobile Contact Number is required.';
     }
     if (!editingUserId) {
       if (!formData.password || formData.password.trim().length < 6) {
-        setFormError('Password is required for new user (minimum 6 characters).');
-        return;
+        errors.password = 'Password must be at least 6 characters.';
       }
     }
+
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+    setValidationErrors({});
 
     setSaving(true);
     try {
@@ -436,10 +453,22 @@ export const Users = () => {
                   className="form-control"
                   placeholder="Enter Full Name"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                  style={{ height: '44px', borderRadius: '8px' }}
+                  onChange={(e) => {
+                    setFormData({ ...formData, name: e.target.value });
+                    if (validationErrors.name) setValidationErrors(prev => ({ ...prev, name: '' }));
+                  }}
+                  style={{
+                    height: '44px',
+                    borderRadius: '8px',
+                    borderColor: validationErrors.name ? '#dc2626' : undefined,
+                    backgroundColor: validationErrors.name ? '#fef2f2' : undefined
+                  }}
                 />
+                {validationErrors.name && (
+                  <div style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.3rem', fontWeight: 500 }}>
+                    {validationErrors.name}
+                  </div>
+                )}
               </div>
 
               {/* Mobile Number */}
@@ -452,10 +481,22 @@ export const Users = () => {
                   className="form-control"
                   placeholder="Enter Mobile Number"
                   value={formData.mobile}
-                  onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
-                  required
-                  style={{ height: '44px', borderRadius: '8px' }}
+                  onChange={(e) => {
+                    setFormData({ ...formData, mobile: e.target.value });
+                    if (validationErrors.mobile) setValidationErrors(prev => ({ ...prev, mobile: '' }));
+                  }}
+                  style={{
+                    height: '44px',
+                    borderRadius: '8px',
+                    borderColor: validationErrors.mobile ? '#dc2626' : undefined,
+                    backgroundColor: validationErrors.mobile ? '#fef2f2' : undefined
+                  }}
                 />
+                {validationErrors.mobile && (
+                  <div style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.3rem', fontWeight: 500 }}>
+                    {validationErrors.mobile}
+                  </div>
+                )}
               </div>
 
               {/* Email Address */}
@@ -482,12 +523,22 @@ export const Users = () => {
                   <div style={{ position: 'relative' }}>
                     <input
                       type={showNewUserPwd ? 'text' : 'password'}
+                      name="password"
+                      autoComplete="new-password"
                       className="form-control"
                       placeholder="Enter at least 6 characters"
                       value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      required
-                      style={{ height: '44px', borderRadius: '8px', paddingRight: '2.5rem' }}
+                      onChange={(e) => {
+                        setFormData({ ...formData, password: e.target.value });
+                        if (validationErrors.password) setValidationErrors(prev => ({ ...prev, password: '' }));
+                      }}
+                      style={{
+                        height: '44px',
+                        borderRadius: '8px',
+                        paddingRight: '2.5rem',
+                        borderColor: validationErrors.password ? '#dc2626' : undefined,
+                        backgroundColor: validationErrors.password ? '#fef2f2' : undefined
+                      }}
                     />
                     <button
                       type="button"
@@ -500,6 +551,11 @@ export const Users = () => {
                       {showNewUserPwd ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
+                  {validationErrors.password && (
+                    <div style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.3rem', fontWeight: 500 }}>
+                      {validationErrors.password}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -807,6 +863,8 @@ export const Users = () => {
               <div style={{ position: 'relative' }}>
                 <input
                   type={showPwd ? 'text' : 'password'}
+                  name="newPassword"
+                  autoComplete="new-password"
                   className="form-control"
                   placeholder="Enter new password"
                   value={resetPwd.newPassword}
@@ -827,6 +885,8 @@ export const Users = () => {
               </label>
               <input
                 type={showPwd ? 'text' : 'password'}
+                name="confirmPassword"
+                autoComplete="new-password"
                 className="form-control"
                 placeholder="Confirm new password"
                 value={resetPwd.confirmPassword}
@@ -1029,6 +1089,17 @@ export const Users = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Custom Confirm Modal for User Deletion */}
+      <ConfirmModal
+        isOpen={deleteConfirm.isOpen}
+        title="Delete User"
+        message={`Are you sure you want to permanently delete user "${deleteConfirm.name}"? This action cannot be undone.`}
+        confirmLabel="Yes, Delete User"
+        onConfirm={handleConfirmDeleteUser}
+        onCancel={() => setDeleteConfirm({ isOpen: false, id: null, name: '' })}
+        danger={true}
+      />
     </div>
   );
 };

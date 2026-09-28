@@ -32,17 +32,38 @@ export const PaymentReceipt = () => {
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <div style={{ padding: '2rem' }}>Loading receipt...</div>;
-  if (!payment) return <div style={{ padding: '2rem', color: '#dc2626' }}>Receipt not found.</div>;
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
+        <div className="spinner-circle" />
+        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#64748b' }}>Loading payment receipt...</div>
+      </div>
+    );
+  }
+
+  if (!payment) {
+    return (
+      <div style={{ maxWidth: '750px', margin: '2rem auto', padding: '1.5rem', background: '#ffffff', borderRadius: '8px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
+        <div style={{ color: '#dc2626', fontWeight: 700, fontSize: '1rem', marginBottom: '0.5rem' }}>Payment Receipt Not Found</div>
+        <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '1rem' }}>The requested payment receipt could not be loaded or does not exist.</p>
+        <Link to="/customers" className="btn btn-primary btn-sm">
+          <ArrowLeft size={14} /> Back to Customers
+        </Link>
+      </div>
+    );
+  }
+
+  const targetCustId = payment?.customerId || payment?.customer?._id || payment?.customer?.id || (typeof payment?.customer === 'string' && payment?.customer.length > 5 ? payment?.customer : '');
+  const backLink = targetCustId ? `/customers/${targetCustId}?tab=payments` : '/customers';
 
   return (
-    <div style={{ maxWidth: '750px' }}>
-      
+    <div style={{ maxWidth: '750px', margin: '0 auto' }}>
+
       <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-        <Link to="/payments" className="btn btn-secondary">
-          <ArrowLeft size={16} /> Back to Receipts
+        <Link to={backLink} className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+          <ArrowLeft size={16} /> <span>Back to Customer Payments</span>
         </Link>
-        <button 
+        <button
           onClick={() => window.print()}
           className="btn btn-primary"
           style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
@@ -52,7 +73,7 @@ export const PaymentReceipt = () => {
       </div>
 
       <div className="receipt-container" style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '2.5rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-        
+
         {/* Header */}
         <div style={{ textAlign: 'center', borderBottom: '2px solid #0f172a', pb: '1rem', marginBottom: '1.5rem' }}>
           <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a' }}>MAITRI CERAMIC</h1>

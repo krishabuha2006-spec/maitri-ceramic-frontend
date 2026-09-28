@@ -47,7 +47,7 @@ export const Invoices = () => {
             }}
             style={{ borderRadius: '8px', padding: '0.5rem 0.95rem', fontWeight: 600, fontSize: '0.825rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', backgroundColor: '#ffffff', border: '1px solid #cbd5e1' }}
           >
-            <span style={{ color: '#16a34a', display: 'inline-flex' }}>📊</span>
+            <Download size={15} style={{ color: '#0f172a' }} />
             <span>Export Excel</span>
           </button>
           <Link to="/invoices/create" className="btn btn-primary" style={{ borderRadius: '8px', padding: '0.525rem 1.15rem', fontWeight: 700, fontSize: '0.85rem' }}>

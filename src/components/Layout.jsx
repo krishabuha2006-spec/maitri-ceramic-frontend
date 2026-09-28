@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import Sidebar from './Sidebar';
 import Header from './Header';
 
 const titleMap = {
   '/': 'Dashboard',
   '/products': 'Product Management',
   '/products/new': 'Add New Product',
-  '/customers': 'Customer Directory',
+  '/product-groups': 'Product Groups',
+  '/companies': 'Companies & Brands',
+  '/customers': 'Customer Directory & Hub',
   '/customers/new': 'Add New Customer',
   '/quotations': 'Quotation Management',
   '/quotations/create': 'Create Quotation',
@@ -28,20 +29,11 @@ const titleMap = {
 export const Layout = () => {
   const location = useLocation();
   const currentPath = location.pathname;
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  // Close mobile sidebar on route change
-  useEffect(() => {
-    setSidebarOpen(false);
-  }, [currentPath]);
-
-  const toggleSidebar = () => setSidebarOpen(prev => !prev);
-  const closeSidebar = () => setSidebarOpen(false);
 
   let pageTitle = titleMap[currentPath];
   if (!pageTitle) {
     if (currentPath.startsWith('/products/')) pageTitle = 'Product Details';
-    else if (currentPath.startsWith('/customers/')) pageTitle = 'Customer Details & History';
+    else if (currentPath.startsWith('/customers/')) pageTitle = 'Customer 360° Hub & History';
     else if (currentPath.startsWith('/quotations/')) pageTitle = 'Quotation Details';
     else if (currentPath.startsWith('/invoices/')) pageTitle = 'Invoice Details';
     else if (currentPath.startsWith('/payments/')) pageTitle = 'Payment Receipt Preview';
@@ -50,12 +42,8 @@ export const Layout = () => {
 
   return (
     <div className="app-container">
-      {sidebarOpen && (
-        <div className="sidebar-backdrop" onClick={closeSidebar} />
-      )}
-      <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
+      <Header pageTitle={pageTitle} />
       <div className="main-content">
-        <Header pageTitle={pageTitle} onToggleSidebar={toggleSidebar} />
         <main className="content-body">
           <Outlet />
         </main>

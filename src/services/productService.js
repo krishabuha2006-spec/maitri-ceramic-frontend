@@ -10,6 +10,7 @@ export const normalizeProduct = (p) => {
   const mgmt = p.managementStock || 0;
 
   const compId = p.company?._id || (isMongoId(p.company) ? p.company : p.companyId) || null;
+  const vendId = p.vendor?._id || (isMongoId(p.vendor) ? p.vendor : p.vendorId) || null;
   const grpId = p.productGroup?._id || (isMongoId(p.productGroup) ? p.productGroup : p.productGroupId) || null;
   const uId = p.unit?._id || (isMongoId(p.unit) ? p.unit : p.unitId) || null;
 
@@ -17,11 +18,13 @@ export const normalizeProduct = (p) => {
     _id: p._id || p.id,
     id: p._id || p.id,
     companyId: compId,
+    vendorId: vendId,
     productGroupId: grpId,
     unitId: uId,
     sku: p.companySkuCode || p.sku || p.companySku || p.vendorSkuCode || 'SKU-NONE',
     productName: p.productName || p.name || 'Unnamed Product',
-    company: p.company?.companyName || (typeof p.company === 'string' && !isMongoId(p.company) ? p.company : 'Maitri Ceramic'),
+    company: p.company?.companyName || p.companyName || (typeof p.company === 'string' && !isMongoId(p.company) ? p.company : ''),
+    vendor: p.vendor?.vendorName || p.vendorName || (typeof p.vendor === 'string' && !isMongoId(p.vendor) ? p.vendor : ''),
     productGroup: p.productGroup?.groupName || (typeof p.productGroup === 'string' && !isMongoId(p.productGroup) ? p.productGroup : 'General'),
     hsnCode: p.hsnCode || '69072100',
     vendorSku: p.vendorSkuCode || p.vendorSku || '',
@@ -48,13 +51,18 @@ export const normalizeProduct = (p) => {
   };
 };
 
+// In-memory cache for fast responsive lookups
+let cachedProducts = null;
+let lastCacheTime = 0;
+const CACHE_TTL_MS = 60000; // 1 minute
+
 /**
  * GET /products - Get all products dynamically from live backend
  */
-export const getProducts = async (params = {}) => {
+export const getProducts = async (params = {}, retryCount = 0) => {
   try {
-    const queryParams = { limit: 1000, page: 1, ...params };
-    const res = await api.get('/products', { params: queryParams });
+    const queryParams = { limit: params.limit || 200, page: params.page || 1, ...params };
+    const res = await api.get('/products', { params: queryParams, timeout: 35000 });
     const rawList = extractArray(res.data, ['products', 'data', 'items', 'list']);
     const normalized = (Array.isArray(rawList) ? rawList : [])
       .map(normalizeProduct)
@@ -64,6 +72,9 @@ export const getProducts = async (params = {}) => {
     if (params.search) {
       const q = params.search.toLowerCase();
       list = list.filter(p => (p.productName || '').toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q));
+    }
+    if (params.vendorId) {
+      list = list.filter(p => String(p.vendorId) === String(params.vendorId));
     }
     if (params.company) {
       list = list.filter(p => (p.company || '').toLowerCase() === params.company.toLowerCase() || p.companyId === params.company);
@@ -76,8 +87,31 @@ export const getProducts = async (params = {}) => {
     }
 
     const total = res.data?.data?.pagination?.total || res.data?.total || list.length;
+    if (list.length > 0 && !params.search && !params.vendorId && !params.company) {
+      cachedProducts = list;
+      lastCacheTime = Date.now();
+    }
+
     return { data: list, total };
   } catch (err) {
+    const isTimeout = err?.code === 'ECONNABORTED' || (err?.message && err.message.includes('timeout'));
+    
+    // Auto-retry once on timeout with smaller limit
+    if (isTimeout && retryCount < 1) {
+      console.warn('GET /products timed out, retrying once with leaner limit...');
+      return getProducts({ ...params, limit: 50 }, retryCount + 1);
+    }
+
+    // If cache is fresh, gracefully serve cached list
+    if (cachedProducts && (Date.now() - lastCacheTime < CACHE_TTL_MS * 5)) {
+      console.info('Serving products from memory cache due to network delay');
+      let fallbackList = cachedProducts;
+      if (params.vendorId) {
+        fallbackList = fallbackList.filter(p => String(p.vendorId) === String(params.vendorId));
+      }
+      return { data: fallbackList, total: fallbackList.length };
+    }
+
     const errMsg = err?.response?.data?.message || err?.message || 'Failed to fetch products from backend';
     console.error('GET /products error:', errMsg);
     return { data: [], total: 0, error: errMsg };
@@ -100,8 +134,10 @@ export const getProductById = async (id) => {
   throw new Error('Product not found');
 };
 
+import { getVendors } from './vendorService';
+
 /**
- * Helper to ensure company, productGroup, and unit IDs are valid MongoDB ObjectIds
+ * Helper to ensure company, productGroup, unit, and vendor IDs are valid MongoDB ObjectIds
  */
 const resolveMasterIds = async (productData) => {
   let compId = isMongoId(productData.companyId) ? productData.companyId : (isMongoId(productData.company) ? productData.company : null);
@@ -149,7 +185,20 @@ const resolveMasterIds = async (productData) => {
     }
   }
 
-  return { compId, grpId, unitId };
+  let vendId = isMongoId(productData.vendorId) ? productData.vendorId : (isMongoId(productData.vendor) ? productData.vendor : null);
+  if (!vendId && (productData.vendor || productData.vendorName)) {
+    const vendors = await getVendors();
+    const found = vendors.find(v =>
+      (v.vendorName || v.name || '').toLowerCase() === (productData.vendor || productData.vendorName || '').toLowerCase() ||
+      v.id === productData.vendor ||
+      v._id === productData.vendor
+    );
+    if (found && isMongoId(found._id || found.id)) {
+      vendId = found._id || found.id;
+    }
+  }
+
+  return { compId, grpId, unitId, vendId };
 };
 
 /**
@@ -162,7 +211,7 @@ export const createProduct = async (productData) => {
   const isOversized = typeof rawImage === 'string' && rawImage.startsWith('data:') && rawImage.length > 150000;
   const networkImage = isOversized ? '' : rawImage;
 
-  const { compId, grpId, unitId } = await resolveMasterIds(productData);
+  const { compId, grpId, unitId, vendId } = await resolveMasterIds(productData);
 
   const livePayload = {
     productName: pName,
@@ -185,12 +234,10 @@ export const createProduct = async (productData) => {
   if (compId) livePayload.company = compId;
   if (grpId) livePayload.productGroup = grpId;
   if (unitId) livePayload.unit = unitId;
+  if (vendId) livePayload.vendor = vendId;
 
   if (networkImage) {
     livePayload.productImage = networkImage;
-  }
-  if (productData.vendorId || productData.vendor) {
-    livePayload.vendor = productData.vendorId || productData.vendor;
   }
 
   try {
@@ -213,7 +260,7 @@ export const updateProduct = async (id, productData) => {
   const isOversized = typeof rawImage === 'string' && rawImage.startsWith('data:') && rawImage.length > 150000;
   const networkImage = isOversized ? '' : rawImage;
 
-  const { compId, grpId, unitId } = await resolveMasterIds(productData);
+  const { compId, grpId, unitId, vendId } = await resolveMasterIds(productData);
 
   const livePayload = {
     productName: pName,
@@ -234,6 +281,7 @@ export const updateProduct = async (id, productData) => {
   if (compId) livePayload.company = compId;
   if (grpId) livePayload.productGroup = grpId;
   if (unitId) livePayload.unit = unitId;
+  if (vendId) livePayload.vendor = vendId;
   if (networkImage) livePayload.productImage = networkImage;
 
   try {
@@ -336,10 +384,14 @@ export const getCompanies = async () => {
       return rawList.map(c => ({
         _id: c._id || c.id,
         id: c._id || c.id,
-        companyName: c.companyName || c.name || c.brandName,
-        code: c.code || c.prefix || '',
+        companyName: c.companyName || c.name || c.brandName || '',
         companyType: c.companyType || (c.isOwnCompany ? 'OWN' : 'BRAND_MANUFACTURER'),
         isOwnCompany: c.companyType === 'OWN' || !!c.isOwnCompany,
+        gstNumber: c.gstNumber || '',
+        address: c.address || '',
+        contactPerson: c.contactPerson || '',
+        contactMobile: c.contactMobile || '',
+        logo: c.logo || null,
         status: c.status || (c.isActive === false ? 'Inactive' : 'Active'),
         isActive: c.isActive !== false && c.status !== 'Inactive'
       }));
@@ -361,12 +413,13 @@ export const getCompanyById = async (id) => {
 
 export const createCompany = async (data) => {
   const payload = {
-    companyName: data.companyName || data.name,
-    companyType: data.isOwnCompany ? 'OWN' : (data.companyType || 'BRAND_MANUFACTURER'),
-    gstNumber: data.gstNumber || undefined,
-    address: data.address || undefined,
-    contactPerson: data.contactPerson || undefined,
-    contactMobile: data.contactMobile || undefined
+    companyName: data.companyName ? data.companyName.trim() : (data.name ? data.name.trim() : ''),
+    companyType: data.isOwnCompany || data.companyType === 'OWN' ? 'OWN' : (data.companyType || 'BRAND_MANUFACTURER'),
+    gstNumber: data.gstNumber ? data.gstNumber.trim().toUpperCase() : null,
+    address: data.address ? data.address.trim() : null,
+    contactPerson: data.contactPerson ? data.contactPerson.trim() : null,
+    contactMobile: data.contactMobile ? data.contactMobile.trim() : null,
+    logo: data.logo || null
   };
 
   try {
@@ -380,19 +433,36 @@ export const createCompany = async (data) => {
 
 export const updateCompany = async (id, data) => {
   try {
-    const res = await api.put(`/companies/${id}`, data);
+    const payload = {
+      companyName: data.companyName ? data.companyName.trim() : (data.name ? data.name.trim() : ''),
+      companyType: data.isOwnCompany || data.companyType === 'OWN' ? 'OWN' : (data.companyType || 'BRAND_MANUFACTURER'),
+      gstNumber: data.gstNumber !== undefined ? (data.gstNumber ? data.gstNumber.trim().toUpperCase() : null) : undefined,
+      address: data.address !== undefined ? (data.address ? data.address.trim() : null) : undefined,
+      contactPerson: data.contactPerson !== undefined ? (data.contactPerson ? data.contactPerson.trim() : null) : undefined,
+      contactMobile: data.contactMobile !== undefined ? (data.contactMobile ? data.contactMobile.trim() : null) : undefined,
+      logo: data.logo !== undefined ? (data.logo || null) : undefined,
+      isActive: data.isActive !== undefined ? data.isActive : (data.status ? data.status === 'Active' : true)
+    };
+    const res = await api.put(`/companies/${id}`, payload);
     return res.data?.data || res.data;
   } catch (err) {
-    throw new Error(err?.response?.data?.message || 'Failed to update company.');
+    const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to update company.';
+    throw new Error(serverMsg);
   }
 };
 
-export const deleteCompany = async (id) => {
+export const toggleCompanyStatus = async (id, currentIsActive) => {
   try {
-    const res = await api.delete(`/companies/${id}`);
-    return res.data;
+    if (currentIsActive) {
+      const res = await api.put(`/companies/${id}/deactivate`);
+      return res.data;
+    } else {
+      const res = await api.put(`/companies/${id}`, { isActive: true });
+      return res.data;
+    }
   } catch (err) {
-    throw new Error(err?.response?.data?.message || 'Failed to delete company.');
+    const serverMsg = err?.response?.data?.message || err?.message || 'Failed to toggle company status.';
+    throw new Error(serverMsg);
   }
 };
 
@@ -401,7 +471,7 @@ export const deactivateCompany = async (id) => {
     const res = await api.put(`/companies/${id}/deactivate`);
     return res.data;
   } catch (err) {
-    throw new Error(err?.response?.data?.message || 'Failed to toggle company status.');
+    throw new Error(err?.response?.data?.message || 'Failed to deactivate company.');
   }
 };
 
@@ -486,3 +556,16 @@ export const deactivateProductGroup = async (id) => {
     throw new Error(err?.response?.data?.message || 'Failed to toggle product group status.');
   }
 };
+
+// ==========================================
+// --- Module 2: Vendor Master Endpoints ---
+// ==========================================
+export {
+  getVendors,
+  getVendorById,
+  createVendor,
+  updateVendor,
+  toggleVendorStatus,
+  deactivateVendor
+} from './vendorService';
+

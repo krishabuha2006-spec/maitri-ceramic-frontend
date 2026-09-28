@@ -8,7 +8,9 @@ export const StatusBadge = ({ status }) => {
   const raw = String(status).trim();
   const s = raw.toLowerCase().replace(/_/g, ' ');
 
-  const isConfirmed = s.includes('confirm') || s === 'active' || s === 'delivered' || s === 'paid' || s.includes('completed') || s === 'approved';
+  const isActive = s === 'active' || (s.includes('active') && !s.includes('inactive'));
+  const isConfirmed = s.includes('confirm') || s.includes('completed');
+  const isDeliveredOrPaid = s === 'delivered' || s === 'paid' || s === 'approved';
   const isSent = s === 'sent';
   const isDraft = s === 'draft';
   const isInterested = s.includes('interest');
@@ -32,9 +34,41 @@ export const StatusBadge = ({ status }) => {
     textTransform: 'uppercase'
   };
 
+  // Active status (Clean green badge without external check icon)
+  if (isActive) {
+    return (
+      <span 
+        style={{
+          ...baseBadgeStyle,
+          backgroundColor: '#f0fdf4',
+          border: '1px solid #86efac',
+          color: '#15803d'
+        }}
+      >
+        ACTIVE
+      </span>
+    );
+  }
+
+  // Delivered, Paid, Approved (Clean green badge)
+  if (isDeliveredOrPaid) {
+    return (
+      <span 
+        style={{
+          ...baseBadgeStyle,
+          backgroundColor: '#f0fdf4',
+          border: '1px solid #86efac',
+          color: '#15803d'
+        }}
+      >
+        {raw.replace(/_/g, ' ').toUpperCase()}
+      </span>
+    );
+  }
+
   // When status is Confirmed or Completed, tick mark icon appears OUTSIDE the box right beside it
   if (isConfirmed) {
-    const label = s.includes('confirm') ? 'CONFIRMED' : (s.includes('complete') ? 'COMPLETED' : raw.replace(/_/g, ' ').toUpperCase());
+    const label = s.includes('confirm') ? 'CONFIRMED' : 'COMPLETED';
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', verticalAlign: 'middle' }}>
         <span 
