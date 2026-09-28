@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { User, Lock, Eye, EyeOff, LogIn, AlertCircle, ShieldCheck } from 'lucide-react';
 
 export const Login = () => {
   const navigate = useNavigate();
-  const { loginWithBackend } = useAuth();
+  const { loginWithBackend, currentUser, loading: authLoading } = useAuth();
+
+  if (!authLoading && currentUser) {
+    return <Navigate to="/" replace />;
+  }
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');

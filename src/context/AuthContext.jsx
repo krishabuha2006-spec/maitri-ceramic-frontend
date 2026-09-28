@@ -4,19 +4,64 @@ import { ROLES, DEFAULT_ROLE_PERMISSIONS, normalizePermissions, normalizeRole, i
 
 export const AuthContext = createContext(null);
 
+const decodeToken = (token) => {
+  try {
+    if (!token || typeof token !== 'string') return null;
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const parsed = JSON.parse(jsonPayload);
+    if (parsed && parsed.exp && parsed.exp * 1000 < Date.now()) {
+      return null; // Token expired
+    }
+    const roleName = normalizeRole(parsed.role);
+    return {
+      id: parsed.id || parsed._id || parsed.userId,
+      name: parsed.name || parsed.userName || parsed.mobile || 'User',
+      email: parsed.email || '',
+      mobile: parsed.mobile || '',
+      role: roleName,
+      permissions: normalizePermissions(parsed.permissions, roleName, true)
+    };
+  } catch (e) {
+    return null;
+  }
+};
+
 export const AuthProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(() => {
+    const token = localStorage.getItem('maitri_auth_token');
+    if (token) {
+      const decoded = decodeToken(token);
+      if (decoded) return decoded;
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState(() => {
+    const token = localStorage.getItem('maitri_auth_token');
+    return !!token;
+  });
 
   // Fetch current logged-in user profile & assigned permissions via GET /auth/me on mount using stored auth token
   useEffect(() => {
+    let isMounted = true;
+
     const fetchUser = async () => {
       const token = localStorage.getItem('maitri_auth_token');
       const FAKE_TOKENS = ['maitri_active_session_token_2026', 'fallback-jwt-token'];
       if (token && (FAKE_TOKENS.includes(token) || token.split('.').length !== 3)) {
         localStorage.removeItem('maitri_auth_token');
-        setCurrentUser(null);
-        setLoading(false);
+        if (isMounted) {
+          setCurrentUser(null);
+          setLoading(false);
+        }
         return;
       }
 
@@ -26,40 +71,48 @@ export const AuthProvider = ({ children }) => {
           const meData = res?.data || res;
           const u = meData?.user || (res?.user) || (res?.success !== false && meData?._id ? meData : null);
 
-          if (res && res.success !== false && u && (u._id || u.id || u.email || u.userName)) {
-            const roleObj = u?.role;
-            const rawRole = (typeof roleObj === 'object' ? (roleObj?.roleName || roleObj?.name) : roleObj) || ROLES.SUPER_ADMIN;
-            const roleName = normalizeRole(rawRole);
-            const userId = u?._id || u?.id;
+          if (isMounted) {
+            if (res && res.success !== false && u && (u._id || u.id || u.email || u.userName)) {
+              const roleObj = u?.role;
+              const rawRole = (typeof roleObj === 'object' ? (roleObj?.roleName || roleObj?.name) : roleObj) || ROLES.SUPER_ADMIN;
+              const roleName = normalizeRole(rawRole);
+              const userId = u?._id || u?.id;
 
-            const rawPerms = meData?.permissions || u?.permissions;
-            const effectivePerms = normalizePermissions(rawPerms, roleName, true);
+              const rawPerms = meData?.permissions || u?.permissions;
+              const effectivePerms = normalizePermissions(rawPerms, roleName, true);
 
-            const userObj = {
-              id: userId,
-              name: u?.name || u?.userName || u?.fullName || 'Super Admin',
-              email: u?.email || '',
-              mobile: u?.mobile || '',
-              role: roleName,
-              permissions: effectivePerms
-            };
-            setCurrentUser(userObj);
-          } else {
-            // Token expired or invalid on live backend
-            localStorage.removeItem('maitri_auth_token');
-            setCurrentUser(null);
+              const userObj = {
+                id: userId,
+                name: u?.name || u?.userName || u?.fullName || 'Super Admin',
+                email: u?.email || '',
+                mobile: u?.mobile || '',
+                role: roleName,
+                permissions: effectivePerms
+              };
+              setCurrentUser(userObj);
+            } else if (res?.status === 401 || res?.success === false) {
+              // Only clear if explicitly unauthorized
+              localStorage.removeItem('maitri_auth_token');
+              setCurrentUser(null);
+            }
           }
         } catch (err) {
-          localStorage.removeItem('maitri_auth_token');
-          setCurrentUser(null);
+          if (err?.response?.status === 401) {
+            localStorage.removeItem('maitri_auth_token');
+            if (isMounted) setCurrentUser(null);
+          }
         }
       } else {
-        setCurrentUser(null);
+        if (isMounted) setCurrentUser(null);
       }
-      setLoading(false);
+      if (isMounted) setLoading(false);
     };
 
     fetchUser();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const switchRole = (newRole) => {
