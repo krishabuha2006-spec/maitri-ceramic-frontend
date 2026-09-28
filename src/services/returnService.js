@@ -1,7 +1,5 @@
 import api, { extractArray } from './api';
 
-const STORAGE_KEY = 'maitri_returns_cache';
-
 export const normalizeReturn = (r) => {
   if (!r) return null;
   const cust = typeof r.customer === 'object' && r.customer !== null ? r.customer : {};
@@ -46,26 +44,6 @@ export const normalizeReturn = (r) => {
   };
 };
 
-const loadLocalReturns = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        // Filter out legacy dummy items
-        return parsed.filter(item => item && item.id !== 'PR-2026-001' && item.id !== 'SR-2026-001' && item._id !== 'PR-2026-001' && item._id !== 'SR-2026-001');
-      }
-    }
-  } catch (e) {}
-  return [];
-};
-
-const saveLocalReturns = (items) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  } catch (e) {}
-};
-
 export const getReturns = async (params = {}) => {
   try {
     const res = await api.get('/returns', { params });
@@ -76,31 +54,10 @@ export const getReturns = async (params = {}) => {
       return { data: normalized, total, isLive: true };
     }
   } catch (err) {
-    console.warn('Live /returns API fetch notice:', err?.response?.data || err.message);
+    console.error('GET /returns error:', err?.response?.data || err.message);
   }
 
-  let list = loadLocalReturns().map(normalizeReturn).filter(Boolean);
-  if (params.returnType) {
-    list = list.filter(r => {
-      const type = (r.returnType || '').toUpperCase();
-      const pType = params.returnType.toUpperCase();
-      return type === pType || (pType === 'PURCHASE_RETURN' && type === 'PURCHASE') || (pType === 'SALES_RETURN' && type === 'SALES');
-    });
-  }
-  if (params.returnStatus) {
-    list = list.filter(r => (r.status || '').toUpperCase() === params.returnStatus.toUpperCase());
-  }
-  if (params.search) {
-    const q = params.search.toLowerCase();
-    list = list.filter(r =>
-      (r.returnNoteNumber || '').toLowerCase().includes(q) ||
-      (r.customerName || '').toLowerCase().includes(q) ||
-      (r.vendor || '').toLowerCase().includes(q) ||
-      (r.sku || '').toLowerCase().includes(q) ||
-      (r.productName || '').toLowerCase().includes(q)
-    );
-  }
-  return { data: list, total: list.length, isLive: false };
+  return { data: [], total: 0, isLive: false };
 };
 
 export const getReturnById = async (id) => {
@@ -109,14 +66,12 @@ export const getReturnById = async (id) => {
     const raw = res.data?.data || res.data;
     if (raw) return normalizeReturn(raw);
   } catch (err) {
-    console.warn(`Live GET /returns/${id} failed:`, err.message);
+    console.error(`GET /returns/${id} error:`, err.message);
   }
-  const list = loadLocalReturns().map(normalizeReturn).filter(Boolean);
-  return list.find(r => r.id === id || r._id === id);
+  throw new Error('Return record not found');
 };
 
 export const createPurchaseReturn = async (returnData) => {
-  // Backend API payload
   const apiPayload = {
     vendorId: returnData.vendorId,
     productId: returnData.productId,
@@ -132,16 +87,12 @@ export const createPurchaseReturn = async (returnData) => {
     const saved = normalizeReturn(res.data?.data || res.data);
     return saved;
   } catch (err) {
-    const backendMsg = err?.response?.data?.message || err?.response?.data?.error;
-    if (backendMsg) {
-      throw new Error(backendMsg);
-    }
-    throw err;
+    const backendMsg = err?.response?.data?.message || err?.response?.data?.error || err.message;
+    throw new Error(backendMsg);
   }
 };
 
 export const createSalesReturn = async (returnData) => {
-  // Backend API payload
   const apiPayload = {
     customerId: returnData.customerId,
     productId: returnData.productId,
@@ -158,11 +109,8 @@ export const createSalesReturn = async (returnData) => {
     const saved = normalizeReturn(res.data?.data || res.data);
     return saved;
   } catch (err) {
-    const backendMsg = err?.response?.data?.message || err?.response?.data?.error;
-    if (backendMsg) {
-      throw new Error(backendMsg);
-    }
-    throw err;
+    const backendMsg = err?.response?.data?.message || err?.response?.data?.error || err.message;
+    throw new Error(backendMsg);
   }
 };
 
@@ -170,24 +118,10 @@ export const confirmReturn = async (id) => {
   try {
     const res = await api.put(`/returns/${id}/confirm`);
     const saved = normalizeReturn(res.data?.data || res.data);
-    const list = loadLocalReturns();
-    const idx = list.findIndex(r => r.id === id || r._id === id);
-    if (idx !== -1) {
-      list[idx] = { ...list[idx], status: 'CONFIRMED', returnStatus: 'CONFIRMED' };
-      saveLocalReturns(list);
-    }
     return saved || { id, status: 'CONFIRMED', returnStatus: 'CONFIRMED' };
   } catch (err) {
-    console.warn(`Live PUT /returns/${id}/confirm notice:`, err.message);
-    const list = loadLocalReturns();
-    const item = list.find(r => r.id === id || r._id === id);
-    if (item) {
-      item.status = 'CONFIRMED';
-      item.returnStatus = 'CONFIRMED';
-      saveLocalReturns(list);
-      return item;
-    }
-    throw err;
+    const serverMsg = err?.response?.data?.message || err?.message || 'Failed to confirm return.';
+    throw new Error(serverMsg);
   }
 };
 
@@ -195,25 +129,10 @@ export const cancelReturn = async (id, cancellationReason = '') => {
   try {
     const res = await api.put(`/returns/${id}/cancel`, { cancellationReason });
     const saved = normalizeReturn(res.data?.data || res.data);
-    const list = loadLocalReturns();
-    const idx = list.findIndex(r => r.id === id || r._id === id);
-    if (idx !== -1) {
-      list[idx] = { ...list[idx], status: 'CANCELLED', returnStatus: 'CANCELLED', cancellationReason };
-      saveLocalReturns(list);
-    }
     return saved || { id, status: 'CANCELLED', returnStatus: 'CANCELLED' };
   } catch (err) {
-    console.warn(`Live PUT /returns/${id}/cancel notice:`, err.message);
-    const list = loadLocalReturns();
-    const item = list.find(r => r.id === id || r._id === id);
-    if (item) {
-      item.status = 'CANCELLED';
-      item.returnStatus = 'CANCELLED';
-      item.cancellationReason = cancellationReason;
-      saveLocalReturns(list);
-      return item;
-    }
-    throw err;
+    const serverMsg = err?.response?.data?.message || err?.message || 'Failed to cancel return.';
+    throw new Error(serverMsg);
   }
 };
 
@@ -225,7 +144,7 @@ export const exportReturns = async (params = {}) => {
     });
     return res.data;
   } catch (err) {
-    console.warn('Backend returns export failed:', err.message);
+    console.error('Backend returns export failed:', err.message);
     return null;
   }
 };
@@ -237,5 +156,3 @@ export const getPurchaseReturns = async (params = {}) => {
 export const getSalesReturns = async (params = {}) => {
   return getReturns({ ...params, returnType: 'SALES_RETURN' });
 };
-
-

@@ -98,16 +98,7 @@ export const Users = () => {
     setFormError('');
     
     const userRole = user.role || ROLES.SALES_EXECUTIVE;
-    let customPerms = null;
-    try {
-      const byId = localStorage.getItem(`maitri_user_perms_${user.id}`);
-      const byEmail = user.email ? localStorage.getItem(`maitri_user_perms_${user.email}`) : null;
-      const byMobile = (user.mobile && user.mobile !== '-') ? localStorage.getItem(`maitri_user_perms_${user.mobile}`) : null;
-      const found = byId || byEmail || byMobile;
-      if (found) customPerms = JSON.parse(found);
-    } catch (e) {}
-
-    const rawPerms = customPerms || user.permissions;
+    const rawPerms = user.permissions;
     const currentPerms = rawPerms && Object.keys(rawPerms).length > 0
       ? normalizePermissions(rawPerms, userRole, false)
       : getEmptyPermissions();

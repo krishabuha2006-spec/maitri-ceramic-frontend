@@ -25,20 +25,6 @@ export const hasRealJwtToken = () => {
   }
 };
 
-let isRefreshing = false;
-let failedQueue = [];
-
-const processQueue = (error, token = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
-  });
-  failedQueue = [];
-};
-
 // Attach Authorization Bearer token only if it is a valid real JWT
 api.interceptors.request.use(
   (config) => {
@@ -46,7 +32,6 @@ api.interceptors.request.use(
       const token = localStorage.getItem('maitri_auth_token');
       config.headers.Authorization = `Bearer ${token}`;
     } else {
-      // Remove any leftover stale/fake Authorization header
       delete config.headers.Authorization;
     }
     return config;
@@ -54,7 +39,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor with automatic 401 refresh logic
+// Response interceptor: on 401 Unauthorized, clear auth token and redirect to login
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -62,56 +47,12 @@ api.interceptors.response.use(
     const status = error?.response?.status;
     const requestUrl = originalRequest?.url || '';
 
-    const isAuthEndpoint = requestUrl.includes('/auth/login') || requestUrl.includes('/auth/refresh-token');
+    const isAuthEndpoint = requestUrl.includes('/auth/login');
 
-    if (status === 401 && !originalRequest._retry && !isAuthEndpoint) {
-      const refreshToken = localStorage.getItem('maitri_refresh_token');
-
-      if (refreshToken && refreshToken !== 'null' && refreshToken !== 'undefined') {
-        if (isRefreshing) {
-          return new Promise((resolve, reject) => {
-            failedQueue.push({ resolve, reject });
-          })
-            .then((token) => {
-              originalRequest.headers.Authorization = `Bearer ${token}`;
-              return api(originalRequest);
-            })
-            .catch((err) => Promise.reject(err));
-        }
-
-        originalRequest._retry = true;
-        isRefreshing = true;
-
-        try {
-          const res = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
-          const data = res.data?.data || res.data;
-          const newAccessToken = data?.accessToken || data?.token;
-          const newRefreshToken = data?.refreshToken;
-
-          if (newAccessToken) {
-            localStorage.setItem('maitri_auth_token', newAccessToken);
-            if (newRefreshToken) {
-              localStorage.setItem('maitri_refresh_token', newRefreshToken);
-            }
-            api.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
-            originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-
-            processQueue(null, newAccessToken);
-            isRefreshing = false;
-            return api(originalRequest);
-          }
-        } catch (refreshErr) {
-          processQueue(refreshErr, null);
-          isRefreshing = false;
-        }
-      }
-
-      // Clear invalid tokens on 401 and redirect to login
+    if (status === 401 && !isAuthEndpoint) {
       try {
         localStorage.removeItem('maitri_auth_token');
-        localStorage.removeItem('maitri_refresh_token');
-        localStorage.removeItem('maitri_user');
-        if (window.location.pathname !== '/login') {
+        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
           window.location.href = '/login';
         }
       } catch (e) { }
@@ -129,28 +70,23 @@ export const extractArray = (resData, preferredKeys = []) => {
   const inner = resData.data;
   if (Array.isArray(inner)) return inner;
 
-  const target = (inner && typeof inner === 'object') ? inner : resData;
-  if (Array.isArray(target)) return target;
+  if (resData && typeof resData === 'object') {
+    for (const key of preferredKeys) {
+      if (Array.isArray(resData[key])) return resData[key];
+    }
 
-  const keysToTry = [
-    ...preferredKeys,
-    'users', 'roles', 'products', 'customers', 'quotations', 'confirmations',
-    'orders', 'invoices', 'challans', 'payments', 'returns', 'entries',
-    'followUps', 'movements', 'companies', 'productGroups', 'units', 'taxes',
-    'taxPresets', 'paymentModes', 'vendors', 'quotationFormats', 'modules',
-    'permissions', 'auditLogs', 'logs', 'alerts', 'items', 'docs', 'records',
-    'list', 'data', 'reports', 'catalog', 'history'
-  ];
+    if (inner && typeof inner === 'object') {
+      for (const key of preferredKeys) {
+        if (Array.isArray(inner[key])) return inner[key];
+      }
 
-  for (const key of keysToTry) {
-    if (target[key] && Array.isArray(target[key])) return target[key];
-    if (resData[key] && Array.isArray(resData[key])) return resData[key];
-  }
+      for (const k of Object.keys(inner)) {
+        if (Array.isArray(inner[k])) return inner[k];
+      }
+    }
 
-  // Fallback: check if target has any array property
-  for (const prop in target) {
-    if (Array.isArray(target[prop]) && prop !== 'errors') {
-      return target[prop];
+    for (const k of Object.keys(resData)) {
+      if (Array.isArray(resData[k])) return resData[k];
     }
   }
 

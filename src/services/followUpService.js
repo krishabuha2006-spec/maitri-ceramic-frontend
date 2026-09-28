@@ -1,7 +1,5 @@
 import api, { extractArray } from './api';
 
-const STORAGE_KEY = 'maitri_local_followups';
-
 export const COMMUNICATION_TYPES = [
   { value: 'CALL', label: 'Phone Call (CALL)' },
   { value: 'WHATSAPP', label: 'WhatsApp (WHATSAPP)' },
@@ -20,27 +18,8 @@ export const RESULTING_STATUSES = [
   { value: 'CLOSED', label: 'Closed' }
 ];
 
-export const getStoredFollowUps = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed.filter(f => f && f.id !== 'FLW-001' && f._id !== '6aa8e52a92ab3c10a4023901');
-      }
-    }
-  } catch (e) {}
-  return [];
-};
-
-export const saveStoredFollowUps = (list) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  } catch (e) {}
-};
-
 /**
- * Standardize follow-up object structure from live backend or local cache
+ * Standardize follow-up object structure from live backend
  */
 export const normalizeFollowUp = (f) => {
   if (!f) return null;
@@ -122,63 +101,10 @@ export const createFollowUp = async (followUpData) => {
   try {
     const res = await api.post('/follow-ups', payload);
     const created = normalizeFollowUp(res.data?.data?.followUp || res.data?.data || res.data);
-    
-    // Save to local follow-up cache
-    const current = getStoredFollowUps();
-    saveStoredFollowUps([created, ...current]);
-
-    // Also sync quotation status in local quotation cache
-    try {
-      const qRaw = localStorage.getItem('maitri_quotations_list');
-      if (qRaw) {
-        const qList = JSON.parse(qRaw);
-        if (Array.isArray(qList)) {
-          const displayStatus = String(resStatus).replace(/_/g, ' ');
-          const updatedQList = qList.map(q => {
-            if (String(q.id) === String(followUpData.quotationId) || String(q._id) === String(followUpData.quotationId) || q.quotationNumber === followUpData.quotationNumber) {
-              return { ...q, status: displayStatus };
-            }
-            return q;
-          });
-          localStorage.setItem('maitri_quotations_list', JSON.stringify(updatedQList));
-        }
-      }
-    } catch (e) {}
-
     return created;
   } catch (err) {
-    const serverErr = err?.response?.data?.message || err?.message;
-    console.warn('POST /follow-ups notice:', serverErr);
-    
-    const fallback = normalizeFollowUp({
-      id: `FLW-${Date.now()}`,
-      ...followUpData,
-      communicationType: commType,
-      resultingStatus: resStatus,
-      createdAt: new Date().toISOString()
-    });
-    const current = getStoredFollowUps();
-    saveStoredFollowUps([fallback, ...current]);
-
-    // Sync quotation status in local quotation cache in offline/fallback mode too
-    try {
-      const qRaw = localStorage.getItem('maitri_quotations_list');
-      if (qRaw) {
-        const qList = JSON.parse(qRaw);
-        if (Array.isArray(qList)) {
-          const displayStatus = String(resStatus).replace(/_/g, ' ');
-          const updatedQList = qList.map(q => {
-            if (String(q.id) === String(followUpData.quotationId) || String(q._id) === String(followUpData.quotationId) || q.quotationNumber === followUpData.quotationNumber) {
-              return { ...q, status: displayStatus };
-            }
-            return q;
-          });
-          localStorage.setItem('maitri_quotations_list', JSON.stringify(updatedQList));
-        }
-      }
-    } catch (e) {}
-
-    return fallback;
+    const serverErr = err?.response?.data?.message || err?.message || 'Failed to create follow-up on backend.';
+    throw new Error(serverErr);
   }
 };
 
@@ -192,7 +118,6 @@ export const getFollowUps = async (params = {}) => {
     const rawList = extractArray(res.data, ['followUps', 'records', 'data']);
     if (Array.isArray(rawList)) {
       const normalized = rawList.map(normalizeFollowUp);
-      saveStoredFollowUps(normalized);
       return { 
         data: normalized, 
         total: res.data?.data?.pagination?.total || res.data?.total || normalized.length, 
@@ -201,26 +126,10 @@ export const getFollowUps = async (params = {}) => {
       };
     }
   } catch (err) {
-    console.warn('GET /follow-ups notice:', err?.response?.data || err.message);
+    console.error('GET /follow-ups error:', err?.response?.data || err.message);
   }
 
-  // Fallback to local storage
-  let list = getStoredFollowUps().map(normalizeFollowUp);
-  if (params.resultingStatus) {
-    list = list.filter(f => f.resultingStatus === params.resultingStatus);
-  }
-  if (params.communicationType) {
-    list = list.filter(f => f.communicationType === params.communicationType);
-  }
-  if (params.search) {
-    const q = params.search.toLowerCase();
-    list = list.filter(f => 
-      f.quotationNumber.toLowerCase().includes(q) || 
-      f.customerName.toLowerCase().includes(q) ||
-      (f.customerResponse && f.customerResponse.toLowerCase().includes(q))
-    );
-  }
-  return { data: list, total: list.length, isLive: false };
+  return { data: [], total: 0, isLive: false };
 };
 
 /**
@@ -234,19 +143,15 @@ export const getFollowUpAlerts = async (salespersonId = null) => {
     const alerts = res.data?.data?.alerts || res.data?.data || res.data;
     if (alerts && typeof alerts === 'object') return alerts;
   } catch (err) {
-    console.warn('GET /follow-ups/alerts notice:', err?.response?.data || err.message);
+    console.warn('GET /follow-ups/alerts error:', err?.response?.data || err.message);
   }
 
-  // Client-side fallback categorization from stored follow-ups
-  const all = getStoredFollowUps().map(normalizeFollowUp);
-  const today = new Date().toISOString().split('T')[0];
-
   return {
-    dueToday: all.filter(f => f.nextFollowUpDate === today),
-    overdue: all.filter(f => f.nextFollowUpDate && f.nextFollowUpDate < today && !['REJECTED', 'CLOSED', 'EXPIRED'].includes(f.resultingStatus)),
-    upcoming: all.filter(f => f.nextFollowUpDate && f.nextFollowUpDate > today),
-    noFollowUpSet: all.filter(f => !f.nextFollowUpDate),
-    closedRecently: all.filter(f => ['CLOSED', 'REJECTED', 'EXPIRED'].includes(f.resultingStatus))
+    dueToday: [],
+    overdue: [],
+    upcoming: [],
+    noFollowUpSet: [],
+    closedRecently: []
   };
 };
 
@@ -269,7 +174,7 @@ export const exportFollowUps = async (params = {}) => {
     window.URL.revokeObjectURL(downloadUrl);
     return { success: true };
   } catch (err) {
-    console.warn('GET /follow-ups/export notice:', err?.response?.data || err.message);
+    console.error('GET /follow-ups/export error:', err?.response?.data || err.message);
     throw err;
   }
 };
@@ -288,14 +193,11 @@ export const getQuotationFollowUpTimeline = async (quotationId) => {
         return list.map(normalizeFollowUp);
       }
     } catch (err) {
-      // 404 indicates no backend timeline collection yet, fallback seamlessly
+      console.warn('GET timeline error:', err.message);
     }
   }
 
-  const cleanQId = String(quotationId || '');
-  return getStoredFollowUps()
-    .map(normalizeFollowUp)
-    .filter(f => String(f.quotationId) === cleanQId || (f.quotationNumber && cleanQId && f.quotationNumber.toLowerCase() === cleanQId.toLowerCase()));
+  return [];
 };
 
 /**
@@ -307,10 +209,8 @@ export const getFollowUpById = async (id) => {
     const raw = res.data?.data?.followUp || res.data?.data || res.data;
     if (raw) return normalizeFollowUp(raw);
   } catch (err) {
-    console.warn('GET /follow-ups/:id notice:', err?.response?.data || err.message);
+    console.error('GET /follow-ups/:id error:', err?.response?.data || err.message);
   }
-  const flw = getStoredFollowUps().find(f => String(f.id) === String(id) || String(f._id) === String(id));
-  if (flw) return normalizeFollowUp(flw);
   throw new Error('Follow-up record not found');
 };
 
@@ -357,59 +257,10 @@ export const updateFollowUp = async (id, updateData) => {
   try {
     const res = await api.put(`/follow-ups/${id}`, payload);
     const updated = normalizeFollowUp(res.data?.data?.followUp || res.data?.data || res.data);
-    
-    const current = getStoredFollowUps();
-    saveStoredFollowUps(current.map(f => String(f.id) === String(id) || String(f._id) === String(id) ? updated : f));
-
-    // Also sync quotation status in local quotation cache
-    if (resStatus) {
-      try {
-        const qRaw = localStorage.getItem('maitri_quotations_list');
-        if (qRaw) {
-          const qList = JSON.parse(qRaw);
-          if (Array.isArray(qList)) {
-            const displayStatus = String(resStatus).replace(/_/g, ' ');
-            const qTargetId = updated.quotationId || updateData.quotationId;
-            const updatedQList = qList.map(q => {
-              if (String(q.id) === String(qTargetId) || String(q._id) === String(qTargetId) || q.quotationNumber === updateData.quotationNumber) {
-                return { ...q, status: displayStatus };
-              }
-              return q;
-            });
-            localStorage.setItem('maitri_quotations_list', JSON.stringify(updatedQList));
-          }
-        }
-      } catch (e) {}
-    }
-
     return updated;
   } catch (err) {
-    console.warn('PUT /follow-ups/:id notice:', err?.response?.data || err.message);
-    const current = getStoredFollowUps();
-    const updated = normalizeFollowUp({ ...updateData, id });
-    saveStoredFollowUps(current.map(f => String(f.id) === String(id) || String(f._id) === String(id) ? updated : f));
-
-    if (resStatus) {
-      try {
-        const qRaw = localStorage.getItem('maitri_quotations_list');
-        if (qRaw) {
-          const qList = JSON.parse(qRaw);
-          if (Array.isArray(qList)) {
-            const displayStatus = String(resStatus).replace(/_/g, ' ');
-            const qTargetId = updated.quotationId || updateData.quotationId;
-            const updatedQList = qList.map(q => {
-              if (String(q.id) === String(qTargetId) || String(q._id) === String(qTargetId) || q.quotationNumber === updateData.quotationNumber) {
-                return { ...q, status: displayStatus };
-              }
-              return q;
-            });
-            localStorage.setItem('maitri_quotations_list', JSON.stringify(updatedQList));
-          }
-        }
-      } catch (e) {}
-    }
-
-    return updated;
+    const serverErr = err?.response?.data?.message || err?.message || 'Failed to update follow-up on backend.';
+    throw new Error(serverErr);
   }
 };
 
@@ -419,14 +270,10 @@ export const updateFollowUp = async (id, updateData) => {
 export const deleteFollowUp = async (id) => {
   try {
     const res = await api.delete(`/follow-ups/${id}`);
-    const current = getStoredFollowUps();
-    saveStoredFollowUps(current.filter(f => String(f.id) !== String(id) && String(f._id) !== String(id)));
     return res.data;
   } catch (err) {
-    console.warn('DELETE /follow-ups/:id notice:', err?.response?.data || err.message);
-    const current = getStoredFollowUps();
-    saveStoredFollowUps(current.filter(f => String(f.id) !== String(id) && String(f._id) !== String(id)));
-    return { success: true };
+    const serverErr = err?.response?.data?.message || err?.message || 'Failed to delete follow-up.';
+    throw new Error(serverErr);
   }
 };
 
@@ -436,15 +283,9 @@ export const deleteFollowUp = async (id) => {
 export const deactivateFollowUp = async (id) => {
   try {
     const res = await api.put(`/follow-ups/${id}/deactivate`);
-    const current = getStoredFollowUps();
-    const updated = current.map(f => (String(f.id) === String(id) || String(f._id) === String(id)) ? { ...f, isActive: false } : f);
-    saveStoredFollowUps(updated);
     return res.data;
   } catch (err) {
-    console.warn('PUT /follow-ups/:id/deactivate notice:', err?.response?.data || err.message);
-    const current = getStoredFollowUps();
-    const updated = current.map(f => (String(f.id) === String(id) || String(f._id) === String(id)) ? { ...f, isActive: false } : f);
-    saveStoredFollowUps(updated);
-    return { success: true };
+    const serverErr = err?.response?.data?.message || err?.message || 'Failed to deactivate follow-up.';
+    throw new Error(serverErr);
   }
 };

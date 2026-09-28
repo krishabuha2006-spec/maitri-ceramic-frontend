@@ -1,8 +1,5 @@
 import api, { extractArray } from './api';
 
-const STORAGE_KEY = 'maitri_quotation_formats';
-
-
 export const DEFAULT_8_FORMATS = [
   {
     id: 'FMT-01',
@@ -110,23 +107,6 @@ export const DEFAULT_8_FORMATS = [
   }
 ];
 
-const getStoredFormats = () => {
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    if (data) {
-      const parsed = JSON.parse(data);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch (err) { }
-  return DEFAULT_8_FORMATS;
-};
-
-const saveStoredFormats = (list) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  } catch (err) { }
-};
-
 /**
  * Normalizes any format structure from backend API into a clean UI format contract
  */
@@ -171,61 +151,23 @@ export const normalizeQuotationFormat = (fmt, index = 0) => {
 
 /**
  * GET /quotation-formats - Fetch all quotation format configurations directly from backend API
- * Auto-seeds backend MongoDB if backend collection is empty
  */
 export const getQuotationFormats = async (params = {}) => {
   try {
     const res = await api.get('/quotation-formats', { params });
     const rawList = extractArray(res.data, ['quotationFormats', 'formats', 'data']);
 
-    if (Array.isArray(rawList)) {
-      if (rawList.length > 0) {
-        const normalized = rawList.map((item, idx) => normalizeQuotationFormat(item, idx));
-        saveStoredFormats(normalized);
-        return { data: normalized, total: normalized.length, isLive: true };
-      }
-
-      // If backend returns empty collection, auto-seed all 8 presets to backend API
-      try {
-        const seededList = [];
-        for (const preset of DEFAULT_8_FORMATS) {
-          try {
-            const seedPayload = {
-              name: preset.name,
-              formatName: preset.name,
-              formatKey: preset.formatKey,
-              key: preset.formatKey,
-              formatType: preset.formatType,
-              templateCategory: preset.formatType,
-              description: preset.description,
-              showGst: preset.showGst,
-              showMrp: preset.showMrp,
-              showDiscount: preset.showDiscount,
-              showHsn: preset.showHsn,
-              features: ['GST', 'MRP', 'Discount', 'HSN'],
-              status: 'Active',
-              isDefault: preset.isDefault
-            };
-            const postRes = await api.post('/quotation-formats', seedPayload);
-            const created = normalizeQuotationFormat(postRes.data?.data || postRes.data);
-            if (created) seededList.push(created);
-          } catch (e) { }
-        }
-        if (seededList.length > 0) {
-          saveStoredFormats(seededList);
-          return { data: seededList, total: seededList.length, isLive: true };
-        }
-      } catch (seedErr) {
-        console.warn('Backend auto-seed attempt:', seedErr);
-      }
+    if (Array.isArray(rawList) && rawList.length > 0) {
+      const normalized = rawList.map((item, idx) => normalizeQuotationFormat(item, idx));
+      return { data: normalized, total: normalized.length, isLive: true };
     }
   } catch (err) {
-    console.warn('GET /quotation-formats backend request error:', err?.response?.data || err.message);
+    console.warn('GET /quotation-formats backend notice:', err?.response?.data || err.message);
   }
 
-  // Fallback to local cache with exact 8 specification formats
-  const localList = getStoredFormats();
-  return { data: localList, total: localList.length, isLive: false };
+  // Use presets if backend formats endpoint has no custom formats yet
+  const presets = DEFAULT_8_FORMATS.map((item, idx) => normalizeQuotationFormat(item, idx));
+  return { data: presets, total: presets.length, isLive: false };
 };
 
 /**
@@ -240,9 +182,8 @@ export const getQuotationFormatById = async (id) => {
     console.warn('GET /quotation-formats/:id error:', err?.response?.data || err.message);
   }
 
-  const localList = getStoredFormats();
-  const found = localList.find(f => String(f.id) === String(id) || f.formatKey === id);
-  if (found) return found;
+  const found = DEFAULT_8_FORMATS.find(f => String(f.id) === String(id) || f.formatKey === id);
+  if (found) return normalizeQuotationFormat(found);
   throw new Error('Quotation format not found');
 };
 
@@ -273,22 +214,9 @@ export const createQuotationFormat = async (data) => {
     isDefault: Boolean(data.isDefault)
   };
 
-  try {
-    const res = await api.post('/quotation-formats', payload);
-    const created = normalizeQuotationFormat(res.data?.data || res.data);
-    const list = getStoredFormats();
-    saveStoredFormats([created, ...list]);
-    return created;
-  } catch (err) {
-    console.warn('POST /quotation-formats fallback:', err?.response?.data || err.message);
-    const fallback = {
-      ...payload,
-      id: `FMT-${Date.now()}`
-    };
-    const list = getStoredFormats();
-    saveStoredFormats([fallback, ...list]);
-    return fallback;
-  }
+  const res = await api.post('/quotation-formats', payload);
+  const created = normalizeQuotationFormat(res.data?.data || res.data);
+  return created;
 };
 
 /**
@@ -318,35 +246,17 @@ export const updateQuotationFormat = async (id, data) => {
     isDefault: Boolean(data.isDefault)
   };
 
-  try {
-    const res = await api.put(`/quotation-formats/${id}`, payload);
-    const updated = normalizeQuotationFormat(res.data?.data || res.data);
-    const list = getStoredFormats().map(f => String(f.id) === String(id) ? { ...f, ...updated } : f);
-    saveStoredFormats(list);
-    return updated;
-  } catch (err) {
-    console.warn('PUT /quotation-formats/:id fallback:', err?.response?.data || err.message);
-    const list = getStoredFormats().map(f => String(f.id) === String(id) ? { ...f, ...payload } : f);
-    saveStoredFormats(list);
-    return { id, ...payload };
-  }
+  const res = await api.put(`/quotation-formats/${id}`, payload);
+  const updated = normalizeQuotationFormat(res.data?.data || res.data);
+  return updated;
 };
 
 /**
  * DELETE /quotation-formats/{id} - Delete quotation format on backend API
  */
 export const deleteQuotationFormat = async (id) => {
-  try {
-    const res = await api.delete(`/quotation-formats/${id}`);
-    const list = getStoredFormats().filter(f => String(f.id) !== String(id));
-    saveStoredFormats(list);
-    return res.data;
-  } catch (err) {
-    console.warn('DELETE /quotation-formats/:id fallback:', err?.response?.data || err.message);
-    const list = getStoredFormats().filter(f => String(f.id) !== String(id));
-    saveStoredFormats(list);
-    return { success: true };
-  }
+  const res = await api.delete(`/quotation-formats/${id}`);
+  return res.data;
 };
 
 /**
@@ -355,16 +265,9 @@ export const deleteQuotationFormat = async (id) => {
 export const deactivateQuotationFormat = async (id, newStatus = 'Inactive') => {
   try {
     const res = await api.put(`/quotation-formats/${id}/deactivate`);
-    const list = getStoredFormats().map(f => String(f.id) === String(id) ? { ...f, status: newStatus } : f);
-    saveStoredFormats(list);
     return res.data;
   } catch (err) {
-    console.warn('PUT /quotation-formats/:id/deactivate fallback:', err?.response?.data || err.message);
-    try {
-      await api.put(`/quotation-formats/${id}`, { status: newStatus });
-    } catch (e) { }
-    const list = getStoredFormats().map(f => String(f.id) === String(id) ? { ...f, status: newStatus } : f);
-    saveStoredFormats(list);
-    return { success: true };
+    const res = await api.put(`/quotation-formats/${id}`, { status: newStatus });
+    return res.data;
   }
 };

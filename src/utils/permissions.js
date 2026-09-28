@@ -1,3 +1,6 @@
+import { useContext } from 'react';
+import { AuthContext } from '../context/AuthContext';
+
 // Role-Based Access Control logic & User-wise Permissions for Maitri Ceramic System
 
 export const ROLES = {
@@ -375,11 +378,10 @@ export const usePermissions = (moduleId) => {
   let role = null;
   let permissions = null;
   try {
-    const raw = localStorage.getItem('maitri_user');
-    if (raw) {
-      const u = JSON.parse(raw);
-      role = u?.role;
-      permissions = u?.permissions;
+    const auth = useContext(AuthContext);
+    if (auth?.currentUser) {
+      role = auth.currentUser.role;
+      permissions = auth.currentUser.permissions;
     }
   } catch (e) {}
 

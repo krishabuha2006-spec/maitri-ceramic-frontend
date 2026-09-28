@@ -3,15 +3,19 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 
-// Clear any previously cached mock/seed data so only real backend data shows
-// This runs once on every fresh app load — cached real API data will be re-fetched
-const SEED_CLEAR_VERSION = 'v3_no_mock_data';
-if (localStorage.getItem('maitri_seed_clear') !== SEED_CLEAR_VERSION) {
-  localStorage.removeItem('maitri_local_products');
-  localStorage.removeItem('maitri_local_companies');
-  localStorage.removeItem('maitri_local_product_groups');
-  localStorage.removeItem('maitri_local_customers');
-  localStorage.setItem('maitri_seed_clear', SEED_CLEAR_VERSION);
+// Purge all keys from localStorage on startup except the single login auth token ('maitri_auth_token')
+try {
+  const ALLOWED_AUTH_KEYS = new Set(['maitri_auth_token']);
+  const keysToRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && !ALLOWED_AUTH_KEYS.has(key)) {
+      keysToRemove.push(key);
+    }
+  }
+  keysToRemove.forEach(k => localStorage.removeItem(k));
+} catch (e) {
+  console.warn('LocalStorage cleanup notice:', e);
 }
 
 createRoot(document.getElementById('root')).render(

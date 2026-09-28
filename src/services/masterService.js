@@ -1,9 +1,6 @@
 import api, { extractArray } from './api';
 
 // --- Module 2: Unit Master ---
-const UNIT_STORAGE_KEY = 'maitri_unit_master';
-const TAX_STORAGE_KEY = 'maitri_tax_presets';
-
 export const DEFAULT_UNITS = [
   { id: 'UNIT-01', unitCode: 'Sq.Ft', unitName: 'Square Feet', description: 'Tiles and surface floor coverage', isDecimalAllowed: true, status: 'Active' },
   { id: 'UNIT-02', unitCode: 'Sq.Mt', unitName: 'Square Meter', description: 'International tile coverage standard', isDecimalAllowed: true, status: 'Active' },
@@ -22,34 +19,6 @@ export const DEFAULT_TAX_PRESETS = [
   { id: 'TAX-04', name: 'GST 5%', gstPct: 5, cgstPct: 2.5, sgstPct: 2.5, igstPct: 5, cessPct: 0, description: 'Sand, Basic Clay Bricks & Aggregates', isDefault: false, status: 'Active' },
   { id: 'TAX-05', name: 'Exempted (0%)', gstPct: 0, cgstPct: 0, sgstPct: 0, igstPct: 0, cessPct: 0, description: 'Exempted Construction Materials', isDefault: false, status: 'Active' }
 ];
-
-const getStoredUnits = () => {
-  try {
-    const raw = localStorage.getItem(UNIT_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
-  return DEFAULT_UNITS;
-};
-
-const saveStoredUnits = (list) => {
-  try {
-    localStorage.setItem(UNIT_STORAGE_KEY, JSON.stringify(list));
-  } catch (e) {}
-};
-
-const getStoredTaxes = () => {
-  try {
-    const raw = localStorage.getItem(TAX_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
-  return DEFAULT_TAX_PRESETS;
-};
-
-const saveStoredTaxes = (list) => {
-  try {
-    localStorage.setItem(TAX_STORAGE_KEY, JSON.stringify(list));
-  } catch (e) {}
-};
 
 export const normalizeUnit = (u, idx = 0) => ({
   _id: u._id || (typeof u.id === 'string' && /^[0-9a-fA-F]{24}$/.test(u.id) ? u.id : undefined),
@@ -85,14 +54,12 @@ export const getUnits = async () => {
     const res = await api.get('/units');
     const list = extractArray(res.data, ['units', 'data']);
     if (Array.isArray(list) && list.length > 0) {
-      const normalized = list.map(normalizeUnit);
-      saveStoredUnits(normalized);
-      return normalized;
+      return list.map(normalizeUnit);
     }
   } catch (err) {
-    console.warn('GET /units fallback:', err?.response?.data || err.message);
+    console.warn('GET /units notice:', err?.response?.data || err.message);
   }
-  return getStoredUnits();
+  return DEFAULT_UNITS.map(normalizeUnit);
 };
 
 export const getUnitById = async (id) => {
@@ -101,8 +68,8 @@ export const getUnitById = async (id) => {
     const raw = res.data?.data?.unit || res.data?.data || res.data;
     if (raw) return normalizeUnit(raw);
   } catch (err) {}
-  const list = getStoredUnits();
-  return list.find(u => String(u.id) === String(id) || u.unitCode === id) || null;
+  const found = DEFAULT_UNITS.find(u => String(u.id) === String(id) || u.unitCode === id);
+  return found ? normalizeUnit(found) : null;
 };
 
 export const createUnit = async (unitData) => {
@@ -114,19 +81,8 @@ export const createUnit = async (unitData) => {
     status: unitData.status || 'Active'
   };
 
-  try {
-    const res = await api.post('/units', payload);
-    const created = normalizeUnit(res.data?.data?.unit || res.data?.data || res.data);
-    const list = getStoredUnits();
-    saveStoredUnits([created, ...list]);
-    return created;
-  } catch (err) {
-    console.warn('POST /units fallback:', err?.response?.data || err.message);
-    const fallback = { ...payload, id: `UNIT-${Date.now()}` };
-    const list = getStoredUnits();
-    saveStoredUnits([fallback, ...list]);
-    return fallback;
-  }
+  const res = await api.post('/units', payload);
+  return normalizeUnit(res.data?.data?.unit || res.data?.data || res.data);
 };
 
 export const updateUnit = async (id, unitData) => {
@@ -138,48 +94,22 @@ export const updateUnit = async (id, unitData) => {
     status: unitData.status || 'Active'
   };
 
-  try {
-    const res = await api.put(`/units/${id}`, payload);
-    const updated = normalizeUnit(res.data?.data?.unit || res.data?.data || res.data);
-    const list = getStoredUnits().map(u => String(u.id) === String(id) ? updated : u);
-    saveStoredUnits(list);
-    return updated;
-  } catch (err) {
-    console.warn('PUT /units/:id fallback:', err?.response?.data || err.message);
-    const list = getStoredUnits().map(u => String(u.id) === String(id) ? { ...u, ...payload } : u);
-    saveStoredUnits(list);
-    return { id, ...payload };
-  }
+  const res = await api.put(`/units/${id}`, payload);
+  return normalizeUnit(res.data?.data?.unit || res.data?.data || res.data);
 };
 
 export const deleteUnit = async (id) => {
-  try {
-    const res = await api.delete(`/units/${id}`);
-    const list = getStoredUnits().filter(u => String(u.id) !== String(id));
-    saveStoredUnits(list);
-    return res.data;
-  } catch (err) {
-    console.warn('DELETE /units/:id fallback:', err?.response?.data || err.message);
-    const list = getStoredUnits().filter(u => String(u.id) !== String(id));
-    saveStoredUnits(list);
-    return { success: true };
-  }
+  const res = await api.delete(`/units/${id}`);
+  return res.data;
 };
 
 export const deactivateUnit = async (id, status = 'Inactive') => {
   try {
     const res = await api.put(`/units/${id}/deactivate`);
-    const list = getStoredUnits().map(u => String(u.id) === String(id) ? { ...u, status } : u);
-    saveStoredUnits(list);
     return res.data;
   } catch (err) {
-    console.warn('PUT /units/:id/deactivate fallback:', err?.response?.data || err.message);
-    try {
-      await api.put(`/units/${id}`, { status });
-    } catch (e) {}
-    const list = getStoredUnits().map(u => String(u.id) === String(id) ? { ...u, status } : u);
-    saveStoredUnits(list);
-    return { success: true };
+    const res = await api.put(`/units/${id}`, { status });
+    return res.data;
   }
 };
 
@@ -191,14 +121,12 @@ export const getTaxPresets = async () => {
     const res = await api.get('/tax-presets');
     const list = extractArray(res.data, ['taxPresets', 'presets', 'taxes', 'data']);
     if (Array.isArray(list) && list.length > 0) {
-      const normalized = list.map(normalizeTaxPreset);
-      saveStoredTaxes(normalized);
-      return normalized;
+      return list.map(normalizeTaxPreset);
     }
   } catch (err) {
-    console.warn('GET /tax-presets fallback:', err?.response?.data || err.message);
+    console.warn('GET /tax-presets notice:', err?.response?.data || err.message);
   }
-  return getStoredTaxes();
+  return DEFAULT_TAX_PRESETS.map(normalizeTaxPreset);
 };
 
 export const getTaxPresetById = async (id) => {
@@ -207,8 +135,8 @@ export const getTaxPresetById = async (id) => {
     const raw = res.data?.data?.taxPreset || res.data?.data || res.data;
     if (raw) return normalizeTaxPreset(raw);
   } catch (err) {}
-  const list = getStoredTaxes();
-  return list.find(t => String(t.id) === String(id)) || null;
+  const found = DEFAULT_TAX_PRESETS.find(t => String(t.id) === String(id));
+  return found ? normalizeTaxPreset(found) : null;
 };
 
 export const createTaxPreset = async (taxData) => {
@@ -225,19 +153,8 @@ export const createTaxPreset = async (taxData) => {
     status: taxData.status || 'Active'
   };
 
-  try {
-    const res = await api.post('/tax-presets', payload);
-    const created = normalizeTaxPreset(res.data?.data?.taxPreset || res.data?.data || res.data);
-    const list = getStoredTaxes();
-    saveStoredTaxes([created, ...list]);
-    return created;
-  } catch (err) {
-    console.warn('POST /tax-presets fallback:', err?.response?.data || err.message);
-    const fallback = { ...payload, id: `TAX-${Date.now()}` };
-    const list = getStoredTaxes();
-    saveStoredTaxes([fallback, ...list]);
-    return fallback;
-  }
+  const res = await api.post('/tax-presets', payload);
+  return normalizeTaxPreset(res.data?.data?.taxPreset || res.data?.data || res.data);
 };
 
 export const updateTaxPreset = async (id, taxData) => {
@@ -254,48 +171,22 @@ export const updateTaxPreset = async (id, taxData) => {
     status: taxData.status
   };
 
-  try {
-    const res = await api.put(`/tax-presets/${id}`, payload);
-    const updated = normalizeTaxPreset(res.data?.data?.taxPreset || res.data?.data || res.data);
-    const list = getStoredTaxes().map(t => String(t.id) === String(id) ? updated : t);
-    saveStoredTaxes(list);
-    return updated;
-  } catch (err) {
-    console.warn('PUT /tax-presets/:id fallback:', err?.response?.data || err.message);
-    const list = getStoredTaxes().map(t => String(t.id) === String(id) ? { ...t, ...payload } : t);
-    saveStoredTaxes(list);
-    return { id, ...payload };
-  }
+  const res = await api.put(`/tax-presets/${id}`, payload);
+  return normalizeTaxPreset(res.data?.data?.taxPreset || res.data?.data || res.data);
 };
 
 export const deleteTaxPreset = async (id) => {
-  try {
-    const res = await api.delete(`/tax-presets/${id}`);
-    const list = getStoredTaxes().filter(t => String(t.id) !== String(id));
-    saveStoredTaxes(list);
-    return res.data;
-  } catch (err) {
-    console.warn('DELETE /tax-presets/:id fallback:', err?.response?.data || err.message);
-    const list = getStoredTaxes().filter(t => String(t.id) !== String(id));
-    saveStoredTaxes(list);
-    return { success: true };
-  }
+  const res = await api.delete(`/tax-presets/${id}`);
+  return res.data;
 };
 
 export const deactivateTaxPreset = async (id, status = 'Inactive') => {
   try {
     const res = await api.put(`/tax-presets/${id}/deactivate`);
-    const list = getStoredTaxes().map(t => String(t.id) === String(id) ? { ...t, status } : t);
-    saveStoredTaxes(list);
     return res.data;
   } catch (err) {
-    console.warn('PUT /tax-presets/:id/deactivate fallback:', err?.response?.data || err.message);
-    try {
-      await api.put(`/tax-presets/${id}`, { status });
-    } catch (e) {}
-    const list = getStoredTaxes().map(t => String(t.id) === String(id) ? { ...t, status } : t);
-    saveStoredTaxes(list);
-    return { success: true };
+    const res = await api.put(`/tax-presets/${id}`, { status });
+    return res.data;
   }
 };
 
@@ -324,30 +215,18 @@ export const getPaymentModes = async () => {
 };
 
 export const createPaymentMode = async (data) => {
-  try {
-    const res = await api.post('/payment-modes', data);
-    return res.data?.data || res.data;
-  } catch (err) {
-    return data;
-  }
+  const res = await api.post('/payment-modes', data);
+  return res.data?.data || res.data;
 };
 
 export const updatePaymentMode = async (id, data) => {
-  try {
-    const res = await api.put(`/payment-modes/${id}`, data);
-    return res.data?.data || res.data;
-  } catch (err) {
-    return data;
-  }
+  const res = await api.put(`/payment-modes/${id}`, data);
+  return res.data?.data || res.data;
 };
 
 export const deactivatePaymentMode = async (id) => {
-  try {
-    const res = await api.put(`/payment-modes/${id}/deactivate`);
-    return res.data;
-  } catch (err) {
-    return { success: true };
-  }
+  const res = await api.put(`/payment-modes/${id}/deactivate`);
+  return res.data;
 };
 
 // --- Module 2: Quotation Format Master (Re-exported from quotationFormatService) ---
@@ -398,5 +277,3 @@ export const deactivateVendor = async (id) => {
   const res = await api.put(`/vendors/${id}/deactivate`);
   return res.data;
 };
-
-

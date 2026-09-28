@@ -2,97 +2,6 @@ import api, { extractArray, hasRealJwtToken } from './api';
 import { getFollowUps as getModule6FollowUps, createFollowUp as createModule6FollowUp } from './followUpService';
 import { printQuotationPdf } from '../utils/quotationPdfGenerator';
 
-const STORAGE_KEY = 'maitri_quotations_list';
-
-let MOCK_QUOTATIONS = [
-  {
-    id: 'QT-2026-001',
-    quotationNumber: 'QT-2026-001',
-    date: '2026-03-01',
-    customerId: 'CUST-001',
-    customerName: 'Rajesh Sharma Construction',
-    customerContact: '9825012345',
-    customerAddress: '402, Royal Residency, CG Road, Ahmedabad',
-    salesperson: 'Vikram Mehta',
-    quotationType: 'Quotation With GST (Standard)',
-    formatKey: 'STANDARD_GST',
-    validity: '15 Days',
-    status: 'Customer Interested',
-    reference: 'Site Visit by Vikram',
-    remarks: 'Tiles required for Ground Floor Hall and Passages.',
-    items: [
-      {
-        id: 'QI-1',
-        area: 'Living Room',
-        sku: 'VT-60120-GL',
-        productName: 'Glazed Vitrified Tile 600x1200mm Statuario',
-        company: 'Kajaria',
-        companySku: 'KJ-VT-60120-01',
-        description: 'Statuario Marble Finish Heavy Duty',
-        mrp: 95.00,
-        quantity: 1200,
-        rate: 72.00,
-        discountPercent: 5.0,
-        gstPercent: 18,
-        grossAmount: 86400.00,
-        discountAmount: 4320.00,
-        taxableAmount: 82080.00,
-        gstAmount: 14774.40,
-        netAmount: 96854.40,
-        confirmedQty: 1200,
-        extraQty: 0,
-        deliveredQty: 0
-      }
-    ],
-    grossTotal: 131200.00,
-    discountTotal: 8800.00,
-    taxableTotal: 122400.00,
-    gstTotal: 22032.00,
-    quotationAmount: 144432.00,
-    confirmedAmount: 144432.00,
-    lastFollowUp: '2026-03-05',
-    nextFollowUp: '2026-03-16',
-    followUpStatus: 'Pending',
-    createdAt: '2026-03-01'
-  }
-];
-
-let MOCK_FOLLOWUPS = [
-  {
-    id: 'FLW-001',
-    quotationId: 'QT-2026-001',
-    quotationNumber: 'QT-2026-001',
-    customerName: 'Rajesh Sharma Construction',
-    quotationAmount: 144432.00,
-    followUpDate: '2026-03-05',
-    nextFollowUpDate: '2026-03-16',
-    user: 'Vikram Mehta',
-    communicationType: 'Phone Call',
-    customerResponse: 'Interested in Statuario tile, requested final contractor discount.',
-    remarks: 'Offered 5% discount. Next call scheduled after site engineer confirmation.',
-    expectedOrderValue: 140000,
-    status: 'Customer Interested',
-    nextAction: 'Call Site Engineer'
-  }
-];
-
-const getStoredQuotations = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch (e) { }
-  return MOCK_QUOTATIONS;
-};
-
-const saveStoredQuotations = (list) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  } catch (e) { }
-};
-
 /**
  * Validate 24-character hexadecimal MongoDB ObjectId
  */
@@ -269,29 +178,13 @@ export const getQuotations = async (params = {}) => {
         );
       }
 
-      saveStoredQuotations(normalized);
       return { data: normalized, total: res.data?.data?.pagination?.total || normalized.length, isLive: true };
     }
   } catch (err) {
-    console.warn('GET /quotations fallback:', err?.response?.data || err.message);
+    console.error('GET /quotations error:', err?.response?.data || err.message);
   }
 
-  // Fallback to local storage
-  const stored = getStoredQuotations();
-  let list = stored.map(normalizeQuotation);
-
-  if (params.status) {
-    list = list.filter(qt => qt.status === params.status);
-  }
-  if (params.search) {
-    const q = params.search.toLowerCase();
-    list = list.filter(qt =>
-      qt.quotationNumber.toLowerCase().includes(q) ||
-      qt.customerName.toLowerCase().includes(q)
-    );
-  }
-
-  return { data: list, total: list.length, isLive: false };
+  return { data: [], total: 0, isLive: false };
 };
 
 /**
@@ -354,10 +247,6 @@ export const createQuotation = async (quotationData) => {
   try {
     const res = await api.post('/quotations', backendPayload);
     const created = normalizeQuotation(res.data?.data?.quotation || res.data?.data || res.data);
-
-    // Cache update
-    const current = getStoredQuotations();
-    saveStoredQuotations([created, ...current]);
     return created;
   } catch (err) {
     const serverErr = err?.response?.data?.message || err?.response?.data?.error || err.message || 'Failed to create quotation on live backend.';
@@ -376,10 +265,9 @@ export const getPendingQuotations = async () => {
       return rawList.map(normalizeQuotation);
     }
   } catch (err) {
-    console.warn('GET /quotations/pending fallback:', err?.response?.data || err.message);
+    console.error('GET /quotations/pending error:', err?.response?.data || err.message);
   }
 
-  // Fallback: filter active pending statuses
   const { data: allQuotations } = await getQuotations();
   return allQuotations.filter(q =>
     ['Draft', 'Sent', 'Follow-up Pending', 'Customer Interested', 'Negotiation'].includes(q.status)
@@ -395,7 +283,7 @@ export const getProductsByCompanyId = async (companyId) => {
     const list = extractArray(res.data, ['products', 'data']);
     if (Array.isArray(list) && list.length > 0) return list;
   } catch (err) {
-    console.warn('GET /quotations/company-products fallback:', err?.response?.data || err.message);
+    console.warn('GET /quotations/company-products fallback to /products:', err?.response?.data || err.message);
   }
 
   try {
@@ -417,12 +305,8 @@ export const getQuotationById = async (id) => {
     const raw = res.data?.data?.quotation || res.data?.data || res.data;
     if (raw) return normalizeQuotation(raw);
   } catch (err) {
-    console.warn('GET /quotations/:id fallback:', err?.response?.data || err.message);
+    console.error('GET /quotations/:id error:', err?.response?.data || err.message);
   }
-
-  const stored = getStoredQuotations();
-  const found = stored.find(q => String(q.id) === String(id) || q.quotationNumber === id);
-  if (found) return normalizeQuotation(found);
   throw new Error('Quotation not found');
 };
 
@@ -472,16 +356,10 @@ export const updateQuotation = async (id, quotationData) => {
   try {
     const res = await api.put(`/quotations/${id}`, backendPayload);
     const updated = normalizeQuotation(res.data?.data?.quotation || res.data?.data || res.data);
-
-    const current = getStoredQuotations();
-    saveStoredQuotations(current.map(q => String(q.id) === String(id) || String(q._id) === String(id) ? updated : q));
     return updated;
   } catch (err) {
-    console.warn('PUT /quotations/:id fallback:', err?.response?.data?.message || err.message);
-    const current = getStoredQuotations();
-    const updated = normalizeQuotation({ ...quotationData, id });
-    saveStoredQuotations(current.map(q => String(q.id) === String(id) || String(q._id) === String(id) ? updated : q));
-    return updated;
+    const errMsg = err?.response?.data?.message || err?.response?.data?.error || err.message || 'Failed to update quotation.';
+    throw new Error(errMsg);
   }
 };
 
@@ -494,9 +372,6 @@ export const sendQuotation = async (id) => {
     try {
       const res = await api.put(`/quotations/${id}/send`);
       const sent = normalizeQuotation(res.data?.data?.quotation || res.data?.data || res.data);
-
-      const current = getStoredQuotations();
-      saveStoredQuotations(current.map(q => String(q.id) === String(id) || String(q._id) === String(id) ? { ...q, status: 'Sent' } : q));
       return sent;
     } catch (err) {
       const errMsg = err?.response?.data?.message || err?.response?.data?.error || err.message || 'Failed to send quotation.';
@@ -504,10 +379,6 @@ export const sendQuotation = async (id) => {
       throw new Error(errMsg);
     }
   }
-
-  // Fallback update
-  const current = getStoredQuotations();
-  saveStoredQuotations(current.map(q => String(q.id) === String(id) ? { ...q, status: 'Sent' } : q));
   return { id, status: 'Sent' };
 };
 
@@ -519,8 +390,6 @@ export const cancelQuotation = async (id) => {
   if (hasRealJwtToken() && isMongoId(id)) {
     try {
       const res = await api.put(`/quotations/${id}/cancel`);
-      const current = getStoredQuotations();
-      saveStoredQuotations(current.map(q => String(q.id) === String(id) || String(q._id) === String(id) ? { ...q, status: 'Cancelled' } : q));
       return res.data;
     } catch (err) {
       const errMsg = err?.response?.data?.message || err?.response?.data?.error || err.message || 'Failed to cancel quotation.';
@@ -528,10 +397,6 @@ export const cancelQuotation = async (id) => {
       throw new Error(errMsg);
     }
   }
-
-  // Fallback update
-  const current = getStoredQuotations();
-  saveStoredQuotations(current.map(q => String(q.id) === String(id) ? { ...q, status: 'Cancelled' } : q));
   return { success: true, message: 'Quotation cancelled' };
 };
 
@@ -560,17 +425,9 @@ export const updateQuotationStatus = async (id, newStatus, remarks = '') => {
   const mongoIdRegex = /^[0-9a-fA-F]{24}$/;
   let validId = id;
 
-  const currentStored = getStoredQuotations();
-  const matched = currentStored.find(q => String(q.id) === String(id) || String(q._id) === String(id) || q.quotationNumber === id);
-  if (matched && matched._id && mongoIdRegex.test(matched._id)) {
-    validId = matched._id;
-  } else if (matched && matched.id && mongoIdRegex.test(matched.id)) {
-    validId = matched.id;
-  }
-
   const statusKey = toBackendStatusKey(newStatus);
   const displayStatus = normalizeQuotationStatus(statusKey);
-  const qNum = matched?.quotationNumber || (typeof id === 'string' && id.startsWith('QT') ? id : 'Quotation');
+  const qNum = typeof id === 'string' && id.startsWith('QT') ? id : 'Quotation';
 
   if (hasRealJwtToken() && mongoIdRegex.test(validId)) {
     try {
@@ -596,19 +453,6 @@ export const updateQuotationStatus = async (id, newStatus, remarks = '') => {
     }
   }
 
-  // Update local storage cache
-  const updatedList = currentStored.map(q => {
-    if (String(q.id) === String(id) || String(q._id) === String(id) || String(q.id) === String(validId) || String(q._id) === String(validId) || q.quotationNumber === id) {
-      return {
-        ...q,
-        status: displayStatus,
-        remarks: remarks || q.remarks
-      };
-    }
-    return q;
-  });
-  saveStoredQuotations(updatedList);
-
   return {
     id: validId,
     quotationNumber: qNum,
@@ -627,7 +471,7 @@ export const renderQuotationFormat = async (id, formatKey = 'STANDARD_GST') => {
     });
     return res.data?.data || res.data;
   } catch (err) {
-    console.warn('GET /quotations/:id/render fallback:', err?.response?.data || err.message);
+    console.warn('GET /quotations/:id/render error:', err?.response?.data || err.message);
     return null;
   }
 };
@@ -647,7 +491,7 @@ export const exportQuotationDocument = async (id, format = 'pdf', quotationNumbe
         return { success: true };
       }
     } catch (e) {
-      console.warn('Direct PDF print fallback:', e.message);
+      console.warn('Direct PDF print notice:', e.message);
     }
   }
 
@@ -674,7 +518,7 @@ export const exportQuotationDocument = async (id, format = 'pdf', quotationNumbe
     window.URL.revokeObjectURL(downloadUrl);
     return { success: true };
   } catch (err) {
-    console.warn('GET /quotations/:id/export fallback:', err?.response?.data || err.message);
+    console.warn('GET /quotations/:id/export error:', err?.response?.data || err.message);
     if (format === 'pdf') {
       window.print();
       return { success: true, fallback: true };
@@ -709,7 +553,6 @@ export const confirmQuotation = async (id, confirmationDetails = {}) => {
     ? targetQuotation._id
     : (mongoIdRegex.test(id) ? id : (targetQuotation?.id && mongoIdRegex.test(targetQuotation.id) ? targetQuotation.id : id));
 
-  // Determine source items (from parameters or loaded quotation)
   const sourceItems = (Array.isArray(confirmationDetails.items) && confirmationDetails.items.length > 0)
     ? confirmationDetails.items
     : (targetQuotation?.items || []);
@@ -727,7 +570,6 @@ export const confirmQuotation = async (id, confirmationDetails = {}) => {
     })
     .filter(i => i.originalQuotationItemId);
 
-  // Filter only meaningful extra items
   const extraItems = (confirmationDetails.extraItems || [])
     .filter(i => (i.productId && mongoIdRegex.test(i.productId)) || (i.adHocName && i.adHocName.trim()))
     .map(i => {
@@ -756,43 +598,9 @@ export const confirmQuotation = async (id, confirmationDetails = {}) => {
     payload.extraItems = extraItems;
   }
 
-  try {
-    const res = await api.post('/confirmations', payload);
-    const result = normalizeQuotation(res.data?.data?.quotation || res.data?.data || res.data);
-
-    // Update local storage
-    const current = getStoredQuotations();
-    const updated = current.map(q => {
-      if (String(q.id) === String(id) || String(q._id) === String(id) || q.quotationNumber === id) {
-        return {
-          ...q,
-          status: 'Confirmed',
-          confirmedAmount: confirmationDetails.finalConfirmedAmount || q.quotationAmount
-        };
-      }
-      return q;
-    });
-    saveStoredQuotations(updated);
-    return result || normalizeQuotation(updated.find(q => String(q.id) === String(id) || q.quotationNumber === id));
-  } catch (err) {
-    const serverMsg = err?.response?.data?.message || err?.message;
-    console.warn('POST /confirmations notice:', serverMsg);
-
-    // Update local cache fallback seamlessly
-    const current = getStoredQuotations();
-    const updated = current.map(q => {
-      if (String(q.id) === String(id) || String(q._id) === String(id) || q.quotationNumber === id) {
-        return {
-          ...q,
-          status: 'Confirmed',
-          confirmedAmount: confirmationDetails.finalConfirmedAmount || q.quotationAmount
-        };
-      }
-      return q;
-    });
-    saveStoredQuotations(updated);
-    return normalizeQuotation(updated.find(q => String(q.id) === String(id) || q.quotationNumber === id));
-  }
+  const res = await api.post('/confirmations', payload);
+  const result = normalizeQuotation(res.data?.data?.quotation || res.data?.data || res.data);
+  return result;
 };
 
 export const approveConfirmation = async (confirmationId) => {
@@ -800,7 +608,8 @@ export const approveConfirmation = async (confirmationId) => {
     const res = await api.put(`/confirmations/${confirmationId}/approve`);
     return res.data;
   } catch (err) {
-    return { success: true, message: 'Confirmation approved (Offline)' };
+    const errMsg = err?.response?.data?.message || err.message || 'Failed to approve confirmation.';
+    throw new Error(errMsg);
   }
 };
 
