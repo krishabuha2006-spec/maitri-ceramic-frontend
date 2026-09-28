@@ -299,11 +299,26 @@ export const Dashboard = () => {
     const fetchDashboardData = async () => {
       try {
         const [custRes, prdRes, qtRes, flwRes, chRes] = await Promise.all([
-          getCustomers(),
-          getProducts(),
-          getQuotations(),
-          getFollowUps(),
-          getChallans({ limit: 1000 })
+          getCustomers().catch(err => {
+            console.warn('Dashboard: could not load customers', err?.message);
+            return { data: [] };
+          }),
+          getProducts().catch(err => {
+            console.warn('Dashboard: could not load products', err?.message);
+            return { data: [] };
+          }),
+          getQuotations().catch(err => {
+            console.warn('Dashboard: could not load quotations', err?.message);
+            return { data: [] };
+          }),
+          getFollowUps().catch(err => {
+            console.warn('Dashboard: could not load follow-ups', err?.message);
+            return { data: [] };
+          }),
+          getChallans({ limit: 1000 }).catch(err => {
+            console.warn('Dashboard: could not load challans', err?.message);
+            return { data: [] };
+          })
         ]);
 
         const customers = Array.isArray(custRes?.data) ? custRes.data : (Array.isArray(custRes) ? custRes : []);

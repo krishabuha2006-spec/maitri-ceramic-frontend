@@ -896,14 +896,14 @@ export const PaymentEntry = () => {
                         {item.date || '-'}
                       </td>
                       <td style={{ padding: '0.85rem 1rem', textAlign: 'right', fontWeight: 600, color: '#334155', fontSize: '0.9rem' }}>
-                        ₹{item.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        ₹{Number(item.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
                       <td style={{ padding: '0.85rem 1rem', textAlign: 'right', fontWeight: 600, color: '#15803d', fontSize: '0.9rem' }}>
-                        ₹{item.paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        ₹{Number(item.paidAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
-                      <td style={{ padding: '0.85rem 1rem', textAlign: 'right', fontWeight: 700, color: item.balanceDue > 0 ? '#b91c1c' : '#15803d', fontSize: '0.9rem' }}>
-                        {item.balanceDue > 0 ? (
-                          `₹${item.balanceDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                      <td style={{ padding: '0.85rem 1rem', textAlign: 'right', fontWeight: 700, color: Number(item.balanceDue || 0) > 0 ? '#b91c1c' : '#15803d', fontSize: '0.9rem' }}>
+                        {Number(item.balanceDue || 0) > 0 ? (
+                          `₹${Number(item.balanceDue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
                         ) : (
                           <span style={{ backgroundColor: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700 }}>
                             Fully Paid
