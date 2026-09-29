@@ -1,19 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import { previewImportFile, commitImportBatch, getImportBatches } from '../services/importService';
-import { formatDate } from '../utils/formatters';
+import { createProduct, getCompanies, getProductGroups } from '../services/productService';
 import StatusBadge from '../components/StatusBadge';
-import { UploadCloud, FileSpreadsheet, FileText, CheckCircle2, AlertCircle, Download, ExternalLink, RefreshCw, ArrowLeft } from 'lucide-react';
+import {
+  UploadCloud, FileSpreadsheet, CheckCircle2, AlertCircle, Download,
+  ExternalLink, ArrowLeft, RefreshCw, Check, XCircle, Info, Sparkles
+} from 'lucide-react';
 
 export const ProductImport = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [previewData, setPreviewData] = useState(null);
+  const [previewRows, setPreviewRows] = useState([]);
+  const [summary, setSummary] = useState(null);
   const [commitResult, setCommitResult] = useState(null);
   const [history, setHistory] = useState([]);
+  const [companiesList, setCompaniesList] = useState([]);
+  const [groupsList, setGroupsList] = useState([]);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
 
   useEffect(() => {
     loadHistory();
+    getCompanies().then(c => Array.isArray(c) && setCompaniesList(c)).catch(() => {});
+    getProductGroups().then(g => Array.isArray(g) && setGroupsList(g)).catch(() => {});
   }, []);
 
   const loadHistory = async () => {
@@ -25,213 +35,514 @@ export const ProductImport = () => {
     }
   };
 
+  // Download Sample Excel Sheet with Roca & Tiles format
+  const handleDownloadSampleExcel = () => {
+    const sampleData = [
+      {
+        'Item Code': 'KAJ-STAT-60120',
+        'Product Name': 'Kajaria Statuario White Glazed Vitrified Tile 600x1200mm',
+        'Category': 'Tiles',
+        'Product Type': 'Vitrified Tiles',
+        'SubType': 'GVT / PGVT High Gloss',
+        'Company / Brand': 'Kajaria',
+        'Tile Size / Dimensions': '600x1200mm (2x4 Ft)',
+        'Range / Collection': 'The Royal Marble Series',
+        'Finish / Color': 'Statuario White Marble',
+        'Pcs Per Box': 2,
+        'Coverage Area (Sq.Ft)': 15.5,
+        'Weight Per Box (kg)': 29.5,
+        'Purchase Price (₹)': 620,
+        'Sale Price (₹)': 980,
+        'GST Rate (%)': 18,
+        'Opening Stock (Boxes)': 120,
+        'Min Alert Stock': 20
+      },
+      {
+        'Item Code': 'ROCA-L90-BASIN',
+        'Product Name': 'Roca L90 Single Lever Countertop Basin',
+        'Category': 'Sanitaryware',
+        'Product Type': 'Wash Basin',
+        'SubType': 'Countertop Basin',
+        'Company / Brand': 'Roca',
+        'Tile Size / Dimensions': '-',
+        'Range / Collection': 'L90 Premium Collection',
+        'Finish / Color': 'Glossy White',
+        'Pcs Per Box': 1,
+        'Coverage Area (Sq.Ft)': 0,
+        'Weight Per Box (kg)': 14.5,
+        'Purchase Price (₹)': 4800,
+        'Sale Price (₹)': 7200,
+        'GST Rate (%)': 18,
+        'Opening Stock (Boxes)': 25,
+        'Min Alert Stock': 5
+      },
+      {
+        'Item Code': 'ROCA-INSP-FAUCET',
+        'Product Name': 'Roca Inspira High Basin Mixer Chrome',
+        'Category': 'Faucets',
+        'Product Type': 'Basin Mixers',
+        'SubType': 'Tall Body Mixer',
+        'Company / Brand': 'Roca',
+        'Tile Size / Dimensions': '-',
+        'Range / Collection': 'Inspira Round',
+        'Finish / Color': 'Evershine Chrome',
+        'Pcs Per Box': 1,
+        'Coverage Area (Sq.Ft)': 0,
+        'Weight Per Box (kg)': 2.8,
+        'Purchase Price (₹)': 3200,
+        'Sale Price (₹)': 5100,
+        'GST Rate (%)': 18,
+        'Opening Stock (Boxes)': 40,
+        'Min Alert Stock': 8
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(sampleData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Products Template');
+    XLSX.writeFile(wb, 'Maitri_Ceramic_Product_Import_Template.xlsx');
+  };
+
+  // Parse Excel File on Selection
+  const processExcelFile = (file) => {
+    setSelectedFile(file);
+    setCommitResult(null);
+    setLoading(true);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const rawJson = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+        if (!rawJson || rawJson.length === 0) {
+          alert('Uploaded Excel file has no data rows.');
+          setLoading(false);
+          return;
+        }
+
+        const parsed = rawJson.map((row, idx) => {
+          const sku = String(row['Item Code'] || row['Item Code (SKU)'] || row['SKU'] || row['Code'] || `SKU-${idx + 1}`).trim();
+          const productName = String(row['Product Name'] || row['Item Name'] || row['Description'] || '').trim();
+          const category = String(row['Category'] || 'Tiles').trim();
+          const productType = String(row['Product Type'] || row['Group'] || 'Vitrified Tiles').trim();
+          const subType = String(row['SubType'] || row['Sub Type'] || '').trim();
+          const company = String(row['Company / Brand'] || row['Company'] || row['Brand'] || 'General').trim();
+          const tileSize = String(row['Tile Size / Dimensions'] || row['Size'] || row['Dimensions'] || '').trim();
+          const range = String(row['Range / Collection'] || row['Range'] || row['Collection'] || '').trim();
+          const finish = String(row['Finish / Color'] || row['Finish'] || row['Color'] || '').trim();
+          const pcsPerBox = Number(row['Pcs Per Box'] || row['Pieces'] || 1);
+          const coverageArea = Number(row['Coverage Area (Sq.Ft)'] || row['SqFt'] || row['Area'] || 0);
+          const weight = Number(row['Weight Per Box (kg)'] || row['Weight'] || 0);
+          const purchasePrice = Number(row['Purchase Price (₹)'] || row['Purchase Rate'] || row['Cost'] || 0);
+          const salePrice = Number(row['Sale Price (₹)'] || row['MRP'] || row['Rate'] || 0);
+          const gstPercent = Number(row['GST Rate (%)'] || row['GST'] || 18);
+          const openingStock = Number(row['Opening Stock (Boxes)'] || row['Stock'] || row['Quantity'] || 0);
+          const alertStock = Number(row['Min Alert Stock'] || row['Alert Qty'] || 10);
+
+          const errors = [];
+          if (!productName) errors.push('Product Name is required');
+          if (!sku) errors.push('Item Code / SKU is required');
+          if (isNaN(salePrice) || salePrice < 0) errors.push('Invalid Sale Price');
+
+          return {
+            rowNumber: idx + 1,
+            sku,
+            productName,
+            category,
+            productType,
+            subType,
+            company,
+            tileSize,
+            range,
+            finish,
+            pcsPerBox,
+            coverageArea,
+            weight,
+            purchasePrice,
+            salePrice,
+            gstPercent,
+            openingStock,
+            alertStock,
+            isValid: errors.length === 0,
+            errors
+          };
+        });
+
+        const validCount = parsed.filter(p => p.isValid).length;
+        const invalidCount = parsed.length - validCount;
+
+        setPreviewRows(parsed);
+        setSummary({
+          totalRows: parsed.length,
+          validRowsCount: validCount,
+          invalidRowsCount: invalidCount,
+          fileName: file.name
+        });
+      } catch (err) {
+        alert('Failed to parse Excel file: ' + err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      processExcelFile(e.target.files[0]);
     }
   };
 
-  const handlePreview = async (e) => {
-    e.preventDefault();
-    if (!selectedFile) {
-      alert('Please select an Excel (.xlsx, .xls, .csv) or PDF file to upload.');
+  // Commit and Create Products in Bulk
+  const handleConfirmImport = async () => {
+    const validRows = previewRows.filter(r => r.isValid);
+    if (validRows.length === 0) {
+      alert('No valid rows found to import.');
       return;
     }
+
     setLoading(true);
-    setCommitResult(null);
+    setImportProgress({ current: 0, total: validRows.length });
 
-    const formData = new FormData();
-    formData.append('file', selectedFile);
+    let successCount = 0;
+    let failedCount = 0;
 
-    try {
-      const res = await previewImportFile(formData);
-      setPreviewData(res.data || res);
-    } catch (err) {
-      alert('Error generating file preview: ' + err.message);
-    } finally {
-      setLoading(false);
+    for (let i = 0; i < validRows.length; i++) {
+      const row = validRows[i];
+      try {
+        const payload = {
+          productName: row.productName,
+          companySkuCode: row.sku,
+          sku: row.sku,
+          category: row.category,
+          productType: row.productType,
+          subType: row.subType,
+          companyName: row.company,
+          tileSize: row.tileSize,
+          rangeName: row.range,
+          finishColor: row.finish,
+          piecesPerBox: row.pcsPerBox,
+          coverageAreaSqFt: row.coverageArea,
+          weightKg: row.weight,
+          purchaseRate: row.purchasePrice,
+          salePrice: row.salePrice,
+          mrp: row.salePrice,
+          gstPct: row.gstPercent,
+          openingStock: row.openingStock,
+          actualStock: row.openingStock,
+          currentStock: row.openingStock,
+          reorderAlertQty: row.alertStock,
+          isActive: true
+        };
+
+        await createProduct(payload);
+        successCount++;
+      } catch (e) {
+        console.error('Import row failed:', e);
+        failedCount++;
+      }
+      setImportProgress({ current: i + 1, total: validRows.length });
     }
-  };
 
-  const handleCommit = async () => {
-    if (!previewData || !previewData.batchId) return;
-    setLoading(true);
-    try {
-      const res = await commitImportBatch(previewData.batchId);
-      setCommitResult(res.data || res);
-      setPreviewData(null);
-      setSelectedFile(null);
-      loadHistory();
-    } catch (err) {
-      alert('Error committing import batch: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setCommitResult({
+      status: failedCount === 0 ? 'SUCCESS' : 'PARTIAL_SUCCESS',
+      successCount,
+      failedCount,
+      totalProcessed: validRows.length
+    });
 
-  const handleDownloadErrorReport = () => {
-    alert('Downloading annotated Excel error report...');
+    setPreviewRows([]);
+    setSummary(null);
+    setSelectedFile(null);
+    setLoading(false);
+    loadHistory();
   };
 
   return (
-    <div style={{ maxWidth: '1100px' }}>
-      
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+    <div style={{ maxWidth: '1140px', margin: '0 auto', paddingBottom: '3rem' }}>
+      {/* Top Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Bulk Product Import (Excel & PDF)</h2>
-          <p style={{ fontSize: '0.85rem', color: '#64748b' }}>
-            Cloudinary Cloud Stream & Zero-Write Preview Simulation Engine (Module 3)
+          <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+            Bulk Product Import (Excel / CSV)
+          </h1>
+          <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>
+            Import ceramic tiles, sanitaryware, and faucets in bulk from Excel spreadsheets with full preview & validation.
           </p>
         </div>
 
-        <Link
-          to="/products"
-          className="btn btn-secondary"
-          style={{
-            borderRadius: '9px',
-            padding: '0.5rem 0.85rem',
-            fontWeight: 600,
-            fontSize: '0.825rem',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.35rem'
-          }}
-        >
-          <ArrowLeft size={16} />
-          <span>Back to Products</span>
-        </Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button
+            type="button"
+            onClick={handleDownloadSampleExcel}
+            className="btn btn-secondary"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              borderRadius: '9px',
+              padding: '0.55rem 0.95rem',
+              fontWeight: 600,
+              fontSize: '0.825rem',
+              borderColor: '#bbf7d0',
+              backgroundColor: '#f0fdf4',
+              color: '#166534'
+            }}
+          >
+            <Download size={16} />
+            <span>Download Sample Excel Template</span>
+          </button>
+
+          <Link
+            to="/products"
+            className="btn btn-secondary"
+            style={{
+              borderRadius: '9px',
+              padding: '0.55rem 0.95rem',
+              fontWeight: 600,
+              fontSize: '0.825rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem'
+            }}
+          >
+            <ArrowLeft size={16} />
+            <span>Back to Products</span>
+          </Link>
+        </div>
       </div>
 
       {/* Upload File Card */}
-      <div className="card">
-        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <UploadCloud size={18} style={{ color: '#2563eb' }} />
-          <span>Select Catalog or Price List Document</span>
-        </h3>
-
-        <form onSubmit={handlePreview}>
+      <div style={{
+        backgroundColor: '#ffffff',
+        borderRadius: '14px',
+        border: '1px solid #e2e8f0',
+        padding: '1.75rem',
+        marginBottom: '1.5rem',
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1.25rem' }}>
           <div style={{
-            border: '2px dashed #cbd5e1',
+            width: '36px',
+            height: '36px',
             borderRadius: '8px',
-            padding: '2rem',
-            textAlign: 'center',
-            backgroundColor: '#f8fafc',
-            marginBottom: '1.25rem'
+            backgroundColor: '#eff6ff',
+            color: '#2563eb',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}>
-            <FileSpreadsheet size={36} style={{ color: '#2563eb', marginBottom: '0.5rem' }} />
-            <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem' }}>
-              Upload Excel Sheet (.xlsx, .xls, .csv) or Digital PDF Price List
-            </div>
-            <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1rem' }}>
-              Files are streamed securely to Cloudinary storage before zero-write preview simulation.
+            <UploadCloud size={20} />
+          </div>
+          <div>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+              Select Product Catalog Excel File
+            </h3>
+            <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
+              Supports .xlsx, .xls, and .csv formats with automatic column mapping
             </p>
-
-            <input 
-              type="file" 
-              accept=".xlsx,.xls,.csv,.pdf" 
-              onChange={handleFileChange}
-              style={{ display: 'none' }}
-              id="file-upload-input"
-            />
-            <label htmlFor="file-upload-input" className="btn btn-secondary" style={{ cursor: 'pointer' }}>
-              {selectedFile ? selectedFile.name : 'Browse Computer Files'}
-            </label>
           </div>
+        </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-            <button type="submit" className="btn btn-primary" disabled={loading || !selectedFile}>
-              {loading ? 'Processing Cloud Stream & Preview...' : 'Generate Zero-Write Preview'}
-            </button>
+        <div style={{
+          border: '2px dashed #93c5fd',
+          borderRadius: '12px',
+          padding: '2.5rem 1.5rem',
+          textAlign: 'center',
+          backgroundColor: '#f8fafc',
+          marginBottom: '1.25rem'
+        }}>
+          <FileSpreadsheet size={44} style={{ color: '#2563eb', margin: '0 auto 0.75rem auto', display: 'block' }} />
+          <div style={{ fontWeight: 700, fontSize: '1rem', color: '#1e293b', marginBottom: '0.35rem' }}>
+            {selectedFile ? selectedFile.name : 'Upload Your Products Excel Sheet (.xlsx, .csv)'}
           </div>
-        </form>
+          <p style={{ fontSize: '0.825rem', color: '#64748b', marginBottom: '1.25rem' }}>
+            Drag and drop your file here, or click below to browse from your device.
+          </p>
+
+          <input 
+            type="file" 
+            accept=".xlsx,.xls,.csv" 
+            onChange={handleFileChange}
+            style={{ display: 'none' }}
+            id="excel-upload-input"
+          />
+          <label
+            htmlFor="excel-upload-input"
+            className="btn btn-primary"
+            style={{
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.6rem 1.5rem',
+              borderRadius: '8px',
+              fontWeight: 700
+            }}
+          >
+            <UploadCloud size={18} />
+            <span>{selectedFile ? 'Choose Different File' : 'Browse Excel Files'}</span>
+          </label>
+        </div>
       </div>
 
-      {/* Commit Result Alert */}
+      {/* Progress Indicator */}
+      {loading && importProgress.total > 0 && (
+        <div style={{
+          backgroundColor: '#eff6ff',
+          border: '1px solid #bfdbfe',
+          borderRadius: '12px',
+          padding: '1.25rem',
+          marginBottom: '1.5rem'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+            <span style={{ fontWeight: 700, color: '#1e3a8a', fontSize: '0.9rem' }}>
+              Importing Products ({importProgress.current} / {importProgress.total})
+            </span>
+            <span style={{ fontWeight: 700, color: '#2563eb', fontSize: '0.9rem' }}>
+              {Math.round((importProgress.current / importProgress.total) * 100)}%
+            </span>
+          </div>
+          <div style={{ width: '100%', height: '10px', backgroundColor: '#dbeafe', borderRadius: '5px', overflow: 'hidden' }}>
+            <div style={{
+              width: `${(importProgress.current / importProgress.total) * 100}%`,
+              height: '100%',
+              backgroundColor: '#2563eb',
+              transition: 'width 0.2s ease'
+            }} />
+          </div>
+        </div>
+      )}
+
+      {/* Commit Result Banner */}
       {commitResult && (
-        <div className="card" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <CheckCircle2 size={24} style={{ color: '#16a34a' }} />
-            <div>
-              <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#166534' }}>Import Commit Completed!</h4>
-              <p style={{ fontSize: '0.85rem', color: '#15803d' }}>
-                Import Status: <strong>{commitResult.status || 'PARTIAL_SUCCESS'}</strong> | Success: {commitResult.successCount} | Failed: {commitResult.failedCount}.
-                <br />
-                <em>Repeat Import Rule Enforced: Existing product pricing updated; live <strong>currentStock</strong> strictly preserved.</em>
-              </p>
-            </div>
+        <div style={{
+          backgroundColor: commitResult.failedCount === 0 ? '#f0fdf4' : '#fffbeb',
+          border: commitResult.failedCount === 0 ? '1px solid #bbf7d0' : '1px solid #fef08a',
+          borderRadius: '12px',
+          padding: '1.25rem 1.5rem',
+          marginBottom: '1.5rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1rem'
+        }}>
+          <CheckCircle2 size={28} style={{ color: '#16a34a', flexShrink: 0 }} />
+          <div>
+            <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#166534', margin: 0 }}>
+              Bulk Import Completed!
+            </h4>
+            <p style={{ fontSize: '0.85rem', color: '#15803d', margin: '0.2rem 0 0 0' }}>
+              Successfully imported <strong>{commitResult.successCount}</strong> products into catalog.
+              {commitResult.failedCount > 0 && ` (${commitResult.failedCount} failed rows).`}
+            </p>
           </div>
         </div>
       )}
 
       {/* Preview Simulation Section */}
-      {previewData && (
-        <div className="card" style={{ borderLeft: '4px solid #2563eb' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+      {summary && previewRows.length > 0 && (
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '14px',
+          border: '1px solid #e2e8f0',
+          padding: '1.75rem',
+          marginBottom: '1.75rem',
+          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)'
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '1.25rem',
+            flexWrap: 'wrap',
+            gap: '1rem'
+          }}>
             <div>
-              <h3 className="card-title" style={{ margin: 0 }}>Zero-Write Simulation Preview</h3>
-              <p style={{ fontSize: '0.825rem', color: '#64748b' }}>
-                Batch ID: {previewData.importBatchId} | File URL: <a href={previewData.fileUrl} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>View in Cloudinary <ExternalLink size={12} /></a>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                Spreadsheet Preview & Validation ({summary.totalRows} Rows)
+              </h3>
+              <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>
+                File: {summary.fileName} | Review all rows before committing to database
               </p>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              {previewData.invalidRowsCount > 0 && (
-                <button type="button" className="btn btn-secondary btn-sm" onClick={handleDownloadErrorReport} style={{ borderColor: '#dc2626', color: '#dc2626' }}>
-                  <Download size={14} /> Download Excel Error Report
-                </button>
-              )}
-              <button type="button" className="btn btn-primary btn-sm" onClick={handleCommit} disabled={loading}>
-                Confirm & Commit Valid Rows ({previewData.validRowsCount})
-              </button>
-            </div>
+
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={handleConfirmImport}
+              disabled={loading || summary.validRowsCount === 0}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.65rem 1.5rem',
+                borderRadius: '8px',
+                fontWeight: 700
+              }}
+            >
+              <Check size={18} />
+              <span>Confirm & Import ({summary.validRowsCount} Valid Products)</span>
+            </button>
           </div>
 
-          {/* Row Metrics */}
-          <div className="stats-grid" style={{ marginBottom: '1.25rem' }}>
-            <div className="stat-card" style={{ background: '#f8fafc' }}>
-              <div className="stat-label">Total Sheet Rows</div>
-              <div className="stat-value">{previewData.totalRows}</div>
+          {/* Row Metrics Cards */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: '1rem',
+            marginBottom: '1.25rem'
+          }}>
+            <div style={{ backgroundColor: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>Total Sheet Rows</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', marginTop: '0.2rem' }}>{summary.totalRows}</div>
             </div>
-            <div className="stat-card" style={{ background: '#f0fdf4' }}>
-              <div className="stat-label">Valid Rows</div>
-              <div className="stat-value" style={{ color: '#16a34a' }}>{previewData.validRowsCount}</div>
+            <div style={{ backgroundColor: '#f0fdf4', padding: '1rem', borderRadius: '10px', border: '1px solid #bbf7d0' }}>
+              <div style={{ fontSize: '0.78rem', color: '#16a34a', fontWeight: 600 }}>Valid Products</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#16a34a', marginTop: '0.2rem' }}>{summary.validRowsCount}</div>
             </div>
-            <div className="stat-card" style={{ background: '#fef2f2' }}>
-              <div className="stat-label">Invalid Rows</div>
-              <div className="stat-value" style={{ color: '#dc2626' }}>{previewData.invalidRowsCount}</div>
+            <div style={{ backgroundColor: summary.invalidRowsCount > 0 ? '#fef2f2' : '#f8fafc', padding: '1rem', borderRadius: '10px', border: summary.invalidRowsCount > 0 ? '1px solid #fecaca' : '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '0.78rem', color: summary.invalidRowsCount > 0 ? '#dc2626' : '#64748b', fontWeight: 600 }}>Invalid Rows</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: summary.invalidRowsCount > 0 ? '#dc2626' : '#64748b', marginTop: '0.2rem' }}>{summary.invalidRowsCount}</div>
             </div>
           </div>
 
           {/* Preview Table */}
-          <div className="table-container" style={{ border: 'none', boxShadow: 'none' }}>
+          <div className="table-container" style={{ maxHeight: '420px', overflowY: 'auto' }}>
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Row #</th>
+                  <th>#</th>
+                  <th>Item Code</th>
                   <th>Product Name</th>
-                  <th>Company SKU</th>
-                  <th>Unit</th>
+                  <th>Category</th>
+                  <th>Company / Brand</th>
+                  <th>Size / Range</th>
                   <th>Sale Price (₹)</th>
-                  <th>Validation Status</th>
-                  <th>Errors / Remarks</th>
+                  <th>Opening Stock</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {previewData.previewRows?.map((row) => (
+                {previewRows.map((row) => (
                   <tr key={row.rowNumber} style={{ backgroundColor: !row.isValid ? '#fef2f2' : 'inherit' }}>
                     <td>{row.rowNumber}</td>
-                    <td style={{ fontWeight: 600 }}>{row.mappedData?.productName || '-'}</td>
-                    <td>{row.mappedData?.companySkuCode || '-'}</td>
-                    <td>{row.mappedData?.unit || 'Sq.Ft'}</td>
-                    <td>₹{row.mappedData?.salePrice || 0}</td>
+                    <td style={{ fontWeight: 600, color: '#0f172a' }}>{row.sku}</td>
+                    <td style={{ fontWeight: 600 }}>{row.productName}</td>
+                    <td><span className="badge badge-info">{row.category}</span></td>
+                    <td>{row.company}</td>
+                    <td style={{ fontSize: '0.825rem', color: '#475569' }}>{row.tileSize || row.range || '-'}</td>
+                    <td style={{ fontWeight: 700, color: '#16a34a' }}>₹{row.salePrice}</td>
+                    <td style={{ fontWeight: 600 }}>{row.openingStock} Boxes</td>
                     <td>
                       {row.isValid ? (
-                        <span className="badge badge-success">Valid {row.isExisting ? '(Update)' : '(New)'}</span>
+                        <span className="badge badge-success">Valid</span>
                       ) : (
-                        <span className="badge badge-danger">Invalid Row</span>
+                        <span className="badge badge-danger" title={row.errors.join(', ')}>Invalid</span>
                       )}
-                    </td>
-                    <td style={{ fontSize: '0.8rem', color: !row.isValid ? '#dc2626' : '#64748b' }}>
-                      {row.errors?.join(', ') || 'Ready for import'}
                     </td>
                   </tr>
                 ))}
@@ -244,7 +555,7 @@ export const ProductImport = () => {
       {/* Batch Import History Table */}
       <div className="table-container">
         <div className="table-header-bar">
-          <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>Import Batch History</h3>
+          <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>Import Batch History</h3>
         </div>
         <table className="data-table">
           <thead>
@@ -261,7 +572,7 @@ export const ProductImport = () => {
           </thead>
           <tbody>
             {history.length === 0 ? (
-              <tr><td colSpan="8" style={{ textAlign: 'center', color: '#64748b' }}>No previous import batches.</td></tr>
+              <tr><td colSpan="8" style={{ textAlign: 'center', color: '#64748b', padding: '1.5rem' }}>No previous import batches found.</td></tr>
             ) : (
               history.map(b => (
                 <tr key={b._id}>
@@ -285,9 +596,9 @@ export const ProductImport = () => {
           </tbody>
         </table>
       </div>
-
     </div>
   );
 };
 
 export default ProductImport;
+
