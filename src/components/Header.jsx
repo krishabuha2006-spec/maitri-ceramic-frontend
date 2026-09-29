@@ -1,34 +1,63 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { hasMenuPermission, isSuperAdminRole, normalizeRole } from '../utils/permissions';
+import { hasMenuPermission, isSuperAdminRole, normalizeRole, formatRoleName } from '../utils/permissions';
+import { getLowStockReport } from '../services/stockService';
 import { 
-  LayoutDashboard, Users, CreditCard, RotateCcw, Boxes, 
-  Package, FolderTree, Building2, Truck, BarChart3, Settings, 
-  LogOut, Menu, X, Sparkles, ChevronRight 
+  Home, Users, Boxes, Package, FolderTree, Building2, 
+  BarChart3, Settings, LogOut, Menu, X, ChevronRight, AlertTriangle
 } from 'lucide-react';
 
 export const Header = () => {
   const { currentUser, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [lowStockCount, setLowStockCount] = useState(0);
 
   const rawRole = currentUser?.role;
   const role = normalizeRole(rawRole);
+  const displayRole = formatRoleName(rawRole || role) || (currentUser?.name ? 'Staff' : 'User');
+  const userInitials = currentUser?.name?.trim() ? currentUser.name.trim().charAt(0).toUpperCase() : 'M';
   const userPermissions = currentUser?.permissions;
-  const isSuper = isSuperAdminRole(role);
+  const isSuper = isSuperAdminRole(role || rawRole);
+
+  // Fetch low stock products count for the real-time alert badge
+  useEffect(() => {
+    let isMounted = true;
+    const fetchLowStock = async () => {
+      try {
+        const res = await getLowStockReport();
+        const items = Array.isArray(res) ? res : (res?.data || []);
+        if (isMounted) {
+          setLowStockCount(items.length);
+        }
+      } catch (err) {
+        // Fallback gracefully
+      }
+    };
+    fetchLowStock();
+    const interval = setInterval(fetchLowStock, 45000); // refresh periodically
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const navItems = [
-    { id: 'dashboard', path: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'customers', path: '/customers', label: 'Customers Hub', icon: Users },
-    { id: 'payments', path: '/payments', label: 'Payments', icon: CreditCard },
-    { id: 'returns', path: '/returns', label: 'Returns', icon: RotateCcw },
-    { id: 'stock', path: '/stock', label: 'Stock', icon: Boxes },
+    { id: 'dashboard', path: '/', label: 'Home', icon: Home },
+    { id: 'customers', path: '/customers', label: 'Customer Hub', icon: Users },
     { id: 'products', path: '/products', label: 'Products', icon: Package },
-    { id: 'product-groups', path: '/product-groups', label: 'Groups', icon: FolderTree },
-    { id: 'companies', path: '/companies', label: 'Companies', icon: Building2 },
-    { id: 'vendors', path: '/vendors', label: 'Vendors', icon: Truck },
+    { 
+      id: 'stock', 
+      path: '/stock', 
+      label: 'Stock Management', 
+      icon: Boxes, 
+      badge: lowStockCount > 0 ? `${lowStockCount} Low` : null,
+      badgeColor: '#ef4444'
+    },
+    { id: 'companies', path: '/companies', label: 'Company', icon: Building2 },
+    { id: 'product-groups', path: '/product-types', label: 'Product Types', icon: FolderTree },
     { id: 'reports', path: '/reports', label: 'Reports', icon: BarChart3 },
-    { id: 'users', path: '/users', label: 'Settings', icon: Settings }
+    { id: 'users', path: '/settings', label: 'Settings', icon: Settings }
   ];
 
   let visibleItems = isSuper 
@@ -59,12 +88,12 @@ export const Header = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div className="user-profile">
             <div className="user-avatar" style={{ boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)' }}>
-              {currentUser?.name?.charAt(0) || 'M'}
+              {userInitials}
             </div>
             <div className="user-info-text">
               <span className="user-name-text">{currentUser?.name || 'User'}</span>
               <span className="user-role-text" style={{ fontWeight: 600, color: '#2563eb' }}>
-                {currentUser?.role || 'Super Admin'}
+                {displayRole}
               </span>
             </div>
             <button 
@@ -103,6 +132,25 @@ export const Header = () => {
             >
               <Icon size={16} />
               <span>{item.label}</span>
+              {item.badge && (
+                <span style={{
+                  marginLeft: '0.35rem',
+                  fontSize: '0.65rem',
+                  fontWeight: 800,
+                  backgroundColor: '#fee2e2',
+                  color: '#dc2626',
+                  border: '1px solid #fca5a5',
+                  padding: '0.1rem 0.45rem',
+                  borderRadius: '12px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.2rem',
+                  lineHeight: 1.2
+                }}>
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#dc2626', display: 'inline-block' }}></span>
+                  {item.badge}
+                </span>
+              )}
             </NavLink>
           );
         })}
@@ -143,6 +191,20 @@ export const Header = () => {
                         <Icon size={18} />
                       </div>
                       <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>{item.label}</span>
+                      {item.badge && (
+                        <span style={{
+                          marginLeft: '0.25rem',
+                          fontSize: '0.68rem',
+                          fontWeight: 800,
+                          backgroundColor: '#fee2e2',
+                          color: '#dc2626',
+                          border: '1px solid #fca5a5',
+                          padding: '0.1rem 0.45rem',
+                          borderRadius: '12px'
+                        }}>
+                          {item.badge}
+                        </span>
+                      )}
                     </div>
                     <ChevronRight size={15} style={{ opacity: 0.4 }} />
                   </NavLink>
@@ -153,11 +215,11 @@ export const Header = () => {
             <div className="mobile-nav-footer">
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
                 <div className="user-avatar" style={{ width: '36px', height: '36px', fontSize: '0.95rem' }}>
-                  {currentUser?.name?.charAt(0) || 'M'}
+                  {userInitials}
                 </div>
                 <div>
                   <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.875rem' }}>{currentUser?.name || 'User'}</div>
-                  <div style={{ fontSize: '0.75rem', color: '#2563eb', fontWeight: 600 }}>{currentUser?.role || 'Super Admin'}</div>
+                  <div style={{ fontSize: '0.75rem', color: '#2563eb', fontWeight: 600 }}>{displayRole}</div>
                 </div>
               </div>
               <button 

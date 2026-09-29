@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { getUsers, createUser, updateUser, deleteUser, deactivateUser, resetUserPassword } from '../services/userService';
-import { ROLES, MODULE_LIST, DEFAULT_ROLE_PERMISSIONS, normalizePermissions, getEmptyPermissions, isSuperAdminRole } from '../utils/permissions';
+import { getUsers, getUserById, createUser, updateUser, deleteUser, deactivateUser, resetUserPassword } from '../services/userService';
+import { getRoles, resolveRoleId } from '../services/roleService';
+import { assignUserPermissions } from '../services/permissionService';
+import { ROLES, MODULE_LIST, DEFAULT_ROLE_PERMISSIONS, normalizePermissions, normalizeRole, convertPermsToBackendArray, getEmptyPermissions, isSuperAdminRole } from '../utils/permissions';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import ConfirmModal from '../components/ConfirmModal';
 import {
   Plus, ArrowLeft, ShieldCheck, CheckCircle2, AlertCircle, Save,
-  UserCheck, Shield, Lock, CheckSquare, RefreshCcw, User, Edit3, Trash2, Eye, EyeOff, X
+  UserCheck, Shield, Lock, CheckSquare, RefreshCcw, User, Edit3, Trash2, Eye, EyeOff, X, Sliders
 } from 'lucide-react';
 
 export const Users = () => {
-  const { currentUser, updateCurrentUserPermissions } = useAuth();
-  const userRole = currentUser?.role;
+  const { currentUser, updateCurrentUserPermissions, updateCurrentUserData } = useAuth();
+  const userRole = currentUser?.roleKey || currentUser?.rawRole || currentUser?.role;
   const userPerms = currentUser?.permissions;
   const isSuperAdmin = !userRole || isSuperAdminRole(userRole);
   const canCreateUser = isSuperAdmin || (userPerms?.users?.create ?? false);
@@ -19,6 +21,7 @@ export const Users = () => {
   const canDeleteUser = isSuperAdmin || (userPerms?.users?.delete ?? false);
 
   const [users, setUsers] = useState([]);
+  const [rolesList, setRolesList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isLiveApi, setIsLiveApi] = useState(false);
@@ -39,76 +42,102 @@ export const Users = () => {
   const [showPwd, setShowPwd] = useState(false);
   const [resetting, setResetting] = useState(false);
 
-  // Form State - Starts completely empty (no prefill)
+  // Form State
   const [showNewUserPwd, setShowNewUserPwd] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     mobile: '',
     password: '',
+    roleId: '',
     role: ROLES.SALES_EXECUTIVE,
     status: 'Active',
     permissions: getEmptyPermissions()
   });
 
-  const loadUsers = async () => {
+  const loadUsersData = async () => {
     setLoading(true);
     try {
-      const res = await getUsers();
+      const [res, rolesData] = await Promise.all([
+        getUsers(),
+        getRoles()
+      ]);
       if (res.data && res.data.length > 0) {
         setUsers(res.data);
         setIsLiveApi(!!res.isLive);
       } else if (res.isLive) {
-        // Backend returned empty — clear list
         setUsers([]);
         setIsLiveApi(true);
       }
-      // If isLive=false (backend failed), keep existing users in state
+      if (Array.isArray(rolesData) && rolesData.length > 0) {
+        setRolesList(rolesData);
+      }
     } catch (err) {
-      console.error('Error loading users:', err);
+      console.error('Error loading users/roles:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadUsers();
+    loadUsersData();
   }, []);
 
-  // Open Form for Adding New User - Start completely empty
+  // Open Form for Adding New User - Start with default role preset
   const handleAddNew = () => {
     setEditingUserId(null);
     setFormError('');
     setShowNewUserPwd(false);
+    const defaultRole = rolesList.find(r => r.roleName === 'Sales Executive' || r.roleName === 'SALES_EXECUTIVE') || rolesList[0];
+    const roleName = defaultRole?.roleName || ROLES.SALES_EXECUTIVE;
+    const roleKey = normalizeRole(roleName);
+    const roleDefaults = DEFAULT_ROLE_PERMISSIONS[roleKey] || getEmptyPermissions();
+
     setFormData({
       name: '',
       email: '',
       mobile: '',
       password: '',
-      role: ROLES.SALES_EXECUTIVE,
+      roleId: defaultRole?._id || defaultRole?.id || '',
+      role: roleName,
       status: 'Active',
-      permissions: getEmptyPermissions()
+      permissions: JSON.parse(JSON.stringify(roleDefaults))
     });
     setShowForm(true);
   };
 
-  // Open Form for Editing Existing User
-  const handleEditUser = (user) => {
+  // Open Form for Editing Existing User - Fetches full user & permissions from database
+  const handleEditUser = async (user) => {
     setEditingUserId(user.id);
     setFormError('');
-    
-    const userRole = user.role || ROLES.SALES_EXECUTIVE;
-    const rawPerms = user.permissions;
+
+    let userDetails = user;
+    try {
+      const fullUser = await getUserById(user.id);
+      if (fullUser) {
+        userDetails = fullUser;
+      }
+    } catch (e) {
+      console.warn('Could not fetch detailed user perms, using listed user:', e);
+    }
+
+    const matchedRole = rolesList.find(r => 
+      (r._id && (r._id === userDetails.roleId || r.id === userDetails.roleId)) || 
+      (r.roleName && (r.roleName === userDetails.role || normalizeRole(r.roleName) === normalizeRole(userDetails.role)))
+    );
+    const userRole = matchedRole?.roleName || userDetails.role || ROLES.SALES_EXECUTIVE;
+    const rawPerms = userDetails.permissions;
     const currentPerms = rawPerms && Object.keys(rawPerms).length > 0
       ? normalizePermissions(rawPerms, userRole, false)
       : getEmptyPermissions();
 
     setFormData({
-      name: user.name || '',
-      email: user.email || '',
-      mobile: user.mobile === '-' ? '' : (user.mobile || ''),
+      name: userDetails.name || '',
+      email: userDetails.email || '',
+      mobile: userDetails.mobile === '-' ? '' : (userDetails.mobile || ''),
+      roleId: matchedRole?._id || matchedRole?.id || userDetails.roleId || '',
       role: userRole,
-      status: user.status || 'Active',
+      status: userDetails.status || 'Active',
       permissions: currentPerms
     });
     setShowForm(true);
@@ -127,7 +156,7 @@ export const Users = () => {
       await deleteUser(id);
       setSuccessToast(`User "${name}" deleted successfully.`);
       setTimeout(() => setSuccessToast(''), 2000);
-      loadUsers();
+      loadUsersData();
     } catch (err) {
       const errMsg = err?.message || 'Failed to delete user.';
       setFormError(errMsg);
@@ -185,13 +214,31 @@ export const Users = () => {
     }
   };
 
-  // Change Role Preset -> Updates role label without overwriting user-selected checkboxes
+  // Change Role Preset -> Updates role and roleId
   const handleRoleChange = (e) => {
-    const selectedRole = e.target.value;
+    const selectedVal = e.target.value;
+    const matched = rolesList.find(r => (r._id || r.id) === selectedVal || r.roleName === selectedVal);
+    const newRole = matched?.roleName || selectedVal;
+    const newRoleId = matched?._id || matched?.id || selectedVal;
+
     setFormData(prev => ({
       ...prev,
-      role: selectedRole
+      roleId: newRoleId,
+      role: newRole
     }));
+  };
+
+  // Apply Default Permissions for Selected Role
+  const handleApplyRoleDefaults = () => {
+    const norm = normalizeRole(formData.role);
+    if (norm && DEFAULT_ROLE_PERMISSIONS[norm]) {
+      setFormData(prev => ({
+        ...prev,
+        permissions: JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS[norm]))
+      }));
+      setSuccessToast(`Applied default permission template for "${formData.role}".`);
+      setTimeout(() => setSuccessToast(''), 2500);
+    }
   };
 
   // Toggle specific action (view, create, edit, delete) for a module
@@ -296,18 +343,67 @@ export const Users = () => {
 
     setSaving(true);
     try {
+      let resolvedRoleId = formData.roleId;
+      if (!resolvedRoleId || !/^[0-9a-fA-F]{24}$/.test(String(resolvedRoleId))) {
+        const matchedRole = rolesList.find(r => 
+          (r._id && (r._id === formData.roleId || r.id === formData.roleId)) || 
+          r.roleName === formData.role || 
+          r.roleName === formData.roleId ||
+          normalizeRole(r.roleName) === normalizeRole(formData.role)
+        );
+        resolvedRoleId = matchedRole?._id || matchedRole?.id;
+        if (!resolvedRoleId) {
+          resolvedRoleId = await resolveRoleId(formData.role || formData.roleId, rolesList);
+        }
+      }
+
+      const payload = {
+        name: formData.name.trim(),
+        mobile: formData.mobile.trim(),
+        email: formData.email.trim() || undefined,
+        roleId: resolvedRoleId || undefined,
+        role: formData.role,
+        password: formData.password || undefined,
+        status: formData.status,
+        isActive: formData.status === 'Active',
+        permissions: formData.permissions
+      };
+
+      let targetUserId = editingUserId;
       if (editingUserId) {
-        await updateUser(editingUserId, formData);
+        await updateUser(editingUserId, payload);
         if (updateCurrentUserPermissions) {
           updateCurrentUserPermissions(editingUserId, formData.permissions);
         }
-        setSuccessToast(`User profile and permissions updated for ${formData.name}!`);
-      } else {
-        const created = await createUser(formData);
-        if (created?.id && updateCurrentUserPermissions) {
-          updateCurrentUserPermissions(created.id, formData.permissions);
+        if (updateCurrentUserData && String(currentUser?.id) === String(editingUserId)) {
+          updateCurrentUserData({
+            name: formData.name,
+            role: payload.role,
+            rawRole: payload.role,
+            roleId: resolvedRoleId,
+            permissions: formData.permissions
+          });
         }
-        setSuccessToast(`New staff user ${formData.name} created with assigned permissions!`);
+        setSuccessToast(`User profile, role, and permissions updated for ${formData.name}!`);
+      } else {
+        const created = await createUser(payload);
+        targetUserId = created?.id || created?._id;
+        if (targetUserId && updateCurrentUserPermissions) {
+          updateCurrentUserPermissions(targetUserId, formData.permissions);
+        }
+        setSuccessToast(`New staff user ${formData.name} created with role "${payload.role}"!`);
+      }
+
+      // If user selected custom permissions in matrix, persist to backend collection
+      if (targetUserId && formData.permissions && Object.keys(formData.permissions).length > 0) {
+        try {
+          const backendPerms = convertPermsToBackendArray(formData.permissions);
+          if (backendPerms.length > 0) {
+            await assignUserPermissions(targetUserId, backendPerms);
+          }
+        } catch (pErr) {
+          console.warn('Persisting custom user permissions to backend:', pErr?.message);
+        }
       }
       
       setTimeout(() => {
@@ -315,7 +411,7 @@ export const Users = () => {
       }, 3500);
 
       setShowForm(false);
-      loadUsers();
+      loadUsersData();
     } catch (err) {
       console.error(err);
       setFormError(err.message || 'Failed to save staff user permissions.');
@@ -323,6 +419,7 @@ export const Users = () => {
       setSaving(false);
     }
   };
+
 
   // Helper function to summarize permissions for table badge
   const getPermissionSummary = (user) => {
@@ -557,13 +654,21 @@ export const Users = () => {
                 </label>
                 <select
                   className="form-control"
-                  value={formData.role}
+                  value={formData.roleId || formData.role}
                   onChange={handleRoleChange}
                   style={{ height: '44px', borderRadius: '8px', fontWeight: 600, color: '#0f172a' }}
                 >
-                  {Object.values(ROLES).map(role => (
-                    <option key={role} value={role}>{role}</option>
-                  ))}
+                  {rolesList.length > 0 ? (
+                    rolesList.map(r => (
+                      <option key={r._id || r.id} value={r._id || r.id}>
+                        {r.roleName} {r.isSystemRole ? '(System)' : ''}
+                      </option>
+                    ))
+                  ) : (
+                    Object.values(ROLES).map(role => (
+                      <option key={role} value={role}>{role}</option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -628,7 +733,17 @@ export const Users = () => {
               </div>
 
               {/* Quick Preset Action Buttons */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={handleApplyRoleDefaults}
+                  className="btn btn-secondary btn-sm"
+                  title={`Apply standard permissions for "${formData.role}"`}
+                  style={{ fontSize: '0.775rem', padding: '0.4rem 0.75rem', borderRadius: '6px', color: '#2563eb', borderColor: '#bfdbfe', backgroundColor: '#eff6ff' }}
+                >
+                  <Sliders size={14} style={{ marginRight: '0.3rem' }} />
+                  Apply Role Defaults
+                </button>
                 <button
                   type="button"
                   onClick={handleSelectAll}

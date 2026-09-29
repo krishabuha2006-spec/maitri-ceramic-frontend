@@ -3,7 +3,8 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { 
   ArrowLeft, Package, Percent, DollarSign, Layers, 
   CheckCircle2, AlertCircle, Save, RefreshCw, Info,
-  UploadCloud, Trash2, Link as LinkIcon, FileImage, Building, Plus, X, Truck
+  UploadCloud, Trash2, Link as LinkIcon, FileImage, Building, Plus, X, Truck,
+  Tag, Ruler, Palette, Box, Hash
 } from 'lucide-react';
 import { 
   getProductById, createProduct, updateProduct, 
@@ -12,6 +13,31 @@ import {
   getVendors, createVendor
 } from '../services/productService';
 import { getUnits } from '../services/masterService';
+import { CATEGORIES, DEFAULT_PRODUCT_TYPES } from './ProductGroups';
+
+export const TILE_SIZE_PRESETS = [
+  '600x1200 mm',
+  '800x1600 mm',
+  '600x600 mm',
+  '300x600 mm',
+  '300x450 mm',
+  '200x1200 mm',
+  '800x2400 mm',
+  '1200x1800 mm'
+];
+
+export const SANITARY_RANGE_PRESETS = [
+  'MERIDIAN',
+  'INSIGNIA',
+  'W+W',
+  'THE GAP',
+  'ONA',
+  'CARMEN',
+  'INSPIRA',
+  'ELEMENT',
+  'DEBBA',
+  'HALL'
+];
 
 export const ProductForm = () => {
   const navigate = useNavigate();
@@ -25,9 +51,21 @@ export const ProductForm = () => {
     companyId: '',
     vendor: '',
     vendorId: '',
+    category: 'Sanitaryware',
     productGroup: '',
     productGroupId: '',
-    hsnCode: '69072100',
+    productType: '',
+    productSubType: '',
+    rangeOrSize: '',
+    range: '',
+    size: '',
+    colourName: 'White',
+    finish: 'Glossy',
+    fullDescription: '',
+    piecesPerBox: '',
+    sqftPerBox: '',
+    weightPerBox: '',
+    hsnCode: '69109000',
     sku: '',
     vendorSku: '',
     companySku: '',
@@ -64,6 +102,11 @@ export const ProductForm = () => {
 
   // Dynamic live master lists from backend
   const [companies, setCompanies] = useState([]);
+  const [productGroups, setProductGroups] = useState([]);
+  const [availableUnits, setAvailableUnits] = useState([]);
+  const [vendors, setVendors] = useState([]);
+
+  // Quick Company Modal
   const [showCompanyModal, setShowCompanyModal] = useState(false);
   const [savingCompany, setSavingCompany] = useState(false);
   const [companyFormError, setCompanyFormError] = useState('');
@@ -74,43 +117,31 @@ export const ProductForm = () => {
     status: 'Active'
   });
 
-  // Dynamic vendor list & quick modal state
-  const [vendors, setVendors] = useState([]);
-  const [showVendorModal, setShowVendorModal] = useState(false);
-  const [savingVendor, setSavingVendor] = useState(false);
-  const [vendorFormError, setVendorFormError] = useState('');
-  const [vendorFormData, setVendorFormData] = useState({
-    vendorName: '',
-    mobile: '',
-    email: '',
-    gstNumber: '',
-    address: '',
-    status: 'Active'
-  });
-
-  const [productGroups, setProductGroups] = useState([]);
-  const [availableUnits, setAvailableUnits] = useState([]);
-  const [showGroupModal, setShowGroupModal] = useState(false);
-  const [savingGroup, setSavingGroup] = useState(false);
-  const [groupFormError, setGroupFormError] = useState('');
-  const [groupFormData, setGroupFormData] = useState({
+  // Quick Product Type Modal
+  const [showTypeModal, setShowTypeModal] = useState(false);
+  const [savingType, setSavingType] = useState(false);
+  const [typeFormError, setTypeFormError] = useState('');
+  const [typeFormData, setTypeFormData] = useState({
     groupName: '',
-    groupCode: '',
+    category: 'Sanitaryware',
+    subTypes: [],
+    subTypeInput: '',
     description: '',
     status: 'Active'
   });
 
+  // Load masters & edit product
   useEffect(() => {
     Promise.all([
-      getCompanies(),
-      getProductGroups(),
-      getUnits(),
-      getVendors()
+      getCompanies().catch(() => []),
+      getProductGroups().catch(() => []),
+      getUnits().catch(() => []),
+      getVendors().catch(() => [])
     ]).then(([comps, grps, units, vends]) => {
-      const validComps = Array.isArray(comps) ? comps : [];
-      const validGrps = Array.isArray(grps) ? grps : [];
-      const validUnits = Array.isArray(units) ? units : [];
-      const validVends = Array.isArray(vends) ? vends : [];
+      const validComps = Array.isArray(comps) ? comps : (comps?.data || []);
+      const validGrps = Array.isArray(grps) && grps.length > 0 ? grps : DEFAULT_PRODUCT_TYPES;
+      const validUnits = Array.isArray(units) ? units : (units?.data || []);
+      const validVends = Array.isArray(vends) ? vends : (vends?.data || []);
 
       setCompanies(validComps);
       setProductGroups(validGrps);
@@ -118,2156 +149,922 @@ export const ProductForm = () => {
       setVendors(validVends);
 
       if (!isEdit) {
-        setFormData(prev => {
-          const defaultComp = validComps[0];
-          const defaultGrp = validGrps[0];
-          const defaultUnit = validUnits[0];
-          const defaultVend = validVends[0];
-
-          const compName = prev.company || defaultComp?.companyName || defaultComp?.name || '';
-          const compId = prev.companyId || defaultComp?._id || defaultComp?.id || '';
-          const grpName = prev.productGroup || defaultGrp?.groupName || defaultGrp?.name || '';
-          const grpId = prev.productGroupId || defaultGrp?._id || defaultGrp?.id || '';
-          const unitName = prev.unit || defaultUnit?.unitCode || defaultUnit?.unitName || '';
-          const unitId = prev.unitId || defaultUnit?._id || defaultUnit?.id || '';
-          const vendName = prev.vendor || defaultVend?.vendorName || defaultVend?.name || '';
-          const vendId = prev.vendorId || defaultVend?._id || defaultVend?.id || '';
-
-          const generatedSku = prev.sku || generateAutoSku(compName, grpName, prev.productName);
-
-          return {
-            ...prev,
-            company: compName,
-            companyId: compId,
-            productGroup: grpName,
-            productGroupId: grpId,
-            unit: unitName,
-            unitId: unitId,
-            vendor: vendName,
-            vendorId: vendId,
-            sku: generatedSku
-          };
-        });
+        // Set smart defaults
+        const defaultUnit = validUnits.find(u => u.unitCode === 'PCS' || u.unitName?.toLowerCase().includes('piece')) || validUnits[0];
+        const defaultComp = validComps.find(c => c.companyName?.toUpperCase() === 'ROCA') || validComps[0];
+        
+        setFormData(prev => ({
+          ...prev,
+          unitId: defaultUnit?._id || defaultUnit?.id || '',
+          unit: defaultUnit?.unitName || 'Pcs',
+          companyId: defaultComp?._id || defaultComp?.id || '',
+          company: defaultComp?.companyName || 'ROCA'
+        }));
       }
-    }).catch(err => {
-      console.error('Failed to load master data from live backend:', err);
     });
-  }, [isEdit]);
+  }, []);
 
-  // Automatic SKU Generator Logic
-  const extractNameCode = (productName) => {
-    if (!productName) return Math.floor(1000 + Math.random() * 9000).toString();
-    const dimMatch = productName.match(/(\d{2,4})\s*[xX*]\s*(\d{2,4})/);
-    if (dimMatch) {
-      return `${dimMatch[1].slice(-2)}${dimMatch[2].slice(-2)}`;
+  // Load product if editing
+  useEffect(() => {
+    if (!isEdit) return;
+    setLoading(true);
+    getProductById(id)
+      .then(res => {
+        const p = res.data || res;
+        if (!p) return;
+
+        const cat = p.category || (p.productGroup?.category) || 'Sanitaryware';
+        const isTile = cat === 'Tiles';
+
+        setFormData({
+          productName: p.productName || '',
+          company: p.company?.companyName || p.company || '',
+          companyId: p.company?._id || p.company?.id || (typeof p.company === 'string' ? p.company : ''),
+          vendor: p.vendor?.vendorName || p.vendor || '',
+          vendorId: p.vendor?._id || p.vendor?.id || (typeof p.vendor === 'string' ? p.vendor : ''),
+          category: cat,
+          productGroup: p.productGroup?.groupName || p.productGroup || p.productType || '',
+          productGroupId: p.productGroup?._id || p.productGroup?.id || '',
+          productType: p.productType || p.productGroup?.groupName || '',
+          productSubType: p.productSubType || '',
+          rangeOrSize: p.rangeOrSize || (isTile ? p.size : p.range) || '',
+          range: p.range || '',
+          size: p.size || '',
+          colourName: p.colourName || p.color || 'White',
+          finish: p.finish || 'Glossy',
+          fullDescription: p.fullDescription || p.description || '',
+          piecesPerBox: p.piecesPerBox || '',
+          sqftPerBox: p.sqftPerBox || '',
+          weightPerBox: p.weightPerBox || '',
+          hsnCode: p.hsnCode || (isTile ? '69072100' : '69109000'),
+          sku: p.companySkuCode || p.sku || '',
+          vendorSku: p.vendorSkuCode || '',
+          companySku: p.companySkuCode || '',
+          unit: p.unit?.unitName || '',
+          unitId: p.unit?._id || p.unit?.id || '',
+          image: p.productImage || '',
+          gstPercent: p.gstPct || 18,
+          igstPercent: p.igstPct || 18,
+          cgstPercent: p.cgstPct || 9,
+          sgstPercent: p.sgstPct || 9,
+          cessPercent: p.cessPct || 0,
+          mrp: p.mrp || '',
+          purchaseRate: p.purchaseRate || '',
+          costRate: p.costRate || '',
+          salePrice: p.salePrice || '',
+          saleDiscount: p.saleDiscount || 0,
+          openingStock: p.openingStock || 0,
+          openingStockValue: p.openingStockValue || 0,
+          defaultQty: p.defaultQuantity || 1,
+          reorderLevel: p.reorderAlertQty || 10,
+          alertStockQty: p.reorderAlertQty || 10,
+          status: p.isActive !== false ? 'Active' : 'Inactive'
+        });
+        setIsSkuManuallyEdited(true);
+      })
+      .catch(err => {
+        console.error('Error fetching product:', err);
+        setFormErrorSummary('Failed to load product details.');
+      })
+      .finally(() => setLoading(false));
+  }, [id, isEdit]);
+
+  const isTileCategory = formData.category === 'Tiles';
+
+  // Available SubTypes for the currently selected Product Type
+  const currentSubTypes = React.useMemo(() => {
+    if (!formData.productType) return [];
+    const matchedType = productGroups.find(
+      g => (g.groupName || g.typeName || '').toLowerCase() === formData.productType.toLowerCase()
+    );
+    return matchedType && Array.isArray(matchedType.subTypes) ? matchedType.subTypes : [];
+  }, [formData.productType, productGroups]);
+
+  // Handle Category Change (updates default HSN & unit automatically)
+  const handleCategoryChange = (newCat) => {
+    let newHsn = formData.hsnCode;
+    if (newCat === 'Tiles') {
+      newHsn = '69072100';
+    } else if (newCat === 'Sanitaryware') {
+      newHsn = '69109000';
+    } else if (newCat === 'Faucets' || newCat === 'Showers' || newCat === 'Allied') {
+      newHsn = '84818020';
     }
-    const words = productName.trim().split(/\s+/);
-    const cleanWord = words.find(w => w.length >= 3 && !['glazed', 'vitrified', 'tile', 'tiles'].includes(w.toLowerCase())) || words[0];
-    return cleanWord.replace(/[^a-zA-Z0-9]/g, '').substring(0, 4).toUpperCase() || '1001';
+
+    setFormData(prev => ({
+      ...prev,
+      category: newCat,
+      hsnCode: newHsn,
+      productType: '',
+      productSubType: ''
+    }));
   };
 
-  const extractGroupCode = (productGroup) => {
-    const groupWords = (productGroup || 'TILE').split(' ');
-    return groupWords.length > 1 
-      ? groupWords.map(w => w[0]).join('').substring(0, 3).toUpperCase()
-      : groupWords[0].substring(0, 3).toUpperCase();
-  };
-
-  const generateAutoSku = (company, productGroup, productName) => {
-    const brandCode = (company || 'GEN').replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'GEN';
-    const groupCode = extractGroupCode(productGroup);
-    const nameCode = extractNameCode(productName);
-    return `${brandCode}-${groupCode}-${nameCode}`;
-  };
-
-  const generateCompanySku = (company, productGroup, productName) => {
-    const brandCode = (company || 'GEN').replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'GEN';
-    const nameCode = extractNameCode(productName);
-    return `${brandCode}-${nameCode}`;
-  };
-
-  const generateVendorSku = (vendor, productGroup, productName) => {
-    const vendorCode = (vendor || 'VND').replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'VND';
-    const groupCode = extractGroupCode(productGroup);
-    const nameCode = extractNameCode(productName);
-    return `${vendorCode}-${groupCode}-${nameCode}`;
-  };
-
-  const handleOpenVendorModal = () => {
-    setVendorFormError('');
-    setVendorFormData({
-      vendorName: '',
-      mobile: '',
-      email: '',
-      gstNumber: '',
-      address: '',
-      status: 'Active'
-    });
-    setShowVendorModal(true);
-  };
-
-  const handleCreateVendorSubmit = async (e) => {
+  // Quick Create Company
+  const handleCreateCompany = async (e) => {
     e.preventDefault();
-    setVendorFormError('');
-
-    if (!vendorFormData.vendorName.trim()) {
-      setVendorFormError('Please enter Vendor / Supplier Name.');
-      return;
-    }
-
-    if (vendorFormData.mobile && !/^[0-9]{10}$/.test(vendorFormData.mobile.trim())) {
-      setVendorFormError('Mobile number must be a valid 10-digit number.');
-      return;
-    }
-
-    if (vendorFormData.gstNumber && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(vendorFormData.gstNumber.trim().toUpperCase())) {
-      setVendorFormError('Please enter a valid 15-character GSTIN (e.g. 24AAAAA0000A1Z5).');
-      return;
-    }
-
-    setSavingVendor(true);
-    try {
-      const newVend = await createVendor({
-        vendorName: vendorFormData.vendorName.trim(),
-        mobile: vendorFormData.mobile.trim() || undefined,
-        email: vendorFormData.email.trim().toLowerCase() || undefined,
-        gstNumber: vendorFormData.gstNumber.trim().toUpperCase() || undefined,
-        address: vendorFormData.address.trim() || undefined,
-        isActive: vendorFormData.status === 'Active'
-      });
-
-      const addedName = newVend?.vendorName || vendorFormData.vendorName.trim();
-      const addedId = newVend?._id || newVend?.id;
-
-      const refreshedVendors = await getVendors();
-      setVendors(refreshedVendors);
-
-      setFormData(prev => ({
-        ...prev,
-        vendor: addedName,
-        vendorId: addedId || prev.vendorId,
-        vendorSku: generateVendorSku(addedName, prev.productGroup, prev.productName)
-      }));
-      setSuccessToast(`Vendor "${addedName}" created successfully!`);
-      setTimeout(() => setSuccessToast(''), 3000);
-      setShowVendorModal(false);
-    } catch (err) {
-      setVendorFormError(err.message || 'Failed to create vendor.');
-    } finally {
-      setSavingVendor(false);
-    }
-  };
-
-  const handleOpenGroupModal = () => {
-    setGroupFormError('');
-    setGroupFormData({ groupName: '', groupCode: '', description: '', status: 'Active' });
-    setShowGroupModal(true);
-  };
-
-  const handleCreateGroupSubmit = async (e) => {
-    e.preventDefault();
-    setGroupFormError('');
-
-    if (!groupFormData.groupName.trim()) {
-      setGroupFormError('Please enter Product Group Name.');
-      return;
-    }
-
-    setSavingGroup(true);
-    try {
-      const newGrp = await createProductGroup({
-        groupName: groupFormData.groupName.trim(),
-        description: groupFormData.description.trim(),
-        status: groupFormData.status
-      });
-
-      const addedName = newGrp?.groupName || groupFormData.groupName.trim();
-      const addedId = newGrp?._id || newGrp?.id;
-
-      const refreshedGroups = await getProductGroups();
-      setProductGroups(refreshedGroups);
-
-      setFormData(prev => ({
-        ...prev,
-        productGroup: addedName,
-        productGroupId: addedId || prev.productGroupId,
-        sku: !isSkuManuallyEdited ? generateAutoSku(prev.company, addedName, prev.productName) : prev.sku,
-        companySku: generateCompanySku(prev.company, addedName, prev.productName),
-        vendorSku: generateVendorSku(prev.vendor, addedName, prev.productName)
-      }));
-      setShowGroupModal(false);
-      setSuccessToast(`Product Group "${addedName}" added.`);
-      setTimeout(() => setSuccessToast(''), 3000);
-    } catch (err) {
-      setGroupFormError(err.message || 'Failed to create product group.');
-    } finally {
-      setSavingGroup(false);
-    }
-  };
-
-  const handleOpenCompanyModal = () => {
-    setCompanyFormError('');
-    setCompanyFormData({ companyName: '', code: '', isOwnCompany: false, status: 'Active' });
-    setShowCompanyModal(true);
-  };
-
-  const handleCreateCompanySubmit = async (e) => {
-    e.preventDefault();
-    setCompanyFormError('');
-
     if (!companyFormData.companyName.trim()) {
-      setCompanyFormError('Please enter Company / Brand Name.');
+      setCompanyFormError('Company Name is required.');
       return;
     }
-
     setSavingCompany(true);
+    setCompanyFormError('');
     try {
-      const newComp = await createCompany({
-        companyName: companyFormData.companyName.trim(),
-        isOwnCompany: companyFormData.isOwnCompany,
-        status: companyFormData.status
-      });
-
-      const addedName = newComp?.companyName || companyFormData.companyName.trim();
-      const addedId = newComp?._id || newComp?.id;
-
-      const refreshedCompanies = await getCompanies();
-      setCompanies(refreshedCompanies);
-
+      const res = await createCompany(companyFormData);
+      const newComp = res.data || res;
+      setCompanies(prev => [...prev, newComp]);
       setFormData(prev => ({
         ...prev,
-        company: addedName,
-        companyId: addedId || prev.companyId,
-        sku: !isSkuManuallyEdited ? generateAutoSku(addedName, prev.productGroup, prev.productName) : prev.sku,
-        companySku: generateCompanySku(addedName, prev.productGroup, prev.productName),
-        vendorSku: generateVendorSku(prev.vendor, prev.productGroup, prev.productName)
+        companyId: newComp._id || newComp.id,
+        company: newComp.companyName
       }));
-      setSuccessToast(`Company / Brand "${addedName}" created successfully!`);
-      setTimeout(() => setSuccessToast(''), 3000);
       setShowCompanyModal(false);
+      setCompanyFormData({ companyName: '', code: '', isOwnCompany: false, status: 'Active' });
     } catch (err) {
-      setCompanyFormError(err.message || 'Failed to create company.');
+      setCompanyFormError(err.response?.data?.message || 'Failed to create company.');
     } finally {
       setSavingCompany(false);
     }
   };
 
-  // Real-time Auto SKU, Company SKU & Vendor SKU Update when Brand, Vendor, Product Group, or Product Name changes
-  useEffect(() => {
-    if (!isEdit) {
-      const autoSku = generateAutoSku(formData.company, formData.productGroup, formData.productName);
-      const autoCompanySku = generateCompanySku(formData.company, formData.productGroup, formData.productName);
-      const autoVendorSku = generateVendorSku(formData.vendor, formData.productGroup, formData.productName);
-
+  // Quick Create Product Type
+  const handleCreateType = async (e) => {
+    e.preventDefault();
+    if (!typeFormData.groupName.trim()) {
+      setTypeFormError('Product Type Name is required.');
+      return;
+    }
+    setSavingType(true);
+    setTypeFormError('');
+    try {
+      const res = await createProductGroup({
+        groupName: typeFormData.groupName.trim(),
+        category: typeFormData.category,
+        subTypes: typeFormData.subTypes,
+        description: typeFormData.description,
+        isActive: typeFormData.status === 'Active'
+      });
+      const newType = res.data || res;
+      setProductGroups(prev => [...prev, newType]);
       setFormData(prev => ({
         ...prev,
-        sku: !isSkuManuallyEdited ? autoSku : prev.sku,
-        companySku: autoCompanySku,
-        vendorSku: autoVendorSku
+        productGroupId: newType._id || newType.id,
+        productType: newType.groupName,
+        category: newType.category || prev.category
       }));
+      setShowTypeModal(false);
+      setTypeFormData({ groupName: '', category: 'Sanitaryware', subTypes: [], subTypeInput: '', description: '', status: 'Active' });
+    } catch (err) {
+      setTypeFormError(err.response?.data?.message || 'Failed to create Product Type.');
+    } finally {
+      setSavingType(false);
     }
-  }, [formData.company, formData.vendor, formData.productGroup, formData.productName, isEdit, isSkuManuallyEdited]);
+  };
 
-  useEffect(() => {
-    if (isEdit) {
-      setLoading(true);
-      getProductById(id)
-        .then(data => {
-          if (data) {
-            const loadedVendor = typeof data.vendor === 'object' && data.vendor !== null
-              ? (data.vendor.vendorName || data.vendor.name || '')
-              : (data.vendorName || data.vendor || '');
-            const loadedVendorId = typeof data.vendor === 'object' && data.vendor !== null
-              ? (data.vendor._id || data.vendor.id || '')
-              : (data.vendorId || (typeof data.vendor === 'string' && data.vendor.length === 24 ? data.vendor : ''));
-
-            setFormData(prev => ({
-              ...prev,
-              ...data,
-              vendor: loadedVendor || prev.vendor,
-              vendorId: loadedVendorId || prev.vendorId,
-              companyId: data.companyId || prev.companyId,
-              productGroupId: data.productGroupId || prev.productGroupId,
-              unitId: data.unitId || prev.unitId,
-              gstPercent: data.gstPercent ?? 18,
-              igstPercent: data.igstPercent ?? data.gstPercent ?? 18,
-              cgstPercent: data.cgstPercent ?? (data.gstPercent ? data.gstPercent / 2 : 9),
-              sgstPercent: data.sgstPercent ?? (data.gstPercent ? data.gstPercent / 2 : 9)
-            }));
-            if (data.image && data.image.startsWith('http')) {
-              setUploadMode('url');
-            }
-            setIsSkuManuallyEdited(true);
-          }
-        })
-        .catch(err => {
-          console.error(err);
-          setFormErrorSummary('Failed to load product details.');
-        })
-        .finally(() => setLoading(false));
-    }
-  }, [id, isEdit]);
-
-  // Image Upload Handler with Canvas Compression (keeps size < 100KB, avoiding 413 Content Too Large)
-  const handleFileSelect = (file) => {
+  // Image Upload handler
+  const handleImageFile = (e) => {
+    const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setErrors(prev => ({ ...prev, image: 'Please select a valid image file (JPG, PNG, WebP, etc.).' }));
-      return;
-    }
-    if (file.size > 15 * 1024 * 1024) {
-      setErrors(prev => ({ ...prev, image: 'Image size should be less than 15MB.' }));
-      return;
-    }
-
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const rawDataUrl = e.target?.result;
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          const maxDim = 800;
-          let width = img.width;
-          let height = img.height;
-          if (width > height && width > maxDim) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else if (height > maxDim) {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.75);
-          setFormData(prev => ({ ...prev, image: compressedDataUrl }));
-        } catch (canvasErr) {
-          setFormData(prev => ({ ...prev, image: rawDataUrl }));
-        }
-        setErrors(prev => ({ ...prev, image: '' }));
-        setTouched(prev => ({ ...prev, image: true }));
-      };
-      img.onerror = () => {
-        setFormData(prev => ({ ...prev, image: rawDataUrl }));
-        setErrors(prev => ({ ...prev, image: '' }));
-        setTouched(prev => ({ ...prev, image: true }));
-      };
-      img.src = rawDataUrl;
+    reader.onload = () => {
+      setFormData(prev => ({ ...prev, image: reader.result }));
     };
     reader.readAsDataURL(file);
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileSelect(e.dataTransfer.files[0]);
-    }
-  };
-
-  // Field Level Validation Rule Engine
-  const validateField = (name, value, allData = formData) => {
-    let err = '';
-
-    switch (name) {
-      case 'productName':
-        if (!value || !value.toString().trim()) {
-          err = 'Product Name is required.';
-        } else if (value.toString().trim().length < 3) {
-          err = 'Product Name must be at least 3 characters.';
-        }
-        break;
-
-      case 'sku':
-        if (!value || !value.toString().trim()) {
-          err = 'System SKU is required.';
-        } else if (!/^[A-Za-z0-9\-_/. &@#+]+$/.test(value.toString().trim())) {
-          err = 'SKU contains invalid characters. Use letters, numbers, hyphens, or slashes.';
-        }
-        break;
-
-      case 'company':
-        if (!value) err = 'Company / Brand selection is required.';
-        break;
-
-      case 'productGroup':
-        if (!value) err = 'Product Group selection is required.';
-        break;
-
-      case 'hsnCode':
-        if (value && !/^\d{4,8}$/.test(value.toString().trim())) {
-          err = 'HSN Code must be between 4 and 8 numeric digits.';
-        }
-        break;
-
-      case 'unit':
-        if (!value) err = 'Measurement Unit is required.';
-        break;
-
-      case 'salePrice':
-        if (value === '' || value === null || isNaN(value)) {
-          err = 'Sale Price is required.';
-        } else if (Number(value) <= 0) {
-          err = 'Sale Price must be greater than ₹0.';
-        }
-        break;
-
-      case 'mrp':
-        if (value !== '' && Number(value) < 0) {
-          err = 'MRP cannot be negative.';
-        } else if (value !== '' && Number(value) > 0 && Number(value) < Number(allData.salePrice || 0)) {
-          err = 'MRP should generally be equal to or greater than Sale Price.';
-        }
-        break;
-
-      case 'purchaseRate':
-        if (value !== '' && Number(value) < 0) {
-          err = 'Purchase rate cannot be negative.';
-        }
-        break;
-
-      case 'costRate':
-        if (value !== '' && Number(value) < 0) {
-          err = 'Cost rate cannot be negative.';
-        }
-        break;
-
-      case 'gstPercent':
-        if (value === '' || isNaN(value) || Number(value) < 0 || Number(value) > 100) {
-          err = 'GST % must be between 0% and 100%.';
-        }
-        break;
-
-      case 'image':
-        if (value && uploadMode === 'url' && !/^(https?:\/\/|\/|\.\/)[^\s]+$/i.test(value.trim())) {
-          err = 'Image must be a valid HTTP/HTTPS URL or path.';
-        }
-        break;
-
-      default:
-        break;
-    }
-
-    return err;
-  };
-
-  const validateAll = () => {
-    const newErrors = {};
-    const fieldsToValidate = ['productName', 'sku', 'company', 'productGroup', 'hsnCode', 'unit', 'salePrice', 'mrp', 'purchaseRate', 'gstPercent', 'image'];
-    
-    fieldsToValidate.forEach(field => {
-      const errorMsg = validateField(field, formData[field], formData);
-      if (errorMsg) {
-        newErrors[field] = errorMsg;
-      }
-    });
-
-    setErrors(newErrors);
-    return newErrors;
-  };
-
-  const NUMERIC_FIELDS = [
-    'gstPercent', 'cessPercent', 'mrp', 'purchaseRate', 'costRate',
-    'salePrice', 'saleDiscount', 'openingStock', 'openingStockValue',
-    'defaultQty', 'reorderLevel', 'alertStockQty'
-  ];
-
-  const handleNumberKeyDown = (e) => {
-    // Completely disallow minus sign (-), exponential (e/E), plus (+)
-    if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
-      e.preventDefault();
-    }
-  };
-
-  const handleNumberFocus = (e) => {
-    if (e.target) e.target.select();
-  };
-
-  const handleChange = (e) => {
-    const { name, value, type } = e.target;
-    let parsedVal = value;
-
-    if (NUMERIC_FIELDS.includes(name) || type === 'number') {
-      // Disallow minus sign, alphabets, and symbols; allow only digits and single decimal dot
-      let clean = String(value).replace(/[^0-9.]/g, '');
-      const parts = clean.split('.');
-      if (parts.length > 2) {
-        clean = parts[0] + '.' + parts.slice(1).join('');
-      }
-      // Strip leading zeros before digits (e.g. "05" -> "5", but keep "0.5" or "0")
-      if (/^0[0-9]/.test(clean)) {
-        clean = clean.replace(/^0+/, '');
-        if (clean === '' || clean.startsWith('.')) clean = '0' + clean;
-      }
-      parsedVal = clean;
-    }
-
-    setFormData(prev => {
-      const updated = { ...prev, [name]: parsedVal };
-
-      // Auto Tax Synchronization when GST% changes
-      if (name === 'gstPercent' && parsedVal !== '') {
-        const gstNum = Number(parsedVal) || 0;
-        updated.igstPercent = gstNum;
-        updated.cgstPercent = Number((gstNum / 2).toFixed(2));
-        updated.sgstPercent = Number((gstNum / 2).toFixed(2));
-      }
-
-      // Auto Cost Rate sync if purchaseRate updated and costRate untouched
-      if (name === 'purchaseRate' && (!prev.costRate || prev.costRate === prev.purchaseRate)) {
-        updated.costRate = parsedVal;
-      }
-
-      // Auto Opening Stock Value calculation
-      if (name === 'openingStock' || name === 'costRate' || name === 'purchaseRate') {
-        const qty = name === 'openingStock' ? Number(parsedVal || 0) : Number(prev.openingStock || 0);
-        const rate = name === 'costRate' ? Number(parsedVal || 0) : Number(updated.costRate || updated.purchaseRate || 0);
-        updated.openingStockValue = (qty * rate).toFixed(2);
-      }
-
-      // Re-validate current field in real time
-      if (touched[name]) {
-        const err = validateField(name, parsedVal, updated);
-        setErrors(prevErr => ({ ...prevErr, [name]: err }));
-      }
-
-      return updated;
-    });
-  };
-
-  const handleBlur = (e) => {
-    const { name, value } = e.target;
-    setTouched(prev => ({ ...prev, [name]: true }));
-    const err = validateField(name, value, formData);
-    setErrors(prevErr => ({ ...prevErr, [name]: err }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormErrorSummary('');
 
-    // Mark all inputs as touched for validation highlight
-    const allTouched = Object.keys(formData).reduce((acc, key) => {
-      acc[key] = true;
-      return acc;
-    }, {});
-    setTouched(allTouched);
-
-    const validationErrors = validateAll();
-    const firstErrorKey = Object.keys(validationErrors).find(key => validationErrors[key]);
-
-    if (firstErrorKey) {
-      setFormErrorSummary('Please correct the highlighted errors in the form before saving.');
-      // Auto-focus and auto-scroll directly to the first error field
-      setTimeout(() => {
-        const errorInput = document.querySelector(`[name="${firstErrorKey}"]`) || document.querySelector(`#${firstErrorKey}`);
-        if (errorInput) {
-          errorInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          if (typeof errorInput.focus === 'function') {
-            errorInput.focus();
-          }
-        } else {
-          const banner = document.querySelector('.error-summary-banner') || document.querySelector('[role="alert"]');
-          if (banner) {
-            banner.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          } else {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }
-        }
-      }, 50);
+    if (!formData.productName.trim()) {
+      setFormErrorSummary('Product Name is required.');
+      return;
+    }
+    if (!formData.sku.trim()) {
+      setFormErrorSummary('Product SKU / Code is required.');
+      return;
+    }
+    if (!formData.unitId) {
+      setFormErrorSummary('Please select a Unit of Measurement.');
       return;
     }
 
     setSaving(true);
     try {
-      const isMongoId = (v) => typeof v === 'string' && /^[0-9a-fA-F]{24}$/.test(v.trim());
-      const matchedCompany = companies.find(c => (c.companyName || c.name) === formData.company || c.id === formData.company || c._id === formData.company);
-      const matchedGroup = productGroups.find(g => (g.groupName || g.name) === formData.productGroup || g.id === formData.productGroup || g._id === formData.productGroup);
-      const matchedUnit = availableUnits.find(u => (u.unitCode || u.unitName) === formData.unit || u.id === formData.unit || u._id === formData.unit);
-      const matchedVendor = vendors.find(v => (v.vendorName || v.name) === formData.vendor || v.id === formData.vendor || v._id === formData.vendor);
+      const rangeOrSizeVal = isTileCategory ? (formData.size || formData.rangeOrSize) : (formData.range || formData.rangeOrSize);
 
-      const resolvedCompanyId = isMongoId(matchedCompany?._id) ? matchedCompany._id : (isMongoId(matchedCompany?.id) ? matchedCompany.id : (isMongoId(formData.companyId) ? formData.companyId : undefined));
-      const resolvedGroupId = isMongoId(matchedGroup?._id) ? matchedGroup._id : (isMongoId(matchedGroup?.id) ? matchedGroup.id : (isMongoId(formData.productGroupId) ? formData.productGroupId : undefined));
-      const resolvedUnitId = isMongoId(matchedUnit?._id) ? matchedUnit._id : (isMongoId(matchedUnit?.id) ? matchedUnit.id : (isMongoId(formData.unitId) ? formData.unitId : undefined));
-      const resolvedVendorId = isMongoId(matchedVendor?._id) ? matchedVendor._id : (isMongoId(matchedVendor?.id) ? matchedVendor.id : (isMongoId(formData.vendorId) ? formData.vendorId : (isMongoId(formData.vendor) ? formData.vendor : undefined)));
-
-      const numOrZero = (val) => (val === '' || val === null || val === undefined ? 0 : Number(val) || 0);
-
-      const submissionData = {
-        ...formData,
-        gstPercent: numOrZero(formData.gstPercent),
-        igstPercent: numOrZero(formData.igstPercent),
-        cgstPercent: numOrZero(formData.cgstPercent),
-        sgstPercent: numOrZero(formData.sgstPercent),
-        cessPercent: numOrZero(formData.cessPercent),
-        mrp: numOrZero(formData.mrp),
-        purchaseRate: numOrZero(formData.purchaseRate),
-        costRate: numOrZero(formData.costRate),
-        salePrice: numOrZero(formData.salePrice),
-        saleDiscount: numOrZero(formData.saleDiscount),
-        openingStock: numOrZero(formData.openingStock),
-        openingStockValue: numOrZero(formData.openingStockValue),
-        defaultQty: numOrZero(formData.defaultQty) || 1,
-        reorderLevel: numOrZero(formData.reorderLevel) || 10,
-        alertStockQty: numOrZero(formData.alertStockQty) || 10,
-        companyId: resolvedCompanyId,
-        productGroupId: resolvedGroupId,
-        unitId: resolvedUnitId,
-        vendorId: resolvedVendorId,
-        vendor: resolvedVendorId
+      const payload = {
+        companySkuCode: formData.sku.trim(),
+        vendorSkuCode: formData.vendorSku?.trim() || null,
+        productName: formData.productName.trim(),
+        hsnCode: formData.hsnCode?.trim() || null,
+        company: formData.companyId || null,
+        vendor: formData.vendorId || null,
+        productGroup: formData.productGroupId || null,
+        category: formData.category,
+        productType: formData.productType || null,
+        productSubType: formData.productSubType || null,
+        rangeOrSize: rangeOrSizeVal || null,
+        range: isTileCategory ? null : (formData.range || rangeOrSizeVal || null),
+        size: isTileCategory ? (formData.size || rangeOrSizeVal || null) : null,
+        colourName: formData.colourName?.trim() || null,
+        finish: formData.finish?.trim() || null,
+        fullDescription: formData.fullDescription?.trim() || null,
+        piecesPerBox: isTileCategory && formData.piecesPerBox ? Number(formData.piecesPerBox) : null,
+        sqftPerBox: isTileCategory && formData.sqftPerBox ? Number(formData.sqftPerBox) : null,
+        weightPerBox: isTileCategory && formData.weightPerBox ? Number(formData.weightPerBox) : null,
+        productImage: formData.image || null,
+        unit: formData.unitId,
+        gstPct: Number(formData.gstPercent) || 0,
+        igstPct: Number(formData.igstPercent) || 0,
+        cgstPct: Number(formData.cgstPercent) || 0,
+        sgstPct: Number(formData.sgstPercent) || 0,
+        mrp: Number(formData.mrp) || 0,
+        purchaseRate: Number(formData.purchaseRate) || 0,
+        costRate: Number(formData.costRate || formData.purchaseRate) || 0,
+        salePrice: Number(formData.salePrice) || 0,
+        saleDiscount: Number(formData.saleDiscount) || 0,
+        openingStock: Number(formData.openingStock) || 0,
+        reorderAlertQty: Number(formData.reorderLevel || formData.alertStockQty) || 10,
+        isActive: formData.status === 'Active'
       };
 
       if (isEdit) {
-        await updateProduct(id, submissionData);
-        setSuccessToast('Product updated successfully!');
+        await updateProduct(id, payload);
+        setSuccessToast(`Product "${payload.productName}" updated successfully!`);
       } else {
-        await createProduct(submissionData);
-        setSuccessToast('Product created successfully!');
+        await createProduct(payload);
+        setSuccessToast(`Product "${payload.productName}" created successfully!`);
       }
 
       setTimeout(() => {
         navigate('/products');
-      }, 900);
+      }, 1500);
     } catch (err) {
-      console.error(err);
-      const msg = err?.response?.data?.message || err?.message || 'Failed to save product. Please try again.';
-      setFormErrorSummary(msg);
-      setTimeout(() => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }, 50);
+      console.error('Save product error:', err);
+      setFormErrorSummary(err.response?.data?.message || err.message || 'Failed to save product.');
     } finally {
       setSaving(false);
     }
   };
 
-  // Calculate Profit Margin %
-  const calculateMargin = () => {
-    const sale = Number(formData.salePrice || 0);
-    const cost = Number(formData.costRate || formData.purchaseRate || 0);
-    if (!sale || sale <= 0) return null;
-    const margin = ((sale - cost) / sale) * 100;
-    return margin.toFixed(1);
-  };
-
-  const profitMargin = calculateMargin();
-
   if (loading) {
     return (
-      <div style={{
-        maxWidth: '1020px',
-        margin: '2rem auto',
-        padding: '3rem',
-        textAlign: 'center',
-        background: '#ffffff',
-        borderRadius: '16px',
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)',
-        border: '1px solid #e2e8f0'
-      }}>
-        <RefreshCw size={32} style={{ animation: 'spin 1s linear infinite', color: '#2563eb', marginBottom: '1rem' }} />
-        <h3 style={{ color: '#0f172a', fontWeight: 600 }}>Loading product data...</h3>
+      <div style={{ textAlign: 'center', padding: '4rem', color: '#64748b' }}>
+        <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', color: '#2563eb' }} />
+        <p style={{ marginTop: '0.75rem', fontWeight: 600 }}>Loading product information...</p>
       </div>
     );
   }
 
   return (
-    <div style={{
-      maxWidth: '1020px',
-      margin: '0 auto',
-      paddingBottom: '3rem',
-      fontFamily: 'var(--font-family)'
-    }}>
-      {/* Success Toast */}
+    <div style={{ maxWidth: '1050px', margin: '0 auto', paddingBottom: '3.5rem' }}>
+      {/* Toast Notification */}
       {successToast && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.75rem',
-          backgroundColor: '#16a34a',
-          color: '#ffffff',
-          padding: '1rem 1.5rem',
-          borderRadius: '12px',
-          boxShadow: '0 10px 25px rgba(22, 163, 74, 0.3)',
-          fontWeight: 600,
-          animation: 'fadeInDown 0.3s ease'
-        }}>
-          <CheckCircle2 size={22} />
+        <div className="app-toast">
+          <CheckCircle2 size={18} style={{ color: '#4ade80' }} />
           <span>{successToast}</span>
         </div>
       )}
 
-      {/* Header & Navigation */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '1.75rem',
-        flexWrap: 'wrap',
-        gap: '1rem'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <Link 
-            to="/products" 
+      {/* Top Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button
+            type="button"
+            onClick={() => navigate('/products')}
             className="btn btn-secondary"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              borderRadius: '10px',
-              padding: '0.55rem 0.95rem',
-              fontWeight: 600,
-              fontSize: '0.875rem'
-            }}
+            style={{ borderRadius: '8px', padding: '0.45rem 0.8rem', fontSize: '0.825rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
           >
-            <ArrowLeft size={18} />
-            <span>Back</span>
-          </Link>
-
+            <ArrowLeft size={15} />
+            <span>Back to Products</span>
+          </button>
           <div>
-            <h1 style={{
-              fontSize: '1.6rem',
-              fontWeight: 800,
-              color: '#0f172a',
-              margin: 0,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.6rem'
-            }}>
-              {isEdit ? 'Edit Product' : 'Add New Product'}
+            <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+              {isEdit ? 'Edit Product & Specifications' : 'Add New Product'}
             </h1>
-            <p style={{ color: '#64748b', fontSize: '0.875rem', margin: '0.2rem 0 0 0' }}>
-              Configure master product details, GST tax rates, pricing and inventory alerts.
+            <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.15rem 0 0 0' }}>
+              Standardized Ceramic & Sanitaryware Product Entry according to Roca Portfolio Catalog.
             </p>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={saving}
+          className="btn btn-primary"
+          style={{ borderRadius: '9px', padding: '0.55rem 1.4rem', fontWeight: 700, fontSize: '0.875rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)' }}
+        >
+          <Save size={16} />
+          <span>{saving ? 'Saving...' : isEdit ? 'Update Product' : 'Save Product'}</span>
+        </button>
       </div>
 
-      {/* Top Form Error Summary */}
       {formErrorSummary && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '0.75rem',
-          padding: '1rem 1.25rem',
-          backgroundColor: '#fef2f2',
-          border: '1px solid #fecaca',
-          borderRadius: '12px',
-          color: '#991b1b',
-          fontSize: '0.9rem',
-          fontWeight: 500,
-          marginBottom: '1.5rem',
-          boxShadow: '0 2px 8px rgba(220, 38, 38, 0.08)'
-        }}>
-          <AlertCircle size={20} style={{ flexShrink: 0, marginTop: '2px', color: '#dc2626' }} />
-          <div>{formErrorSummary}</div>
+        <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', padding: '0.85rem 1.25rem', borderRadius: '10px', marginBottom: '1.5rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <AlertCircle size={18} />
+          <span>{formErrorSummary}</span>
         </div>
       )}
 
-      {/* Main Centered Form Container */}
-      <form onSubmit={handleSubmit} noValidate>
+      <form onSubmit={handleSubmit}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+          
+          {/* Section 1: Product Identification & Classification */}
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+            <h2 style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', margin: '0 0 1.25rem 0', display: 'flex', alignItems: 'center', gap: '0.45rem', paddingBottom: '0.65rem', borderBottom: '1px solid #f1f5f9' }}>
+              <Package size={18} style={{ color: '#2563eb' }} />
+              1. Product Identification & Category
+            </h2>
 
-        {/* 1. PRODUCT INFORMATION CARD */}
-        <div style={{
-          backgroundColor: '#ffffff',
-          borderRadius: '14px',
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
-          padding: '1.75rem',
-          marginBottom: '1.5rem'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.65rem',
-            paddingBottom: '1rem',
-            marginBottom: '1.5rem',
-            borderBottom: '1px solid #f1f5f9'
-          }}>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '8px',
-              backgroundColor: '#eff6ff',
-              color: '#2563eb',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Package size={20} />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                Product Information
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
-                Basic identification, SKU codes, manufacturer brand and categories
-              </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+              {/* Category Radio Buttons */}
+              <div>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                  Product Category <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginTop: '0.35rem' }}>
+                  {CATEGORIES.map(cat => {
+                    const isSelected = formData.category === cat;
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => handleCategoryChange(cat)}
+                        style={{
+                          backgroundColor: isSelected ? '#2563eb' : '#f8fafc',
+                          color: isSelected ? '#ffffff' : '#334155',
+                          border: isSelected ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                          borderRadius: '8px',
+                          padding: '0.35rem 0.8rem',
+                          fontSize: '0.8rem',
+                          fontWeight: isSelected ? 700 : 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {cat}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* SKU & Name */}
+              <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '0.85rem' }}>
+                <div>
+                  <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                    SKU / Code <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. RS893020001"
+                    value={formData.sku}
+                    onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                    style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem', fontFamily: 'monospace', fontWeight: 700 }}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                    Product Title / Name <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. W+W Wall Hung Water Closet and Basin Unit"
+                    value={formData.productName}
+                    onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
+                    style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600 }}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Company / Brand */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem', margin: 0 }}>
+                    Company / Brand <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowCompanyModal(true)}
+                    style={{ border: 'none', background: 'none', color: '#2563eb', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                  >
+                    + Quick Add Brand
+                  </button>
+                </div>
+                <select
+                  className="form-control"
+                  value={formData.companyId}
+                  onChange={(e) => {
+                    const c = companies.find(comp => (comp._id || comp.id) === e.target.value);
+                    setFormData({ ...formData, companyId: e.target.value, company: c?.companyName || '' });
+                  }}
+                  style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                >
+                  <option value="">Select Brand / Company</option>
+                  {companies.map(c => (
+                    <option key={c._id || c.id} value={c._id || c.id}>
+                      {c.companyName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Product Type & Product SubType */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem', margin: 0 }}>
+                      Product Type
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowTypeModal(true)}
+                      style={{ border: 'none', background: 'none', color: '#2563eb', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                    >
+                      + Add Type
+                    </button>
+                  </div>
+                  <select
+                    className="form-control"
+                    value={formData.productType}
+                    onChange={(e) => {
+                      const pt = productGroups.find(g => (g.groupName || g.typeName) === e.target.value);
+                      setFormData({
+                        ...formData,
+                        productType: e.target.value,
+                        productGroupId: pt?._id || pt?.id || '',
+                        productGroup: pt?.groupName || e.target.value,
+                        productSubType: ''
+                      });
+                    }}
+                    style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                  >
+                    <option value="">Select Type</option>
+                    {productGroups
+                      .filter(g => !formData.category || (g.category || 'Sanitaryware') === formData.category)
+                      .map((g, idx) => (
+                        <option key={g._id || g.id || idx} value={g.groupName || g.typeName}>
+                          {g.groupName || g.typeName}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                    Product SubType
+                  </label>
+                  {currentSubTypes.length > 0 ? (
+                    <select
+                      className="form-control"
+                      value={formData.productSubType}
+                      onChange={(e) => setFormData({ ...formData, productSubType: e.target.value })}
+                      style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                    >
+                      <option value="">Select SubType</option>
+                      {currentSubTypes.map((sub, idx) => (
+                        <option key={idx} value={sub}>{sub}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="e.g. Wall Hung WC / GVT"
+                      value={formData.productSubType}
+                      onChange={(e) => setFormData({ ...formData, productSubType: e.target.value })}
+                      style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Dynamic Field: Range vs Size (as specifically requested) */}
+              <div style={{ backgroundColor: '#f8fafc', padding: '0.85rem', borderRadius: '9px', border: '1px solid #e2e8f0' }}>
+                {isTileCategory ? (
+                  /* Tile Size & Dimensions */
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 800, fontSize: '0.825rem', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <Ruler size={16} style={{ color: '#2563eb' }} />
+                      Tile Size / Dimensions <span style={{ color: '#dc2626' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="e.g. 600x1200 mm, 800x1600 mm"
+                      value={formData.size || formData.rangeOrSize}
+                      onChange={(e) => setFormData({ ...formData, size: e.target.value, rangeOrSize: e.target.value })}
+                      style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '0.5rem' }}
+                    />
+                    {/* Quick Size Presets */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                      {TILE_SIZE_PRESETS.map((sz, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, size: sz, rangeOrSize: sz })}
+                          style={{
+                            fontSize: '0.7rem',
+                            padding: '0.15rem 0.5rem',
+                            borderRadius: '5px',
+                            border: '1px solid #cbd5e1',
+                            backgroundColor: (formData.size === sz || formData.rangeOrSize === sz) ? '#eff6ff' : '#ffffff',
+                            color: (formData.size === sz || formData.rangeOrSize === sz) ? '#2563eb' : '#475569',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {sz}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  /* Sanitaryware / Faucets Range & Collection */
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 800, fontSize: '0.825rem', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <Tag size={16} style={{ color: '#2563eb' }} />
+                      Range / Collection Name
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="e.g. MERIDIAN, INSIGNIA, W+W, THE GAP, ONA"
+                      value={formData.range || formData.rangeOrSize}
+                      onChange={(e) => setFormData({ ...formData, range: e.target.value, rangeOrSize: e.target.value })}
+                      style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '0.5rem' }}
+                    />
+                    {/* Quick Range Presets */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                      {SANITARY_RANGE_PRESETS.map((rg, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, range: rg, rangeOrSize: rg })}
+                          style={{
+                            fontSize: '0.7rem',
+                            padding: '0.15rem 0.5rem',
+                            borderRadius: '5px',
+                            border: '1px solid #cbd5e1',
+                            backgroundColor: (formData.range === rg || formData.rangeOrSize === rg) ? '#eff6ff' : '#ffffff',
+                            color: (formData.range === rg || formData.rangeOrSize === rg) ? '#2563eb' : '#475569',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {rg}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="form-grid" style={{ gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.25rem' }}>
-            
-            {/* Product Name */}
-            <div className="form-group" style={{ gridColumn: 'span 8' }}>
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                Product Name <span style={{ color: '#dc2626' }}>*</span>
-              </label>
-              <input
-                type="text"
-                name="productName"
-                className="form-control"
-                placeholder="e.g. Glazed Vitrified Tile 600x1200mm Statuario"
-                value={formData.productName}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                style={{
-                  height: '46px',
-                  borderRadius: '10px',
-                  borderColor: touched.productName && errors.productName ? '#f87171' : '#cbd5e1'
-                }}
-              />
-              {touched.productName && errors.productName && (
-                <div style={{ color: '#dc2626', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.2rem' }}>
-                  <AlertCircle size={14} /> <span>{errors.productName}</span>
+          {/* Section 2: Color, Finish, Specifications & Packaging */}
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+            <h2 style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', margin: '0 0 1.25rem 0', display: 'flex', alignItems: 'center', gap: '0.45rem', paddingBottom: '0.65rem', borderBottom: '1px solid #f1f5f9' }}>
+              <Palette size={18} style={{ color: '#0d9488' }} />
+              2. Design, Color & Technical Details
+            </h2>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+              {/* Color Name & Surface Finish */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+                <div>
+                  <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                    Colour / Finish Name
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. White, Glossy White, Matte Black, Chrome"
+                    value={formData.colourName}
+                    onChange={(e) => setFormData({ ...formData, colourName: e.target.value })}
+                    style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                  />
                 </div>
-              )}
-            </div>
 
-            {/* System SKU (Automatic Generation + Re-roll icon) */}
-            <div className="form-group" style={{ gridColumn: 'span 4' }}>
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155', marginBottom: '0.4rem', display: 'block' }}>
-                System SKU <span style={{ color: '#dc2626' }}>*</span>
-              </label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="text"
-                  name="sku"
-                  className="form-control"
-                  placeholder="Auto-generated SKU"
-                  value={formData.sku}
-                  onChange={(e) => {
-                    setIsSkuManuallyEdited(true);
-                    handleChange(e);
-                  }}
-                  onBlur={handleBlur}
-                  style={{
-                    height: '46px',
-                    borderRadius: '10px',
-                    fontFamily: 'monospace',
-                    fontWeight: 700,
-                    letterSpacing: '0.03em',
-                    paddingRight: '2.5rem',
-                    borderColor: touched.sku && errors.sku ? '#f87171' : '#cbd5e1'
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsSkuManuallyEdited(false);
-                    const auto = generateAutoSku(formData.company, formData.productGroup, formData.productName);
-                    setFormData(prev => ({ ...prev, sku: auto }));
-                  }}
-                  title="Re-generate automatic SKU code"
-                  style={{
-                    position: 'absolute',
-                    right: '10px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    border: 'none',
-                    background: 'none',
-                    color: '#2563eb',
-                    cursor: 'pointer',
-                    padding: '4px',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  <RefreshCw size={15} />
-                </button>
-              </div>
-              {touched.sku && errors.sku && (
-                <div style={{ color: '#dc2626', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.2rem' }}>
-                  <AlertCircle size={14} /> <span>{errors.sku}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Company / Brand */}
-            <div className="form-group" style={{ gridColumn: 'span 4' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155', margin: 0 }}>
-                  Company / Brand <span style={{ color: '#dc2626' }}>*</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={handleOpenCompanyModal}
-                  style={{
-                    border: '1px solid #bfdbfe',
-                    backgroundColor: '#eff6ff',
-                    color: '#2563eb',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.25rem',
-                    padding: '0.2rem 0.55rem',
-                    borderRadius: '6px',
-                    lineHeight: 1
-                  }}
-                  title="Create New Company Master Record"
-                >
-                  <Plus size={13} />
-                  <span>Create Company</span>
-                </button>
-              </div>
-              <select
-                name="company"
-                className="form-control"
-                value={formData.company}
-                onChange={(e) => {
-                  if (e.target.value === '__ADD_NEW__') {
-                    handleOpenCompanyModal();
-                  } else {
-                    const selectedName = e.target.value;
-                    const found = companies.find(c => (c.companyName || c.name) === selectedName || (c._id || c.id) === selectedName);
-                    const autoSku = !isSkuManuallyEdited ? generateAutoSku(selectedName, formData.productGroup, formData.productName) : formData.sku;
-                    const autoCompSku = generateCompanySku(selectedName, formData.productGroup, formData.productName);
-                    const autoVendSku = generateVendorSku(formData.vendor, formData.productGroup, formData.productName);
-
-                    setFormData(prev => ({
-                      ...prev,
-                      company: selectedName,
-                      companyId: found?._id || found?.id || prev.companyId,
-                      sku: autoSku,
-                      companySku: autoCompSku,
-                      vendorSku: autoVendSku
-                    }));
-                  }
-                }}
-                onBlur={handleBlur}
-                style={{ height: '46px', borderRadius: '10px' }}
-              >
-                {companies.length === 0 && <option value="">Loading live companies...</option>}
-                {companies.map(c => (
-                  <option key={c._id || c.id || c.companyName} value={c.companyName}>
-                    {c.companyName} {c.isOwnCompany ? '(Own)' : ''}
-                  </option>
-                ))}
-                <option value="__ADD_NEW__" style={{ fontWeight: 700, color: '#2563eb' }}>+ Add New Company...</option>
-              </select>
-            </div>
-
-            {/* Product Group */}
-            <div className="form-group" style={{ gridColumn: 'span 4' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155', margin: 0 }}>
-                  Product Group <span style={{ color: '#dc2626' }}>*</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={handleOpenGroupModal}
-                  style={{
-                    border: '1px solid #bfdbfe',
-                    backgroundColor: '#eff6ff',
-                    color: '#2563eb',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.25rem',
-                    padding: '0.2rem 0.55rem',
-                    borderRadius: '6px',
-                    lineHeight: 1
-                  }}
-                  title="Create New Product Group Record"
-                >
-                  <Plus size={13} />
-                  <span>Create Group</span>
-                </button>
-              </div>
-              <select
-                name="productGroup"
-                className="form-control"
-                value={formData.productGroup}
-                onChange={(e) => {
-                  if (e.target.value === '__ADD_NEW_GROUP__') {
-                    handleOpenGroupModal();
-                  } else {
-                    const selectedName = e.target.value;
-                    const found = productGroups.find(g => (g.groupName || g.name) === selectedName || (g._id || g.id) === selectedName);
-                    const autoSku = !isSkuManuallyEdited ? generateAutoSku(formData.company, selectedName, formData.productName) : formData.sku;
-                    const autoCompSku = generateCompanySku(formData.company, selectedName, formData.productName);
-                    const autoVendSku = generateVendorSku(formData.vendor, selectedName, formData.productName);
-
-                    setFormData(prev => ({
-                      ...prev,
-                      productGroup: selectedName,
-                      productGroupId: found?._id || found?.id || prev.productGroupId,
-                      sku: autoSku,
-                      companySku: autoCompSku,
-                      vendorSku: autoVendSku
-                    }));
-                  }
-                }}
-                onBlur={handleBlur}
-                style={{ height: '46px', borderRadius: '10px' }}
-              >
-                {productGroups.length === 0 && <option value="">Loading live groups...</option>}
-                {productGroups.map(g => (
-                  <option key={g._id || g.id || g.groupName} value={g.groupName}>{g.groupName}</option>
-                ))}
-                <option value="__ADD_NEW_GROUP__" style={{ fontWeight: 700, color: '#2563eb' }}>+ Add New Group...</option>
-              </select>
-            </div>
-
-            {/* Vendor / Supplier */}
-            <div className="form-group" style={{ gridColumn: 'span 4' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155', margin: 0 }}>
-                  Primary Vendor
-                </label>
-                <button
-                  type="button"
-                  onClick={handleOpenVendorModal}
-                  style={{
-                    border: '1px solid #bfdbfe',
-                    backgroundColor: '#eff6ff',
-                    color: '#2563eb',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.25rem',
-                    padding: '0.2rem 0.55rem',
-                    borderRadius: '6px',
-                    lineHeight: 1
-                  }}
-                  title="Create New Vendor Record"
-                >
-                  <Plus size={13} />
-                  <span>Create Vendor</span>
-                </button>
-              </div>
-              <select
-                name="vendor"
-                className="form-control"
-                value={formData.vendor}
-                onChange={(e) => {
-                  if (e.target.value === '__ADD_NEW_VENDOR__') {
-                    handleOpenVendorModal();
-                  } else {
-                    const selectedName = e.target.value;
-                    const found = vendors.find(v => (v.vendorName || v.name) === selectedName || (v._id || v.id) === selectedName);
-                    const autoVendSku = generateVendorSku(selectedName, formData.productGroup, formData.productName);
-
-                    setFormData(prev => ({
-                      ...prev,
-                      vendor: selectedName,
-                      vendorId: found?._id || found?.id || prev.vendorId,
-                      vendorSku: autoVendSku
-                    }));
-                  }
-                }}
-                style={{ height: '46px', borderRadius: '10px' }}
-              >
-                {vendors.length === 0 && <option value="">Loading live vendors...</option>}
-                {vendors.map(v => (
-                  <option key={v._id || v.id || v.vendorName} value={v.vendorName || v.name}>
-                    {v.vendorName || v.name}
-                  </option>
-                ))}
-                <option value="__ADD_NEW_VENDOR__" style={{ fontWeight: 700, color: '#2563eb' }}>+ Add New Vendor...</option>
-              </select>
-            </div>
-
-            {/* HSN Code */}
-            <div className="form-group" style={{ gridColumn: 'span 3' }}>
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                HSN Code
-              </label>
-              <input
-                type="text"
-                name="hsnCode"
-                className="form-control"
-                placeholder="69072100"
-                value={formData.hsnCode}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                style={{
-                  height: '46px',
-                  borderRadius: '10px',
-                  borderColor: touched.hsnCode && errors.hsnCode ? '#f87171' : '#cbd5e1'
-                }}
-              />
-              {touched.hsnCode && errors.hsnCode && (
-                <div style={{ color: '#dc2626', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.2rem' }}>
-                  <AlertCircle size={14} /> <span>{errors.hsnCode}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Measurement Unit */}
-            <div className="form-group" style={{ gridColumn: 'span 3' }}>
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                Measurement Unit <span style={{ color: '#dc2626' }}>*</span>
-              </label>
-              <select
-                name="unit"
-                className="form-control"
-                value={formData.unit}
-                onChange={(e) => {
-                  const selectedVal = e.target.value;
-                  const found = availableUnits.find(u => u.unitCode === selectedVal || u.unitName === selectedVal || (u._id || u.id) === selectedVal);
-                  setFormData(prev => ({
-                    ...prev,
-                    unit: selectedVal,
-                    unitId: found?._id || found?.id || prev.unitId
-                  }));
-                }}
-                style={{ height: '46px', borderRadius: '10px' }}
-              >
-                {availableUnits.length > 0 ? (
-                  availableUnits.map(u => (
-                    <option key={u._id || u.id || u.unitCode} value={u.unitCode}>
-                      {u.unitCode} ({u.unitName})
-                    </option>
-                  ))
-                ) : (
-                  <option value="">Loading live units...</option>
-                )}
-              </select>
-            </div>
-
-            {/* Vendor SKU */}
-            <div className="form-group" style={{ gridColumn: 'span 3' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155', margin: 0 }}>
-                  Vendor SKU
-                </label>
-              </div>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="text"
-                  name="vendorSku"
-                  className="form-control"
-                  placeholder="e.g. SHR-TILE-1001"
-                  value={formData.vendorSku}
-                  onChange={handleChange}
-                  style={{
-                    height: '46px',
-                    borderRadius: '10px',
-                    fontFamily: 'monospace',
-                    fontWeight: 600,
-                    letterSpacing: '0.02em',
-                    paddingRight: '2.5rem'
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const autoVendSku = generateVendorSku(formData.vendor, formData.productGroup, formData.productName);
-                    setFormData(prev => ({ ...prev, vendorSku: autoVendSku }));
-                  }}
-                  title="Re-generate Vendor SKU"
-                  style={{
-                    position: 'absolute',
-                    right: '10px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    border: 'none',
-                    background: 'none',
-                    color: '#2563eb',
-                    cursor: 'pointer',
-                    padding: '4px',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  <RefreshCw size={15} />
-                </button>
-              </div>
-            </div>
-
-            {/* Company SKU */}
-            <div className="form-group" style={{ gridColumn: 'span 3' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155', margin: 0 }}>
-                  Company SKU
-                </label>
-              </div>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="text"
-                  name="companySku"
-                  className="form-control"
-                  placeholder="e.g. KJR-1001"
-                  value={formData.companySku}
-                  onChange={handleChange}
-                  style={{
-                    height: '46px',
-                    borderRadius: '10px',
-                    fontFamily: 'monospace',
-                    fontWeight: 600,
-                    letterSpacing: '0.02em',
-                    paddingRight: '2.5rem'
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const autoCompSku = generateCompanySku(formData.company, formData.productGroup, formData.productName);
-                    setFormData(prev => ({ ...prev, companySku: autoCompSku }));
-                  }}
-                  title="Re-generate Company SKU"
-                  style={{
-                    position: 'absolute',
-                    right: '10px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    border: 'none',
-                    background: 'none',
-                    color: '#2563eb',
-                    cursor: 'pointer',
-                    padding: '4px',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  <RefreshCw size={15} />
-                </button>
-              </div>
-            </div>
-
-            {/* Product Image Uploader (File Upload / Drag & Drop / Image URL) */}
-            <div className="form-group" style={{ gridColumn: 'span 12' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                  Product Image
-                </label>
-                
-                {/* Upload Mode Switcher Tabs */}
-                <div style={{ display: 'flex', gap: '0.3rem', backgroundColor: '#f1f5f9', padding: '0.2rem', borderRadius: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setUploadMode('file')}
-                    style={{
-                      border: 'none',
-                      padding: '0.25rem 0.75rem',
-                      borderRadius: '6px',
-                      fontSize: '0.78rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.3rem',
-                      backgroundColor: uploadMode === 'file' ? '#ffffff' : 'transparent',
-                      color: uploadMode === 'file' ? '#2563eb' : '#64748b',
-                      boxShadow: uploadMode === 'file' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                    }}
+                <div>
+                  <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                    Surface Texture
+                  </label>
+                  <select
+                    className="form-control"
+                    value={formData.finish}
+                    onChange={(e) => setFormData({ ...formData, finish: e.target.value })}
+                    style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
                   >
-                    <UploadCloud size={13} />
-                    <span>Upload File</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setUploadMode('url')}
-                    style={{
-                      border: 'none',
-                      padding: '0.25rem 0.75rem',
-                      borderRadius: '6px',
-                      fontSize: '0.78rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.3rem',
-                      backgroundColor: uploadMode === 'url' ? '#ffffff' : 'transparent',
-                      color: uploadMode === 'url' ? '#2563eb' : '#64748b',
-                      boxShadow: uploadMode === 'url' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                    }}
-                  >
-                    <LinkIcon size={13} />
-                    <span>Image URL</span>
-                  </button>
+                    <option value="Glossy">Glossy / Mirror Polish</option>
+                    <option value="Satin Matte">Satin Matte</option>
+                    <option value="High Gloss Vitrified">High Gloss Vitrified</option>
+                    <option value="Rustic / Textured">Rustic / Textured</option>
+                    <option value="Chrome Plated">Chrome Plated</option>
+                    <option value="PVD Rose Gold">PVD Rose Gold</option>
+                    <option value="PVD Matte Black">PVD Matte Black</option>
+                  </select>
                 </div>
               </div>
 
-              {/* Display Attached Image Preview Box */}
-              {formData.image ? (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1.25rem',
-                  padding: '1rem 1.25rem',
-                  backgroundColor: '#f8fafc',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '12px'
-                }}>
-                  <div style={{
-                    width: '85px',
-                    height: '85px',
-                    borderRadius: '10px',
-                    overflow: 'hidden',
-                    border: '1px solid #cbd5e1',
-                    backgroundColor: '#ffffff',
-                    flexShrink: 0
-                  }}>
-                    <img
-                      src={formData.image}
-                      alt="Product Preview"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1615873968403-89e068629265?w=200&auto=format&fit=crop&q=60'; }}
-                    />
-                  </div>
-
-                  <div style={{ flex: 1 }}>
-                    <h4 style={{ margin: '0 0 0.2rem 0', fontSize: '0.925rem', fontWeight: 700, color: '#0f172a' }}>
-                      Product Image Attached
-                    </h4>
-                    <p style={{ margin: 0, fontSize: '0.78rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '500px' }}>
-                      {formData.image.startsWith('data:') ? 'Local file uploaded successfully (Base64 format)' : formData.image}
-                    </p>
-
-                    <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.65rem' }}>
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        style={{
-                          padding: '0.35rem 0.75rem',
-                          fontSize: '0.8rem',
-                          fontWeight: 600,
-                          color: '#2563eb',
-                          backgroundColor: '#eff6ff',
-                          border: '1px solid #bfdbfe',
-                          borderRadius: '7px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.3rem'
-                        }}
-                      >
-                        <FileImage size={13} /> Change Image
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, image: '' }))}
-                        style={{
-                          padding: '0.35rem 0.75rem',
-                          fontSize: '0.8rem',
-                          fontWeight: 600,
-                          color: '#dc2626',
-                          backgroundColor: '#fef2f2',
-                          border: '1px solid #fecaca',
-                          borderRadius: '7px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.3rem'
-                        }}
-                      >
-                        <Trash2 size={13} /> Remove
-                      </button>
-                    </div>
-                  </div>
+              {/* HSN Code & Unit */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+                <div>
+                  <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                    HSN Code <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="69109000 / 69072100"
+                    value={formData.hsnCode}
+                    onChange={(e) => setFormData({ ...formData, hsnCode: e.target.value })}
+                    style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem', fontFamily: 'monospace' }}
+                    required
+                  />
                 </div>
-              ) : (
-                <>
-                  {uploadMode === 'file' ? (
-                    <div
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
-                      onDrop={handleDrop}
-                      onClick={() => fileInputRef.current?.click()}
-                      style={{
-                        border: `2px dashed ${dragActive ? '#2563eb' : '#cbd5e1'}`,
-                        borderRadius: '12px',
-                        padding: '1.75rem 1rem',
-                        textAlign: 'center',
-                        backgroundColor: dragActive ? '#eff6ff' : '#f8fafc',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      <UploadCloud size={36} style={{ color: dragActive ? '#2563eb' : '#94a3b8', marginBottom: '0.4rem' }} />
-                      <p style={{ margin: 0, fontWeight: 600, color: '#334155', fontSize: '0.9rem' }}>
-                        Click to browse file or drag & drop product image here
-                      </p>
-                      <p style={{ margin: '0.25rem 0 0 0', color: '#94a3b8', fontSize: '0.78rem' }}>
-                        Supports JPG, PNG, WebP or GIF (Max 5MB)
-                      </p>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+
+                <div>
+                  <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                    Unit of Measurement <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
+                  <select
+                    className="form-control"
+                    value={formData.unitId}
+                    onChange={(e) => {
+                      const u = availableUnits.find(unit => (unit._id || unit.id) === e.target.value);
+                      setFormData({ ...formData, unitId: e.target.value, unit: u?.unitName || '' });
+                    }}
+                    style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                    required
+                  >
+                    <option value="">Select Unit</option>
+                    {availableUnits.map(u => (
+                      <option key={u._id || u.id} value={u._id || u.id}>
+                        {u.unitName} ({u.unitCode})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Tile Packaging (Shown for Tiles) */}
+              {isTileCategory && (
+                <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '9px', padding: '0.85rem' }}>
+                  <label className="form-label" style={{ fontWeight: 800, fontSize: '0.825rem', color: '#166534', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.5rem' }}>
+                    <Box size={16} style={{ color: '#16a34a' }} />
+                    Tile Box Packaging & Coverage Specifications
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                    <div>
+                      <span style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 600 }}>Pcs / Box</span>
                       <input
-                        type="text"
-                        name="image"
+                        type="number"
                         className="form-control"
-                        placeholder="Paste image URL (e.g. https://images.unsplash.com/...)"
-                        value={formData.image}
-                        onChange={handleChange}
-                        onBlur={handleBlur}
-                        style={{ height: '46px', borderRadius: '10px' }}
+                        placeholder="e.g. 2"
+                        value={formData.piecesPerBox}
+                        onChange={(e) => setFormData({ ...formData, piecesPerBox: e.target.value })}
+                        style={{ height: '34px', borderRadius: '6px', fontSize: '0.8rem', marginTop: '0.2rem' }}
                       />
                     </div>
-                  )}
-                </>
-              )}
-
-              {/* Hidden File Input */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
-                style={{ display: 'none' }}
-              />
-
-              {touched.image && errors.image && (
-                <div style={{ color: '#dc2626', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.35rem' }}>
-                  <AlertCircle size={14} /> <span>{errors.image}</span>
+                    <div>
+                      <span style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 600 }}>Sq.Ft / Box</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="form-control"
+                        placeholder="e.g. 15.5"
+                        value={formData.sqftPerBox}
+                        onChange={(e) => setFormData({ ...formData, sqftPerBox: e.target.value })}
+                        style={{ height: '34px', borderRadius: '6px', fontSize: '0.8rem', marginTop: '0.2rem' }}
+                      />
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 600 }}>Weight (Kg)</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        className="form-control"
+                        placeholder="e.g. 28"
+                        value={formData.weightPerBox}
+                        onChange={(e) => setFormData({ ...formData, weightPerBox: e.target.value })}
+                        style={{ height: '34px', borderRadius: '6px', fontSize: '0.8rem', marginTop: '0.2rem' }}
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
 
-          </div>
-        </div>
-
-
-        {/* 2. TAX INFORMATION CARD */}
-        <div style={{
-          backgroundColor: '#ffffff',
-          borderRadius: '14px',
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
-          padding: '1.75rem',
-          marginBottom: '1.5rem'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.65rem',
-            paddingBottom: '1rem',
-            marginBottom: '1.5rem',
-            borderBottom: '1px solid #f1f5f9'
-          }}>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '8px',
-              backgroundColor: '#f0fdf4',
-              color: '#16a34a',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Percent size={20} />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                Tax Information (GST Slabs)
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
-                Configured GST percentage automatically splits CGST & SGST (50% each) and IGST.
-              </p>
-            </div>
-          </div>
-
-          <div className="form-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem' }}>
-            
-            {/* GST % */}
-            <div className="form-group">
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                GST % <span style={{ color: '#dc2626' }}>*</span>
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                name="gstPercent"
-                className="form-control"
-                placeholder="18"
-                value={formData.gstPercent}
-                onChange={handleChange}
-                onKeyDown={handleNumberKeyDown}
-                onFocus={handleNumberFocus}
-                onBlur={handleBlur}
-                style={{
-                  height: '46px',
-                  borderRadius: '10px',
-                  fontWeight: 700,
-                  borderColor: touched.gstPercent && errors.gstPercent ? '#f87171' : '#cbd5e1'
-                }}
-              />
-            </div>
-
-            {/* IGST % */}
-            <div className="form-group">
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#64748b' }}>
-                IGST %
-              </label>
-              <input
-                type="text"
-                name="igstPercent"
-                className="form-control"
-                value={formData.igstPercent}
-                readOnly
-                style={{ height: '46px', borderRadius: '10px', backgroundColor: '#f8fafc', color: '#475569', fontWeight: 600 }}
-              />
-            </div>
-
-            {/* CGST % */}
-            <div className="form-group">
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#64748b' }}>
-                CGST %
-              </label>
-              <input
-                type="text"
-                name="cgstPercent"
-                className="form-control"
-                value={formData.cgstPercent}
-                readOnly
-                style={{ height: '46px', borderRadius: '10px', backgroundColor: '#f8fafc', color: '#475569', fontWeight: 600 }}
-              />
-            </div>
-
-            {/* SGST % */}
-            <div className="form-group">
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#64748b' }}>
-                SGST %
-              </label>
-              <input
-                type="text"
-                name="sgstPercent"
-                className="form-control"
-                value={formData.sgstPercent}
-                readOnly
-                style={{ height: '46px', borderRadius: '10px', backgroundColor: '#f8fafc', color: '#475569', fontWeight: 600 }}
-              />
-            </div>
-
-            {/* CESS % */}
-            <div className="form-group">
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                CESS %
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                name="cessPercent"
-                className="form-control"
-                placeholder="0"
-                value={formData.cessPercent}
-                onChange={handleChange}
-                onKeyDown={handleNumberKeyDown}
-                onFocus={handleNumberFocus}
-                style={{ height: '46px', borderRadius: '10px' }}
-              />
-            </div>
-
-          </div>
-          {touched.gstPercent && errors.gstPercent && (
-            <div style={{ color: '#dc2626', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.5rem' }}>
-              <AlertCircle size={14} /> <span>{errors.gstPercent}</span>
-            </div>
-          )}
-        </div>
-
-
-        {/* 3. PRICING CARD */}
-        <div style={{
-          backgroundColor: '#ffffff',
-          borderRadius: '14px',
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
-          padding: '1.75rem',
-          marginBottom: '1.5rem'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            paddingBottom: '1rem',
-            marginBottom: '1.5rem',
-            borderBottom: '1px solid #f1f5f9'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-              <div style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#fffbe6',
-                color: '#d97706',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <DollarSign size={20} />
-              </div>
+              {/* Full Technical Description */}
               <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                  Pricing & Profit Margins
-                </h3>
-                <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
-                  Set purchasing rates, MRP and selling price.
-                </p>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                  Full Description (As printed on Quotation / Invoices)
+                </label>
+                <textarea
+                  className="form-control"
+                  rows="3"
+                  placeholder="e.g. Single Unit of Wall Hung Water Closet and Wash Basin with UF Soft Close Seat Cover, Fixing Accessories, Size: 860x500x760 mm, White"
+                  value={formData.fullDescription}
+                  onChange={(e) => setFormData({ ...formData, fullDescription: e.target.value })}
+                  style={{ borderRadius: '8px', fontSize: '0.825rem' }}
+                />
               </div>
             </div>
           </div>
 
-          <div className="form-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem' }}>
-            
-            {/* MRP */}
-            <div className="form-group">
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                MRP (₹)
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                name="mrp"
-                className="form-control"
-                placeholder="0.00"
-                value={formData.mrp}
-                onChange={handleChange}
-                onKeyDown={handleNumberKeyDown}
-                onFocus={handleNumberFocus}
-                onBlur={handleBlur}
-                style={{
-                  height: '46px',
-                  borderRadius: '10px',
-                  borderColor: touched.mrp && errors.mrp ? '#f87171' : '#cbd5e1'
-                }}
-              />
-            </div>
+          {/* Section 3: Pricing, GST & Taxes */}
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+            <h2 style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', margin: '0 0 1.25rem 0', display: 'flex', alignItems: 'center', gap: '0.45rem', paddingBottom: '0.65rem', borderBottom: '1px solid #f1f5f9' }}>
+              <DollarSign size={18} style={{ color: '#16a34a' }} />
+              3. Pricing, GST & Margins
+            </h2>
 
-            {/* Purchase Rate */}
-            <div className="form-group">
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                Purchase Rate (₹)
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                name="purchaseRate"
-                className="form-control"
-                placeholder="0.00"
-                value={formData.purchaseRate}
-                onChange={handleChange}
-                onKeyDown={handleNumberKeyDown}
-                onFocus={handleNumberFocus}
-                onBlur={handleBlur}
-                style={{ height: '46px', borderRadius: '10px' }}
-              />
-            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                  Catalog MRP (₹)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="form-control"
+                  placeholder="0.00"
+                  value={formData.mrp}
+                  onChange={(e) => setFormData({ ...formData, mrp: e.target.value })}
+                  style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 700 }}
+                />
+              </div>
 
-            {/* Cost Rate */}
-            <div className="form-group">
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                Cost Rate (₹)
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                name="costRate"
-                className="form-control"
-                placeholder="0.00"
-                value={formData.costRate}
-                onChange={handleChange}
-                onKeyDown={handleNumberKeyDown}
-                onFocus={handleNumberFocus}
-                onBlur={handleBlur}
-                style={{ height: '46px', borderRadius: '10px' }}
-              />
-            </div>
+              <div>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                  Selling Price / Wholesale (₹) <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="form-control"
+                  placeholder="0.00"
+                  value={formData.salePrice}
+                  onChange={(e) => setFormData({ ...formData, salePrice: e.target.value })}
+                  style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 800, color: '#16a34a' }}
+                  required
+                />
+              </div>
 
-            {/* Sale Price */}
-            <div className="form-group">
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                Sale Price (₹) <span style={{ color: '#dc2626' }}>*</span>
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                name="salePrice"
-                className="form-control"
-                placeholder="0.00"
-                value={formData.salePrice}
-                onChange={handleChange}
-                onKeyDown={handleNumberKeyDown}
-                onFocus={handleNumberFocus}
-                onBlur={handleBlur}
-                style={{
-                  height: '46px',
-                  borderRadius: '10px',
-                  fontWeight: 700,
-                  borderColor: touched.salePrice && errors.salePrice ? '#f87171' : '#cbd5e1'
-                }}
-              />
-            </div>
+              <div>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                  Purchase Rate / Cost (₹)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="form-control"
+                  placeholder="0.00"
+                  value={formData.purchaseRate}
+                  onChange={(e) => setFormData({ ...formData, purchaseRate: e.target.value })}
+                  style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                />
+              </div>
 
-            {/* Sale Discount */}
-            <div className="form-group">
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                Discount %
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                name="saleDiscount"
-                className="form-control"
-                placeholder="0.0"
-                value={formData.saleDiscount}
-                onChange={handleChange}
-                onKeyDown={handleNumberKeyDown}
-                onFocus={handleNumberFocus}
-                style={{ height: '46px', borderRadius: '10px' }}
-              />
+              <div>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                  GST Tax Rate %
+                </label>
+                <select
+                  className="form-control"
+                  value={formData.gstPercent}
+                  onChange={(e) => {
+                    const g = Number(e.target.value);
+                    setFormData({
+                      ...formData,
+                      gstPercent: g,
+                      igstPercent: g,
+                      cgstPercent: g / 2,
+                      sgstPercent: g / 2
+                    });
+                  }}
+                  style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                >
+                  <option value={18}>18% Standard Ceramic GST (9% CGST + 9% SGST)</option>
+                  <option value={12}>12% GST</option>
+                  <option value={28}>28% Luxury GST</option>
+                  <option value={5}>5% Low GST</option>
+                  <option value={0}>0% Nil GST</option>
+                </select>
+              </div>
             </div>
-
           </div>
 
-          {touched.salePrice && errors.salePrice && (
-            <div style={{ color: '#dc2626', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.5rem' }}>
-              <AlertCircle size={14} /> <span>{errors.salePrice}</span>
+          {/* Section 4: Inventory, Stock & Low Stock Alert Level */}
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+            <h2 style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', margin: '0 0 1.25rem 0', display: 'flex', alignItems: 'center', gap: '0.45rem', paddingBottom: '0.65rem', borderBottom: '1px solid #f1f5f9' }}>
+              <Layers size={18} style={{ color: '#ea580c' }} />
+              4. Inventory & Reorder Thresholds
+            </h2>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                  Opening Stock Quantity
+                </label>
+                <input
+                  type="number"
+                  className="form-control"
+                  placeholder="0"
+                  value={formData.openingStock}
+                  onChange={(e) => setFormData({ ...formData, openingStock: e.target.value })}
+                  style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              <div>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                  Low Stock Alert Level (Threshold)
+                </label>
+                <input
+                  type="number"
+                  className="form-control"
+                  placeholder="10"
+                  value={formData.reorderLevel}
+                  onChange={(e) => setFormData({ ...formData, reorderLevel: e.target.value, alertStockQty: e.target.value })}
+                  style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem', borderColor: '#fed7aa' }}
+                />
+              </div>
+
+              <div style={{ gridColumn: 'span 2' }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>
+                  Product Active Status
+                </label>
+                <select
+                  className="form-control"
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                >
+                  <option value="Active">Active (Available for Quotations & Invoicing)</option>
+                  <option value="Inactive">Inactive (Hidden from catalog)</option>
+                </select>
+              </div>
             </div>
-          )}
-          {touched.mrp && errors.mrp && (
-            <div style={{ color: '#d97706', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.5rem' }}>
-              <AlertCircle size={14} /> <span>{errors.mrp}</span>
-            </div>
-          )}
+          </div>
+
         </div>
 
-
-        {/* 4. STOCK PARAMETERS CARD */}
-        <div style={{
-          backgroundColor: '#ffffff',
-          borderRadius: '14px',
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
-          padding: '1.75rem',
-          marginBottom: '2rem'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.65rem',
-            paddingBottom: '1rem',
-            marginBottom: '1.5rem',
-            borderBottom: '1px solid #f1f5f9'
-          }}>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '8px',
-              backgroundColor: '#f0f9ff',
-              color: '#0284c7',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Layers size={20} />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                Inventory & Stock Parameters
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
-                Initial stock quantities, stock values, reorder alerts and default billing quantities.
-              </p>
-            </div>
-          </div>
-
-          <div className="form-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem' }}>
-            
-            {/* Opening Stock */}
-            <div className="form-group">
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                Opening Stock
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                name="openingStock"
-                className="form-control"
-                placeholder="0"
-                value={formData.openingStock}
-                onChange={handleChange}
-                onKeyDown={handleNumberKeyDown}
-                onFocus={handleNumberFocus}
-                style={{ height: '46px', borderRadius: '10px' }}
-              />
-            </div>
-
-            {/* Opening Stock Value */}
-            <div className="form-group">
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                Stock Value (₹)
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                name="openingStockValue"
-                className="form-control"
-                placeholder="0.00"
-                value={formData.openingStockValue}
-                onChange={handleChange}
-                onKeyDown={handleNumberKeyDown}
-                onFocus={handleNumberFocus}
-                style={{ height: '46px', borderRadius: '10px' }}
-              />
-            </div>
-
-            {/* Default Qty */}
-            <div className="form-group">
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                Default Qty
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                name="defaultQty"
-                className="form-control"
-                placeholder="1"
-                value={formData.defaultQty}
-                onChange={handleChange}
-                onKeyDown={handleNumberKeyDown}
-                onFocus={handleNumberFocus}
-                style={{ height: '46px', borderRadius: '10px' }}
-              />
-            </div>
-
-            {/* Reorder Level */}
-            <div className="form-group">
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                Reorder Level
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                name="reorderLevel"
-                className="form-control"
-                placeholder="100"
-                value={formData.reorderLevel}
-                onChange={handleChange}
-                onKeyDown={handleNumberKeyDown}
-                onFocus={handleNumberFocus}
-                style={{ height: '46px', borderRadius: '10px' }}
-              />
-            </div>
-
-            {/* Alert Stock Qty */}
-            <div className="form-group">
-              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
-                Alert Stock Qty
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                name="alertStockQty"
-                className="form-control"
-                placeholder="50"
-                value={formData.alertStockQty}
-                onChange={handleChange}
-                onKeyDown={handleNumberKeyDown}
-                onFocus={handleNumberFocus}
-                style={{ height: '46px', borderRadius: '10px' }}
-              />
-            </div>
-
-          </div>
+        {/* Action Buttons Footer */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.85rem', marginTop: '2rem' }}>
+          <button
+            type="button"
+            onClick={() => navigate('/products')}
+            className="btn btn-secondary"
+            style={{ borderRadius: '9px', padding: '0.65rem 1.4rem', fontWeight: 600 }}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="btn btn-primary"
+            style={{ borderRadius: '9px', padding: '0.65rem 1.8rem', fontWeight: 700, fontSize: '0.875rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)' }}
+          >
+            <Save size={16} />
+            <span>{saving ? 'Saving...' : isEdit ? 'Update Product' : 'Save Product'}</span>
+          </button>
         </div>
-
-
-        {/* ACTIONS BAR */}
-        <div style={{
-          backgroundColor: '#ffffff',
-          borderRadius: '14px',
-          border: '1px solid #e2e8f0',
-          padding: '1.25rem 1.75rem',
-          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '1rem',
-          marginTop: '1.5rem'
-        }}>
-          <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
-            Fields marked with <span style={{ color: '#dc2626', fontWeight: 700 }}>*</span> are required.
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-            <Link 
-              to="/products" 
-              className="btn btn-secondary"
-              style={{
-                borderRadius: '10px',
-                height: '46px',
-                padding: '0 1.25rem',
-                fontWeight: 600,
-                fontSize: '0.925rem'
-              }}
-            >
-              Cancel
-            </Link>
-
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={saving}
-              style={{
-                borderRadius: '10px',
-                height: '46px',
-                padding: '0 1.75rem',
-                fontWeight: 700,
-                fontSize: '0.95rem',
-                boxShadow: '0 4px 14px rgba(37, 99, 235, 0.28)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem'
-              }}
-            >
-              {saving ? (
-                <>
-                  <RefreshCw size={18} style={{ animation: 'spin 1s linear infinite' }} />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <Save size={18} />
-                  <span>{isEdit ? 'Update Product' : 'Save Product'}</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
       </form>
 
-      {/* Create New Company Modal Dialog */}
+      {/* Quick Brand Modal */}
       {showCompanyModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.55)',
-          backdropFilter: 'blur(4px)',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '1rem'
-        }}>
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: '16px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            width: '100%',
-            maxWidth: '480px',
-            overflow: 'hidden'
-          }}>
-            {/* Modal Header */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '1.25rem 1.5rem',
-              borderBottom: '1px solid #f1f5f9',
-              backgroundColor: '#f8fafc'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <div style={{
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '8px',
-                  backgroundColor: '#eff6ff',
-                  color: '#2563eb',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <Building size={18} />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                    Create New Company / Brand
-                  </h3>
-                  <p style={{ fontSize: '0.785rem', color: '#64748b', margin: 0 }}>
-                    Add a brand supplier or company master record
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCompanyModal(false)}
-                style={{
-                  border: 'none',
-                  background: 'none',
-                  color: '#94a3b8',
-                  cursor: 'pointer',
-                  padding: '0.25rem',
-                  borderRadius: '6px'
-                }}
-              >
-                <X size={18} />
-              </button>
+        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', width: '100%', maxWidth: '420px', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Add New Brand / Company</h3>
+              <button type="button" onClick={() => setShowCompanyModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><X size={18} /></button>
             </div>
-
-            {/* Modal Form Body */}
-            <form onSubmit={handleCreateCompanySubmit}>
-              <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
-                {companyFormError && (
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    backgroundColor: '#fef2f2',
-                    border: '1px solid #fecaca',
-                    color: '#991b1b',
-                    padding: '0.75rem 1rem',
-                    borderRadius: '8px',
-                    fontSize: '0.825rem'
-                  }}>
-                    <AlertCircle size={16} style={{ flexShrink: 0, color: '#dc2626' }} />
-                    <span>{companyFormError}</span>
-                  </div>
-                )}
-
-                {/* Company Name */}
-                <div>
-                  <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
-                    Company / Brand Name <span style={{ color: '#dc2626' }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="e.g. Somany Ceramics, Kajaria, Simpolo"
-                    value={companyFormData.companyName}
-                    onChange={(e) => setCompanyFormData({ ...companyFormData, companyName: e.target.value })}
-                    autoFocus
-                    required
-                    style={{ height: '42px', borderRadius: '8px' }}
-                  />
-                </div>
-
-                {/* Company Code / Prefix */}
-                <div>
-                  <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
-                    Brand Code / Prefix (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="e.g. KJR, SMN, SMP"
-                    value={companyFormData.code}
-                    onChange={(e) => setCompanyFormData({ ...companyFormData, code: e.target.value.toUpperCase() })}
-                    style={{ height: '42px', borderRadius: '8px', fontFamily: 'monospace' }}
-                  />
-                </div>
-
-                {/* Is Own Company Checkbox */}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.65rem',
-                  padding: '0.75rem 1rem',
-                  backgroundColor: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px'
-                }}>
-                  <input
-                    type="checkbox"
-                    id="isOwnCompanyCheck"
-                    checked={companyFormData.isOwnCompany}
-                    onChange={(e) => setCompanyFormData({ ...companyFormData, isOwnCompany: e.target.checked })}
-                    style={{ width: '17px', height: '17px', accentColor: '#2563eb', cursor: 'pointer' }}
-                  />
-                  <label htmlFor="isOwnCompanyCheck" style={{ cursor: 'pointer', margin: 0, fontSize: '0.835rem', fontWeight: 600, color: '#334155' }}>
-                    This is our Own Primary Company (Max 1 allowed)
-                  </label>
-                </div>
-
-                {/* Account Status */}
-                <div>
-                  <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
-                    Status
-                  </label>
-                  <select
-                    className="form-control"
-                    value={companyFormData.status}
-                    onChange={(e) => setCompanyFormData({ ...companyFormData, status: e.target.value })}
-                    style={{ height: '42px', borderRadius: '8px', fontWeight: 600 }}
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
-                </div>
+            {companyFormError && <div style={{ color: '#dc2626', fontSize: '0.8rem', marginBottom: '0.75rem' }}>{companyFormError}</div>}
+            <form onSubmit={handleCreateCompany}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>Brand / Company Name *</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. ROCA, Kajaria, Somany"
+                  value={companyFormData.companyName}
+                  onChange={(e) => setCompanyFormData({ ...companyFormData, companyName: e.target.value })}
+                  style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                  required
+                />
               </div>
-
-              {/* Modal Footer */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                gap: '0.75rem',
-                padding: '1rem 1.5rem',
-                borderTop: '1px solid #f1f5f9',
-                backgroundColor: '#f8fafc'
-              }}>
-                <button
-                  type="button"
-                  onClick={() => setShowCompanyModal(false)}
-                  className="btn btn-secondary"
-                  style={{ padding: '0.55rem 1.25rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600 }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingCompany}
-                  className="btn btn-primary"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    padding: '0.55rem 1.35rem',
-                    borderRadius: '8px',
-                    fontSize: '0.85rem',
-                    fontWeight: 700
-                  }}
-                >
-                  {savingCompany ? (
-                    <>
-                      <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Save size={15} />
-                      <span>Save & Add Company</span>
-                    </>
-                  )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button type="button" onClick={() => setShowCompanyModal(false)} className="btn btn-secondary btn-sm" style={{ borderRadius: '6px' }}>Cancel</button>
+                <button type="submit" disabled={savingCompany} className="btn btn-primary btn-sm" style={{ borderRadius: '6px', fontWeight: 700 }}>
+                  {savingCompany ? 'Saving...' : 'Create Brand'}
                 </button>
               </div>
             </form>
@@ -2275,188 +1072,43 @@ export const ProductForm = () => {
         </div>
       )}
 
-      {/* Create New Product Group Modal Dialog */}
-      {showGroupModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.55)',
-          backdropFilter: 'blur(4px)',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '1rem'
-        }}>
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: '16px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            width: '100%',
-            maxWidth: '520px',
-            overflow: 'hidden'
-          }}>
-            {/* Modal Header */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '1.25rem 1.5rem',
-              borderBottom: '1px solid #f1f5f9',
-              backgroundColor: '#f8fafc'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <div style={{
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '8px',
-                  backgroundColor: '#eff6ff',
-                  color: '#2563eb',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <Layers size={18} />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                    Create New Product Group
-                  </h3>
-                  <p style={{ fontSize: '0.785rem', color: '#64748b', margin: 0 }}>
-                    Add a category or material group classification
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowGroupModal(false)}
-                style={{
-                  border: 'none',
-                  background: 'none',
-                  color: '#94a3b8',
-                  cursor: 'pointer',
-                  padding: '0.25rem',
-                  borderRadius: '6px'
-                }}
-              >
-                <X size={18} />
-              </button>
+      {/* Quick Type Modal */}
+      {showTypeModal && (
+        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', width: '100%', maxWidth: '460px', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Add New Product Type</h3>
+              <button type="button" onClick={() => setShowTypeModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><X size={18} /></button>
             </div>
-
-            {/* Modal Form */}
-            <form onSubmit={handleCreateGroupSubmit}>
-              <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {groupFormError && (
-                  <div style={{
-                    padding: '0.65rem 0.85rem',
-                    backgroundColor: '#fef2f2',
-                    border: '1px solid #fecaca',
-                    borderRadius: '8px',
-                    color: '#dc2626',
-                    fontSize: '0.8rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.4rem'
-                  }}>
-                    <AlertCircle size={15} />
-                    <span>{groupFormError}</span>
-                  </div>
-                )}
-
-                {/* Group Name */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
-                    Product Group Name <span style={{ color: '#dc2626' }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="e.g. Marble Finish Tiles, Brass Fittings..."
-                    value={groupFormData.groupName}
-                    onChange={(e) => setGroupFormData(prev => ({ ...prev, groupName: e.target.value }))}
-                    style={{ height: '42px', borderRadius: '8px' }}
-                    required
-                  />
-                </div>
-
-                {/* Group Code */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
-                    Group Code / Prefix
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="e.g. MFT, BF"
-                    value={groupFormData.groupCode}
-                    onChange={(e) => setGroupFormData(prev => ({ ...prev, groupCode: e.target.value.toUpperCase() }))}
-                    style={{ height: '42px', borderRadius: '8px' }}
-                  />
-                </div>
-
-                {/* Status */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
-                    Status
-                  </label>
-                  <select
-                    className="form-control"
-                    value={groupFormData.status}
-                    onChange={(e) => setGroupFormData(prev => ({ ...prev, status: e.target.value }))}
-                    style={{ height: '42px', borderRadius: '8px' }}
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
-                </div>
+            {typeFormError && <div style={{ color: '#dc2626', fontSize: '0.8rem', marginBottom: '0.75rem' }}>{typeFormError}</div>}
+            <form onSubmit={handleCreateType}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>Category</label>
+                <select
+                  className="form-control"
+                  value={typeFormData.category}
+                  onChange={(e) => setTypeFormData({ ...typeFormData, category: e.target.value })}
+                  style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                >
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
-
-              {/* Modal Footer */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                gap: '0.75rem',
-                padding: '1rem 1.5rem',
-                borderTop: '1px solid #f1f5f9',
-                backgroundColor: '#f8fafc'
-              }}>
-                <button
-                  type="button"
-                  onClick={() => setShowGroupModal(false)}
-                  className="btn btn-secondary"
-                  style={{ padding: '0.55rem 1.25rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600 }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingGroup}
-                  className="btn btn-primary"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    padding: '0.55rem 1.35rem',
-                    borderRadius: '8px',
-                    fontSize: '0.85rem',
-                    fontWeight: 700
-                  }}
-                >
-                  {savingGroup ? (
-                    <>
-                      <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Save size={15} />
-                      <span>Save & Select Group</span>
-                    </>
-                  )}
+              <div style={{ marginBottom: '1rem' }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.825rem' }}>Product Type Name *</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. Water Closet, Wall Tiles, Shower Column"
+                  value={typeFormData.groupName}
+                  onChange={(e) => setTypeFormData({ ...typeFormData, groupName: e.target.value })}
+                  style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                  required
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button type="button" onClick={() => setShowTypeModal(false)} className="btn btn-secondary btn-sm" style={{ borderRadius: '6px' }}>Cancel</button>
+                <button type="submit" disabled={savingType} className="btn btn-primary btn-sm" style={{ borderRadius: '6px', fontWeight: 700 }}>
+                  {savingType ? 'Saving...' : 'Create Type'}
                 </button>
               </div>
             </form>
@@ -2464,250 +1116,6 @@ export const ProductForm = () => {
         </div>
       )}
 
-      {/* Create New Vendor Modal Dialog */}
-      {showVendorModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.55)',
-          backdropFilter: 'blur(4px)',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '1rem'
-        }}>
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: '16px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            width: '100%',
-            maxWidth: '560px',
-            maxHeight: '90vh',
-            overflowY: 'auto'
-          }}>
-            {/* Modal Header */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '1.25rem 1.5rem',
-              borderBottom: '1px solid #f1f5f9',
-              backgroundColor: '#f8fafc',
-              position: 'sticky',
-              top: 0,
-              zIndex: 1
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <div style={{
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '8px',
-                  backgroundColor: '#eff6ff',
-                  color: '#2563eb',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <Truck size={18} />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                    Create New Vendor / Supplier
-                  </h3>
-                  <p style={{ fontSize: '0.785rem', color: '#64748b', margin: 0 }}>
-                    Add a supplier or vendor master record
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowVendorModal(false)}
-                style={{
-                  border: 'none',
-                  background: 'none',
-                  color: '#94a3b8',
-                  cursor: 'pointer',
-                  padding: '0.25rem',
-                  borderRadius: '6px'
-                }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Modal Form Body */}
-            <form onSubmit={handleCreateVendorSubmit}>
-              <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
-                {vendorFormError && (
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    backgroundColor: '#fef2f2',
-                    border: '1px solid #fecaca',
-                    color: '#991b1b',
-                    padding: '0.75rem 1rem',
-                    borderRadius: '8px',
-                    fontSize: '0.825rem'
-                  }}>
-                    <AlertCircle size={16} style={{ flexShrink: 0, color: '#dc2626' }} />
-                    <span>{vendorFormError}</span>
-                  </div>
-                )}
-
-                {/* Vendor Name */}
-                <div>
-                  <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
-                    Vendor / Supplier Name <span style={{ color: '#dc2626' }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="e.g. Morbi Ceramics Supplier Ltd."
-                    value={vendorFormData.vendorName}
-                    onChange={(e) => setVendorFormData({ ...vendorFormData, vendorName: e.target.value })}
-                    autoFocus
-                    required
-                    style={{ height: '42px', borderRadius: '8px' }}
-                  />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  {/* Mobile */}
-                  <div>
-                    <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
-                      Mobile Number
-                    </label>
-                    <input
-                      type="tel"
-                      maxLength={10}
-                      className="form-control"
-                      placeholder="10-digit mobile"
-                      value={vendorFormData.mobile}
-                      onChange={(e) => setVendorFormData({ ...vendorFormData, mobile: e.target.value.replace(/\D/g, '') })}
-                      style={{ height: '42px', borderRadius: '8px' }}
-                    />
-                  </div>
-
-                  {/* Email */}
-                  <div>
-                    <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      className="form-control"
-                      placeholder="vendor@supplier.com"
-                      value={vendorFormData.email}
-                      onChange={(e) => setVendorFormData({ ...vendorFormData, email: e.target.value })}
-                      style={{ height: '42px', borderRadius: '8px' }}
-                    />
-                  </div>
-                </div>
-
-                {/* GSTIN */}
-                <div>
-                  <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
-                    GSTIN Number
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={15}
-                    className="form-control"
-                    placeholder="e.g. 24AAAAA0000A1Z5"
-                    value={vendorFormData.gstNumber}
-                    onChange={(e) => setVendorFormData({ ...vendorFormData, gstNumber: e.target.value.toUpperCase() })}
-                    style={{ height: '42px', borderRadius: '8px', fontFamily: 'monospace', textTransform: 'uppercase' }}
-                  />
-                </div>
-
-                {/* Address */}
-                <div>
-                  <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
-                    Address
-                  </label>
-                  <textarea
-                    rows={2}
-                    className="form-control"
-                    placeholder="Factory / Office Address, City, State"
-                    value={vendorFormData.address}
-                    onChange={(e) => setVendorFormData({ ...vendorFormData, address: e.target.value })}
-                    style={{ borderRadius: '8px', resize: 'vertical' }}
-                  />
-                </div>
-
-                {/* Account Status */}
-                <div>
-                  <label style={{ fontWeight: 600, fontSize: '0.85rem', color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
-                    Status
-                  </label>
-                  <select
-                    className="form-control"
-                    value={vendorFormData.status}
-                    onChange={(e) => setVendorFormData({ ...vendorFormData, status: e.target.value })}
-                    style={{ height: '42px', borderRadius: '8px', fontWeight: 600 }}
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                gap: '0.75rem',
-                padding: '1rem 1.5rem',
-                borderTop: '1px solid #f1f5f9',
-                backgroundColor: '#f8fafc',
-                position: 'sticky',
-                bottom: 0
-              }}>
-                <button
-                  type="button"
-                  onClick={() => setShowVendorModal(false)}
-                  className="btn btn-secondary"
-                  style={{ padding: '0.55rem 1.25rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600 }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingVendor}
-                  className="btn btn-primary"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    padding: '0.55rem 1.35rem',
-                    borderRadius: '8px',
-                    fontSize: '0.85rem',
-                    fontWeight: 700
-                  }}
-                >
-                  {savingVendor ? (
-                    <>
-                      <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Save size={15} />
-                      <span>Save & Select Vendor</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

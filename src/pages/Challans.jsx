@@ -10,6 +10,7 @@ import {
   getChallanPrintData 
 } from '../services/challanService';
 import { formatDate } from '../utils/formatters';
+import { usePermissions } from '../utils/permissions';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
 import ConfirmModal from '../components/ConfirmModal';
@@ -36,6 +37,7 @@ import {
 } from 'lucide-react';
 
 export const Challans = () => {
+  const { canCreate, canEdit, canDelete } = usePermissions('challans');
   const [challans, setChallans] = useState([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL', 'DRAFT', 'FINALIZED', 'CANCELLED'
@@ -307,14 +309,16 @@ export const Challans = () => {
             <span>{exporting ? 'Exporting...' : 'Export Excel'}</span>
           </button>
 
-          <Link 
-            to="/challans/create" 
-            className="btn btn-primary" 
-            style={{ borderRadius: '8px', padding: '0.525rem 1.15rem', fontWeight: 700, fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
-          >
-            <Plus size={16} />
-            <span>Create Delivery Challan</span>
-          </Link>
+          {canCreate && (
+            <Link 
+              to="/challans/create" 
+              className="btn btn-primary" 
+              style={{ borderRadius: '8px', padding: '0.525rem 1.15rem', fontWeight: 700, fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+            >
+              <Plus size={16} />
+              <span>Create Delivery Challan</span>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -549,73 +553,79 @@ export const Challans = () => {
                         {/* DRAFT Actions: Edit, Finalize, Cancel */}
                         {isDraft && (
                           <>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditModal(c)}
-                              title="Edit DRAFT Challan Details & Items"
-                              style={{
-                                padding: '0.25rem 0.5rem',
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                borderRadius: '6px',
-                                border: '1px solid #fed7aa',
-                                backgroundColor: '#fffbeb',
-                                color: '#b45309',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.2rem'
-                              }}
-                            >
-                              <Edit3 size={13} />
-                              <span>Edit</span>
-                            </button>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditModal(c)}
+                                title="Edit DRAFT Challan Details & Items"
+                                style={{
+                                  padding: '0.25rem 0.5rem',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  borderRadius: '6px',
+                                  border: '1px solid #fed7aa',
+                                  backgroundColor: '#fffbeb',
+                                  color: '#b45309',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.2rem'
+                                }}
+                              >
+                                <Edit3 size={13} />
+                                <span>Edit</span>
+                              </button>
+                            )}
 
-                            <button
-                              type="button"
-                              onClick={() => handleFinalize(c)}
-                              disabled={isActionRunning}
-                              title="Finalize Challan (ATOMIC DUAL-WRITE: stock deduction + delivery recording)"
-                              style={{
-                                padding: '0.25rem 0.55rem',
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                borderRadius: '6px',
-                                border: '1px solid #bbf7d0',
-                                backgroundColor: '#f0fdf4',
-                                color: '#16a34a',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.2rem'
-                              }}
-                            >
-                              {isActionRunning ? <RefreshCw size={13} className="spin-animation" /> : <ShieldCheck size={13} />}
-                              <span>Finalize</span>
-                            </button>
+                            {(canEdit || canCreate) && (
+                              <button
+                                type="button"
+                                onClick={() => handleFinalize(c)}
+                                disabled={isActionRunning}
+                                title="Finalize Challan (ATOMIC DUAL-WRITE: stock deduction + delivery recording)"
+                                style={{
+                                  padding: '0.25rem 0.55rem',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  borderRadius: '6px',
+                                  border: '1px solid #bbf7d0',
+                                  backgroundColor: '#f0fdf4',
+                                  color: '#16a34a',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.2rem'
+                                }}
+                              >
+                                {isActionRunning ? <RefreshCw size={13} className="spin-animation" /> : <ShieldCheck size={13} />}
+                                <span>Finalize</span>
+                              </button>
+                            )}
 
-                            <button
-                              type="button"
-                              onClick={() => handleCancel(c)}
-                              disabled={isActionRunning}
-                              title="Cancel DRAFT Challan"
-                              style={{
-                                padding: '0.25rem 0.45rem',
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                borderRadius: '6px',
-                                border: '1px solid #fecaca',
-                                backgroundColor: '#fef2f2',
-                                color: '#dc2626',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.15rem'
-                              }}
-                            >
-                              <X size={13} />
-                              <span>Cancel</span>
-                            </button>
+                            {canDelete && (
+                              <button
+                                type="button"
+                                onClick={() => handleCancel(c)}
+                                disabled={isActionRunning}
+                                title="Cancel DRAFT Challan"
+                                style={{
+                                  padding: '0.25rem 0.45rem',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  borderRadius: '6px',
+                                  border: '1px solid #fecaca',
+                                  backgroundColor: '#fef2f2',
+                                  color: '#dc2626',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.15rem'
+                                }}
+                              >
+                                <X size={13} />
+                                <span>Cancel</span>
+                              </button>
+                            )}
                           </>
                         )}
                       </div>

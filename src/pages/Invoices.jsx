@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getInvoices } from '../services/invoiceService';
 import { formatCurrency, formatDate } from '../utils/formatters';
+import { usePermissions } from '../utils/permissions';
 import StatusBadge from '../components/StatusBadge';
 import { Plus, Search, Eye, CreditCard, Printer, Download, RefreshCw } from 'lucide-react';
 
 export const Invoices = () => {
+  const { canCreate, canEdit, canDelete } = usePermissions('invoices');
   const [invoices, setInvoices] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -50,10 +52,12 @@ export const Invoices = () => {
             <Download size={15} style={{ color: '#0f172a' }} />
             <span>Export Excel</span>
           </button>
-          <Link to="/invoices/create" className="btn btn-primary" style={{ borderRadius: '8px', padding: '0.525rem 1.15rem', fontWeight: 700, fontSize: '0.85rem' }}>
-            <Plus size={16} />
-            <span>Create Invoice</span>
-          </Link>
+          {canCreate && (
+            <Link to="/invoices/create" className="btn btn-primary" style={{ borderRadius: '8px', padding: '0.525rem 1.15rem', fontWeight: 700, fontSize: '0.85rem' }}>
+              <Plus size={16} />
+              <span>Create Invoice</span>
+            </Link>
+          )}
         </div>
       </div>
 

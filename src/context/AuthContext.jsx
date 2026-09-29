@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import authService from '../services/authService';
-import { ROLES, DEFAULT_ROLE_PERMISSIONS, normalizePermissions, normalizeRole, isSuperAdminRole } from '../utils/permissions';
+import { ROLES, DEFAULT_ROLE_PERMISSIONS, normalizePermissions, normalizeRole, formatRoleName, isSuperAdminRole } from '../utils/permissions';
 
 export const AuthContext = createContext(null);
 
@@ -21,14 +21,16 @@ const decodeToken = (token) => {
     if (parsed && parsed.exp && parsed.exp * 1000 < Date.now()) {
       return null; // Token expired
     }
-    const roleName = normalizeRole(parsed.role);
+    const roleKey = normalizeRole(parsed.role);
+    const roleDisplayName = formatRoleName(parsed.role) || (roleKey ? formatRoleName(roleKey) : '');
     return {
       id: parsed.id || parsed._id || parsed.userId,
       name: parsed.name || parsed.userName || parsed.mobile || 'User',
       email: parsed.email || '',
       mobile: parsed.mobile || '',
-      role: roleName,
-      permissions: normalizePermissions(parsed.permissions, roleName, true)
+      role: roleDisplayName,
+      roleKey: roleKey,
+      permissions: normalizePermissions(parsed.permissions, roleKey, true)
     };
   } catch (e) {
     return null;
@@ -74,19 +76,23 @@ export const AuthProvider = ({ children }) => {
           if (isMounted) {
             if (res && res.success !== false && u && (u._id || u.id || u.email || u.userName)) {
               const roleObj = u?.role;
-              const rawRole = (typeof roleObj === 'object' ? (roleObj?.roleName || roleObj?.name) : roleObj) || ROLES.SUPER_ADMIN;
-              const roleName = normalizeRole(rawRole);
+              const rawRole = (typeof roleObj === 'object' ? (roleObj?.roleName || roleObj?.displayName || roleObj?.name) : roleObj) || '';
+              const roleDisplayName = formatRoleName(roleObj || rawRole) || 'Staff';
+              const roleKey = normalizeRole(rawRole) || rawRole;
               const userId = u?._id || u?.id;
 
               const rawPerms = meData?.permissions || u?.permissions;
-              const effectivePerms = normalizePermissions(rawPerms, roleName, true);
+              const effectivePerms = normalizePermissions(rawPerms, roleKey || rawRole, true);
 
               const userObj = {
                 id: userId,
-                name: u?.name || u?.userName || u?.fullName || 'Super Admin',
+                name: u?.name || u?.userName || u?.fullName || 'User',
                 email: u?.email || '',
                 mobile: u?.mobile || '',
-                role: roleName,
+                role: roleDisplayName,
+                roleKey: roleKey,
+                rawRole: rawRole,
+                roleId: typeof roleObj === 'object' ? (roleObj?._id || roleObj?.id) : (u?.roleId || roleObj),
                 permissions: effectivePerms
               };
               setCurrentUser(userObj);
@@ -117,10 +123,13 @@ export const AuthProvider = ({ children }) => {
 
   const switchRole = (newRole) => {
     if (!currentUser) return;
+    const roleDisplayName = formatRoleName(newRole) || newRole;
+    const roleKey = normalizeRole(newRole) || newRole;
     const updated = {
       ...currentUser,
-      role: newRole,
-      permissions: normalizePermissions(DEFAULT_ROLE_PERMISSIONS[newRole], newRole, true)
+      role: roleDisplayName,
+      roleKey: roleKey,
+      permissions: normalizePermissions(DEFAULT_ROLE_PERMISSIONS[roleKey], roleKey, true)
     };
     setCurrentUser(updated);
   };
@@ -133,10 +142,27 @@ export const AuthProvider = ({ children }) => {
     )) {
       const updated = {
         ...currentUser,
-        permissions: normalizePermissions(newPerms, currentUser.role, false)
+        permissions: normalizePermissions(newPerms, currentUser.roleKey || currentUser.role, false)
       };
       setCurrentUser(updated);
     }
+  };
+
+  const updateCurrentUserData = (updatedFields) => {
+    setCurrentUser(prev => {
+      if (!prev) return null;
+      const roleObj = updatedFields.roleObj || updatedFields.role;
+      const rawRole = (typeof roleObj === 'object' ? (roleObj?.roleName || roleObj?.displayName || roleObj?.name) : roleObj) || updatedFields.rawRole || prev.rawRole || '';
+      const roleDisplayName = formatRoleName(roleObj || rawRole) || (updatedFields.role ? formatRoleName(updatedFields.role) : prev.role);
+      const roleKey = normalizeRole(rawRole) || rawRole;
+      return {
+        ...prev,
+        ...updatedFields,
+        role: roleDisplayName || prev.role,
+        roleKey: roleKey || prev.roleKey,
+        rawRole: rawRole
+      };
+    });
   };
 
   const loginWithBackend = async (credentials) => {
@@ -162,19 +188,23 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('maitri_auth_token', accessToken);
 
       const roleObj = userRaw?.role;
-      const rawRole = (typeof roleObj === 'object' ? (roleObj?.roleName || roleObj?.name) : roleObj) || ROLES.SUPER_ADMIN;
-      const roleName = normalizeRole(rawRole);
+      const rawRole = (typeof roleObj === 'object' ? (roleObj?.roleName || roleObj?.displayName || roleObj?.name) : roleObj) || '';
+      const roleDisplayName = formatRoleName(roleObj || rawRole) || 'Staff';
+      const roleKey = normalizeRole(rawRole) || rawRole;
       const userId = userRaw?._id || userRaw?.id;
 
       const rawPerms = userRaw?.permissions || roleObj?.permissions;
-      const effectivePerms = normalizePermissions(rawPerms, roleName, true);
+      const effectivePerms = normalizePermissions(rawPerms, roleKey || rawRole, true);
 
       const userObj = {
         id: userId,
         name: userRaw?.name || userRaw?.userName || credentials?.identifier || 'User',
         email: userRaw?.email || '',
         mobile: userRaw?.mobile || '',
-        role: roleName,
+        role: roleDisplayName,
+        roleKey: roleKey,
+        rawRole: rawRole,
+        roleId: typeof roleObj === 'object' ? (roleObj?._id || roleObj?.id) : (userRaw?.roleId || roleObj),
         permissions: effectivePerms
       };
 
@@ -202,6 +232,7 @@ export const AuthProvider = ({ children }) => {
       loading,
       switchRole,
       updateCurrentUserPermissions,
+      updateCurrentUserData,
       loginWithBackend,
       logout,
       fetchMe: authService.getMe

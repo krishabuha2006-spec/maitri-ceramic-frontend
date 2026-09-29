@@ -18,6 +18,7 @@ import {
   CheckSquare, Check, X, XCircle, RefreshCw, Sliders, Ban, Trash2,
   Package, ShieldCheck, Building2
 } from 'lucide-react';
+import { usePermissions } from '../utils/permissions';
 
 const getSafeMode = (val, fallback = 'Bank Transfer') => {
   if (!val) return fallback;
@@ -36,6 +37,11 @@ export const CustomerDetails = () => {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const customerPerms = usePermissions('customers');
+  const quotePerms = usePermissions('quotations');
+  const challanPerms = usePermissions('challans');
+  const invoicePerms = usePermissions('invoices');
+  const paymentPerms = usePermissions('payments');
   const [customer, setCustomer] = useState(null);
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'quotations');
   const [loading, setLoading] = useState(true);
@@ -648,60 +654,72 @@ export const CustomerDetails = () => {
 
         {/* Action Buttons Hub: Create Anything for This Customer Instantly */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <Link
-            to={`/quotations/create?customerId=${activeCustId}`}
-            className="btn btn-primary btn-sm"
-            style={{ borderRadius: '8px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-          >
-            <Plus size={15} />
-            <span>New Quotation</span>
-          </Link>
+          {quotePerms.canCreate && (
+            <Link
+              to={`/quotations/create?customerId=${activeCustId}`}
+              className="btn btn-primary btn-sm"
+              style={{ borderRadius: '8px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+            >
+              <Plus size={15} />
+              <span>New Quotation</span>
+            </Link>
+          )}
 
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => handleOpenFollowUpModal()}
-            style={{ borderRadius: '8px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#fff7ed', color: '#c2410c', borderColor: '#fed7aa' }}
-          >
-            <PhoneCall size={14} />
-            <span>Log Follow-Up</span>
-          </button>
+          {quotePerms.canCreate && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => handleOpenFollowUpModal()}
+              style={{ borderRadius: '8px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#fff7ed', color: '#c2410c', borderColor: '#fed7aa' }}
+            >
+              <PhoneCall size={14} />
+              <span>Log Follow-Up</span>
+            </button>
+          )}
 
-          <Link
-            to={`/challans/create?customerId=${activeCustId}`}
-            className="btn btn-secondary btn-sm"
-            style={{ borderRadius: '8px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-          >
-            <Truck size={14} />
-            <span>New Challan</span>
-          </Link>
+          {challanPerms.canCreate && (
+            <Link
+              to={`/challans/create?customerId=${activeCustId}`}
+              className="btn btn-secondary btn-sm"
+              style={{ borderRadius: '8px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+            >
+              <Truck size={14} />
+              <span>New Challan</span>
+            </Link>
+          )}
 
-          <Link
-            to={`/invoices/create?customerId=${activeCustId}`}
-            className="btn btn-secondary btn-sm"
-            style={{ borderRadius: '8px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-          >
-            <Receipt size={14} />
-            <span>Create Invoice</span>
-          </Link>
+          {invoicePerms.canCreate && (
+            <Link
+              to={`/invoices/create?customerId=${activeCustId}`}
+              className="btn btn-secondary btn-sm"
+              style={{ borderRadius: '8px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+            >
+              <Receipt size={14} />
+              <span>Create Invoice</span>
+            </Link>
+          )}
 
-          <Link
-            to={`/payments/entry?customerId=${activeCustId}`}
-            className="btn btn-secondary btn-sm"
-            style={{ borderRadius: '8px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#f0fdf4', color: '#16a34a', borderColor: '#bbf7d0' }}
-          >
-            <CreditCard size={14} />
-            <span>Record Payment</span>
-          </Link>
+          {paymentPerms.canCreate && (
+            <Link
+              to={`/payments/entry?customerId=${activeCustId}`}
+              className="btn btn-secondary btn-sm"
+              style={{ borderRadius: '8px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#f0fdf4', color: '#16a34a', borderColor: '#bbf7d0' }}
+            >
+              <CreditCard size={14} />
+              <span>Record Payment</span>
+            </Link>
+          )}
 
-          <Link
-            to={`/customers/edit/${activeCustId}`}
-            className="btn btn-secondary btn-sm"
-            style={{ borderRadius: '8px' }}
-          >
-            <Edit size={14} />
-            <span>Edit Profile</span>
-          </Link>
+          {customerPerms.canEdit && (
+            <Link
+              to={`/customers/edit/${activeCustId}`}
+              className="btn btn-secondary btn-sm"
+              style={{ borderRadius: '8px' }}
+            >
+              <Edit size={14} />
+              <span>Edit Profile</span>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -862,13 +880,15 @@ export const CustomerDetails = () => {
           <div>
             <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
               <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Customer Quotation History & Confirmed Commitments</span>
-              <Link
-                to={`/quotations/create?customerId=${activeCustId}`}
-                className="btn btn-primary btn-sm"
-                style={{ borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-              >
-                <Plus size={14} /> New Quotation
-              </Link>
+              {quotePerms.canCreate && (
+                <Link
+                  to={`/quotations/create?customerId=${activeCustId}`}
+                  className="btn btn-primary btn-sm"
+                  style={{ borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                >
+                  <Plus size={14} /> New Quotation
+                </Link>
+              )}
             </div>
             <table className="data-table" style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse' }}>
               <thead>
@@ -947,7 +967,7 @@ export const CustomerDetails = () => {
                             </Link>
 
                             {/* 2. Checklist / Confirm OR Dispatch */}
-                            {!isFinalized && !isCancelled ? (
+                            {quotePerms.canEdit && !isFinalized && !isCancelled ? (
                               <button
                                 type="button"
                                 onClick={() => handleOpenChecklistModal(q)}
@@ -967,7 +987,7 @@ export const CustomerDetails = () => {
                               >
                                 <CheckSquare size={14} />
                               </button>
-                            ) : isFinalized ? (
+                            ) : challanPerms.canCreate && isFinalized ? (
                               <Link
                                 to={`/challans/create?customerId=${activeCustId}&quotationId=${q.id || q._id}`}
                                 className="action-btn"
@@ -989,25 +1009,27 @@ export const CustomerDetails = () => {
                             ) : null}
 
                             {/* 3. Update Status */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenStatusModal(q)}
-                              className="action-btn"
-                              data-tooltip="Update Quotation Status"
-                              style={{
-                                width: '30px',
-                                height: '30px',
-                                borderRadius: '7px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                backgroundColor: '#f0f9ff',
-                                color: '#0284c7',
-                                border: '1px solid #bae6fd'
-                              }}
-                            >
-                              <RefreshCw size={13} />
-                            </button>
+                            {quotePerms.canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenStatusModal(q)}
+                                className="action-btn"
+                                data-tooltip="Update Quotation Status"
+                                style={{
+                                  width: '30px',
+                                  height: '30px',
+                                  borderRadius: '7px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  backgroundColor: '#f0f9ff',
+                                  color: '#0284c7',
+                                  border: '1px solid #bae6fd'
+                                }}
+                              >
+                                <RefreshCw size={13} />
+                              </button>
+                            )}
 
                             {/* 4. Download PDF */}
                             <button
@@ -1031,48 +1053,52 @@ export const CustomerDetails = () => {
                             </button>
 
                             {/* 5. Log Follow-Up */}
-                            <button
-                              type="button"
-                              className="action-btn"
-                              onClick={() => handleOpenFollowUpModal(q.id || q._id)}
-                              data-tooltip="Log Customer Follow-Up"
-                              style={{
-                                width: '30px',
-                                height: '30px',
-                                borderRadius: '7px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#9333ea',
-                                backgroundColor: '#faf5ff',
-                                border: '1px solid #e9d5ff'
-                              }}
-                            >
-                              <PhoneCall size={14} />
-                            </button>
+                            {quotePerms.canCreate && (
+                              <button
+                                type="button"
+                                className="action-btn"
+                                onClick={() => handleOpenFollowUpModal(q.id || q._id)}
+                                data-tooltip="Log Customer Follow-Up"
+                                style={{
+                                  width: '30px',
+                                  height: '30px',
+                                  borderRadius: '7px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: '#9333ea',
+                                  backgroundColor: '#faf5ff',
+                                  border: '1px solid #e9d5ff'
+                                }}
+                              >
+                                <PhoneCall size={14} />
+                              </button>
+                            )}
 
                             {/* 6. Create Tax Invoice */}
-                            <Link
-                              to={`/invoices/create?customerId=${activeCustId}&quotationId=${q.id || q._id}`}
-                              className="action-btn"
-                              data-tooltip="Create Tax Invoice"
-                              style={{
-                                width: '30px',
-                                height: '30px',
-                                borderRadius: '7px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                backgroundColor: '#fdf2f8',
-                                color: '#db2777',
-                                border: '1px solid #fbcfe8'
-                              }}
-                            >
-                              <Receipt size={14} />
-                            </Link>
+                            {invoicePerms.canCreate && (
+                              <Link
+                                to={`/invoices/create?customerId=${activeCustId}&quotationId=${q.id || q._id}`}
+                                className="action-btn"
+                                data-tooltip="Create Tax Invoice"
+                                style={{
+                                  width: '30px',
+                                  height: '30px',
+                                  borderRadius: '7px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  backgroundColor: '#fdf2f8',
+                                  color: '#db2777',
+                                  border: '1px solid #fbcfe8'
+                                }}
+                              >
+                                <Receipt size={14} />
+                              </Link>
+                            )}
 
                             {/* 7. Cancel Quotation (if not already cancelled) */}
-                            {!isCancelled && (
+                            {quotePerms.canDelete && !isCancelled && (
                               <button
                                 type="button"
                                 onClick={() => handleOpenCancelModal(q)}

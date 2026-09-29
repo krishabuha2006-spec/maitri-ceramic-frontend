@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import AccessDenied from './components/AccessDenied';
 import ErrorBoundary from './components/ErrorBoundary';
-import { ROLES, canView, canCreate, canEdit, isSuperAdminRole } from './utils/permissions';
+import { ROLES, canView, canCreate, canEdit, canDelete, isSuperAdminRole } from './utils/permissions';
 
 // Pages
 import Login from './pages/Login';
@@ -67,18 +67,22 @@ const PermissionRoute = ({ moduleId, action = 'view', children }) => {
     return <Navigate to="/login" replace />;
   }
 
+  const userRole = currentUser.roleKey || currentUser.rawRole || currentUser.role;
+
   // Super Admin has full unrestricted access
-  if (isSuperAdminRole(currentUser.role)) {
+  if (isSuperAdminRole(userRole)) {
     return children;
   }
 
   let hasAccess = true;
   if (action === 'create') {
-    hasAccess = canCreate(currentUser.role, moduleId, currentUser.permissions);
+    hasAccess = canCreate(userRole, moduleId, currentUser.permissions);
   } else if (action === 'edit') {
-    hasAccess = canEdit(currentUser.role, moduleId, currentUser.permissions);
+    hasAccess = canEdit(userRole, moduleId, currentUser.permissions);
+  } else if (action === 'delete') {
+    hasAccess = canDelete(userRole, moduleId, currentUser.permissions);
   } else {
-    hasAccess = canView(currentUser.role, moduleId, currentUser.permissions);
+    hasAccess = canView(userRole, moduleId, currentUser.permissions);
   }
 
   if (!hasAccess) {
@@ -126,6 +130,11 @@ export function App() {
             <Route path="products/:id" element={
               <PermissionRoute moduleId="products">
                 <ProductDetails />
+              </PermissionRoute>
+            } />
+            <Route path="product-types" element={
+              <PermissionRoute moduleId="product-groups">
+                <ProductGroups />
               </PermissionRoute>
             } />
             <Route path="product-groups" element={

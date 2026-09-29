@@ -1,9 +1,14 @@
 import api, { extractArray } from './api';
-import { ROLES, DEFAULT_ROLE_PERMISSIONS, normalizePermissions, normalizeRole, isSuperAdminRole } from '../utils/permissions';
+import { ROLES, DEFAULT_ROLE_PERMISSIONS, normalizePermissions, normalizeRole, isSuperAdminRole, convertPermsToBackendArray } from '../utils/permissions';
+import { resolveRoleId, getRoles } from './roleService';
+import { assignUserPermissions } from './permissionService';
 
 export const normalizeUser = (u) => {
-  const rawRole = u.role?.roleName || u.role?.name || (typeof u.role === 'string' ? u.role : null) || ROLES.SALES_EXECUTIVE;
+  if (!u) return null;
+  const roleObj = u.role;
+  const rawRole = roleObj?.roleName || roleObj?.name || (typeof roleObj === 'string' ? roleObj : null) || ROLES.SALES_EXECUTIVE;
   const roleName = normalizeRole(rawRole);
+  const roleId = (roleObj && typeof roleObj === 'object') ? (roleObj._id || roleObj.id) : (typeof roleObj === 'string' && roleObj.length === 24 ? roleObj : null);
   const userId = u._id || u.id || `USR-${Math.floor(Math.random() * 10000)}`;
 
   const rawPerms = u.permissions || u.role?.permissions;
@@ -25,9 +30,12 @@ export const normalizeUser = (u) => {
 
   return {
     id: userId,
+    _id: userId,
     name: u.name || u.fullName || u.username || u.staffName || 'Staff User',
     email: u.email || (u.mobile ? `${u.mobile}@maitriceramic.com` : 'user@maitriceramic.com'),
     role: roleName,
+    roleId: roleId,
+    roleObj: roleObj,
     mobile: u.mobile || u.phone || u.mobileNumber || u.contact || '-',
     status: u.status || (u.isActive === false ? 'Inactive' : 'Active'),
     permissions: effectivePermissions,
@@ -58,47 +66,93 @@ export const getUsers = async (params = {}) => {
 export const getUserById = async (id) => {
   try {
     const res = await api.get(`/users/${id}`);
-    const raw = res.data?.data?.user || res.data?.data || res.data;
-    if (raw) return normalizeUser(raw);
-  } catch (err) {}
+    const userDoc = res.data?.data?.user || res.data?.data || res.data;
+    const permissions = res.data?.data?.permissions || [];
+    if (userDoc) {
+      const merged = {
+        ...userDoc,
+        permissions: permissions && permissions.length > 0 ? permissions : userDoc.permissions
+      };
+      return normalizeUser(merged);
+    }
+  } catch (err) {
+    console.error(`GET /users/${id} failed:`, err?.response?.data || err.message);
+  }
   throw new Error('User not found');
 };
 
 // POST /users - Create user & assign permissions
 export const createUser = async (userData) => {
   try {
+    let cleanRoleId = userData.roleId;
+    if (!cleanRoleId || !/^[0-9a-fA-F]{24}$/.test(String(cleanRoleId))) {
+      cleanRoleId = await resolveRoleId(userData.role || userData.roleId);
+    }
+
     const payload = {
-      name: userData.name,
-      email: userData.email,
-      mobile: userData.mobile,
-      role: userData.role,
+      name: userData.name?.trim(),
+      email: userData.email?.trim() || undefined,
+      mobile: userData.mobile?.trim(),
       password: userData.password,
-      status: userData.status || 'Active',
-      permissions: userData.permissions
+      roleId: cleanRoleId || undefined,
+      isActive: userData.status !== 'Inactive' && userData.isActive !== false
     };
+
     const res = await api.post('/users', payload);
-    const createdUser = normalizeUser(res.data?.data || res.data);
-    return createdUser;
+    const createdUserDoc = res.data?.data || res.data;
+    const createdId = createdUserDoc?._id || createdUserDoc?.id;
+
+    // If custom permissions were provided, assign them
+    if (createdId && userData.permissions && Object.keys(userData.permissions).length > 0) {
+      try {
+        const backendPerms = convertPermsToBackendArray(userData.permissions);
+        if (backendPerms.length > 0) {
+          await assignUserPermissions(createdId, backendPerms);
+        }
+      } catch (pErr) {
+        console.warn('Assigning initial user permissions:', pErr?.message);
+      }
+    }
+
+    return normalizeUser(createdUserDoc);
   } catch (err) {
     const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to create user.';
     throw new Error(serverMsg);
   }
 };
 
-// PUT /users/{id} - Update user profile
+// PUT /users/{id} - Update user profile & role
 export const updateUser = async (id, userData) => {
   try {
+    let cleanRoleId = userData.roleId;
+    if (!cleanRoleId || !/^[0-9a-fA-F]{24}$/.test(String(cleanRoleId))) {
+      cleanRoleId = await resolveRoleId(userData.role || userData.roleId);
+    }
+
     const payload = {
-      name: userData.name,
-      email: userData.email,
-      mobile: userData.mobile,
-      role: userData.role,
-      status: userData.status,
-      permissions: userData.permissions
+      name: userData.name?.trim(),
+      email: userData.email?.trim() || undefined,
+      mobile: userData.mobile?.trim(),
+      roleId: cleanRoleId || undefined,
+      isActive: userData.status !== 'Inactive' && userData.isActive !== false
     };
+
     const res = await api.put(`/users/${id}`, payload);
-    const updatedUser = normalizeUser(res.data?.data || res.data);
-    return updatedUser;
+    const updatedUserDoc = res.data?.data || res.data;
+
+    // If permissions are updated, save them to the permissions collection
+    if (id && userData.permissions && Object.keys(userData.permissions).length > 0) {
+      try {
+        const backendPerms = convertPermsToBackendArray(userData.permissions);
+        if (backendPerms.length > 0) {
+          await assignUserPermissions(id, backendPerms);
+        }
+      } catch (pErr) {
+        console.warn('Saving user permissions:', pErr?.message);
+      }
+    }
+
+    return normalizeUser(updatedUserDoc);
   } catch (err) {
     const serverMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to update user.';
     throw new Error(serverMsg);
@@ -171,68 +225,26 @@ export const resetUserPassword = async (id, passwordData = {}) => {
   }
 };
 
-// --- Module 1: Role Master Endpoints ---
-export const getRoles = async () => {
-  try {
-    const res = await api.get('/roles');
-    const list = extractArray(res.data, ['roles', 'data']);
-    if (Array.isArray(list) && list.length > 0) return list;
-  } catch (err) {}
-  return Object.values(ROLES).map(r => ({ id: r, roleName: r }));
-};
+export {
+  getRoles,
+  createRole,
+  updateRole,
+  deleteRole,
+  getRoleDefaultPermissions,
+  setRoleDefaultPermissions,
+  resolveRoleId
+} from './roleService';
 
-export const createRole = async (roleData) => {
-  try {
-    const res = await api.post('/roles', roleData);
-    return res.data?.data || res.data;
-  } catch (err) {
-    return roleData;
-  }
-};
-
-export const updateRole = async (id, roleData) => {
-  try {
-    const res = await api.put(`/roles/${id}`, roleData);
-    return res.data?.data || res.data;
-  } catch (err) {
-    return roleData;
-  }
-};
-
-export const deleteRole = async (id) => {
-  try {
-    const res = await api.delete(`/roles/${id}`);
-    return res.data;
-  } catch (err) {
-    return { success: true };
-  }
-};
-
-export const getRoleDefaultPermissions = async (roleId) => {
-  try {
-    const res = await api.get(`/roles/${roleId}/default-permissions`);
-    return res.data?.data || res.data;
-  } catch (err) {}
-  return DEFAULT_ROLE_PERMISSIONS[roleId] || {};
-};
+export {
+  getSystemModules,
+  getUserPermissions,
+  assignUserPermissions,
+  revokeUserPermission
+} from './permissionService';
 
 export const configureRoleDefaultPermissions = async (roleId, permissionsData) => {
-  try {
-    const res = await api.post(`/roles/${roleId}/default-permissions`, permissionsData);
-    return res.data;
-  } catch (err) {
-    return { success: true };
-  }
-};
-
-// --- Module 1: Permission Registry & Menu Endpoints ---
-export const getSystemModules = async () => {
-  try {
-    const res = await api.get('/permissions/modules');
-    const list = extractArray(res.data, ['modules', 'data']);
-    if (Array.isArray(list) && list.length > 0) return list;
-  } catch (err) {}
-  return [];
+  const { setRoleDefaultPermissions } = await import('./roleService');
+  return setRoleDefaultPermissions(roleId, permissionsData);
 };
 
 export const seedSystemModules = async () => {
@@ -244,32 +256,6 @@ export const seedSystemModules = async () => {
   }
 };
 
-export const assignUserPermissions = async (payload) => {
-  try {
-    const res = await api.post('/permissions/assign', payload);
-    return res.data;
-  } catch (err) {
-    return { success: true, message: 'Permissions assigned successfully.' };
-  }
-};
-
-export const getUserPermissions = async (userId) => {
-  try {
-    const res = await api.get(`/permissions/user/${userId}`);
-    return res.data?.data || res.data;
-  } catch (err) {}
-  return null;
-};
-
-export const revokeUserPermission = async (payload) => {
-  try {
-    const res = await api.put('/permissions/revoke', payload);
-    return res.data;
-  } catch (err) {
-    return { success: true, message: 'Permission revoked successfully.' };
-  }
-};
-
 export const getMyMenu = async () => {
   try {
     const res = await api.get('/permissions/my-menu');
@@ -278,3 +264,4 @@ export const getMyMenu = async () => {
   } catch (err) {}
   return [];
 };
+

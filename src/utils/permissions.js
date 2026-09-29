@@ -159,12 +159,34 @@ export const isSuperAdminRole = (role) => {
   return clean === 'superadmin' || clean === 'admin' || clean === 'owner' || clean === 'master' || role === ROLES.SUPER_ADMIN;
 };
 
+export const formatRoleName = (role) => {
+  if (!role) return '';
+  if (typeof role === 'object') {
+    role = role.displayName || role.roleName || role.name || role.role || '';
+  }
+  if (!role) return '';
+  const str = String(role).trim();
+  const clean = str.toLowerCase().replace(/[\s_-]+/g, '');
+  if (clean === 'superadmin' || clean === 'admin' || clean === 'owner' || clean === 'master') return 'Super Admin';
+  if (clean === 'salesmanager') return 'Sales Manager';
+  if (clean === 'salesexecutive' || clean === 'sales') return 'Sales Executive';
+  if (clean === 'inventoryuser' || clean === 'inventory') return 'Inventory User';
+  if (clean === 'accountsuser' || clean === 'accounts' || clean === 'accountant') return 'Accounts User';
+  if (clean === 'custom' || clean === 'custompermissions') return 'Custom Permissions';
+
+  if (str.includes('_')) {
+    return str.split('_').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  }
+  return str;
+};
+
 export const normalizeRole = (role) => {
-  if (!role) return ROLES.SUPER_ADMIN;
+  if (!role) return '';
   if (typeof role === 'object') {
     role = role.roleName || role.name || role.role || '';
   }
   const clean = String(role).trim().toLowerCase().replace(/[\s_-]+/g, '');
+  if (!clean) return '';
   if (clean === 'superadmin' || clean === 'admin' || clean === 'owner' || clean === 'master' || clean === 'super_admin') {
     return ROLES.SUPER_ADMIN;
   }
@@ -174,6 +196,91 @@ export const normalizeRole = (role) => {
   if (clean === 'accountsuser' || clean === 'accounts' || clean === 'accountant') return ROLES.ACCOUNTS_USER;
   if (clean === 'custom' || clean === 'custompermissions') return ROLES.CUSTOM;
   return role;
+};
+
+export const BACKEND_TO_FRONTEND_MODULE_MAP = {
+  // Settings & Users
+  USER_MANAGEMENT: 'users',
+  COMPANY_SETTINGS: 'companies',
+  AUDIT_LOG: 'reports',
+
+  // Masters
+  MASTER_MANAGEMENT: 'dashboard',
+  COMPANY_MASTER: 'companies',
+  PRODUCT_GROUP_MASTER: 'product-groups',
+  PRODUCT_MASTER: 'products',
+  VENDOR_MASTER: 'vendors',
+  UNIT_MASTER: 'products',
+  TAX_MASTER: 'invoices',
+  PAYMENT_MODE_MASTER: 'payments',
+  QUOTATION_FORMAT_MASTER: 'quotations',
+  PRODUCT_IMPORT: 'products',
+
+  // Transactions
+  CUSTOMER: 'customers',
+  QUOTATION: 'quotations',
+  FOLLOW_UP: 'quotations',
+  QUOTATION_CONFIRMATION: 'quotations',
+  STOCK: 'stock',
+  CHALLAN: 'challans',
+  INVOICE: 'invoices',
+  PAYMENT: 'payments',
+  RETURN_NOTE: 'returns',
+  CUSTOMER_LEDGER: 'customers',
+  PRODUCT_QUOTATION_TRACKING: 'reports',
+  PRODUCT_TRACKING: 'reports',
+  REPORTS: 'reports',
+  DASHBOARD: 'dashboard'
+};
+
+export const FRONTEND_TO_BACKEND_MAP = {
+  dashboard: ['DASHBOARD', 'MASTER_MANAGEMENT'],
+  products: ['PRODUCT_MASTER', 'PRODUCT_IMPORT', 'UNIT_MASTER'],
+  'product-groups': ['PRODUCT_GROUP_MASTER'],
+  companies: ['COMPANY_MASTER', 'COMPANY_SETTINGS'],
+  vendors: ['VENDOR_MASTER'],
+  customers: ['CUSTOMER', 'CUSTOMER_LEDGER'],
+  quotations: ['QUOTATION', 'FOLLOW_UP', 'QUOTATION_CONFIRMATION', 'QUOTATION_FORMAT_MASTER'],
+  stock: ['STOCK'],
+  challans: ['CHALLAN'],
+  invoices: ['INVOICE', 'TAX_MASTER'],
+  payments: ['PAYMENT', 'PAYMENT_MODE_MASTER'],
+  returns: ['RETURN_NOTE'],
+  reports: ['REPORTS', 'PRODUCT_TRACKING', 'PRODUCT_QUOTATION_TRACKING', 'AUDIT_LOG'],
+  users: ['USER_MANAGEMENT']
+};
+
+/**
+ * Converts frontend module permission object into backend payload array for /permissions/assign
+ */
+export const convertPermsToBackendArray = (frontendPerms) => {
+  if (!frontendPerms || typeof frontendPerms !== 'object') return [];
+  const backendList = [];
+  const processedKeys = new Set();
+
+  Object.entries(frontendPerms).forEach(([fKey, act]) => {
+    if (!act) return;
+    const bKeys = FRONTEND_TO_BACKEND_MAP[fKey] || [fKey.toUpperCase()];
+    bKeys.forEach(bKey => {
+      if (!processedKeys.has(bKey)) {
+        processedKeys.add(bKey);
+        backendList.push({
+          moduleKey: bKey,
+          actions: {
+            view: Boolean(act.view),
+            create: Boolean(act.create),
+            edit: Boolean(act.edit),
+            delete: Boolean(act.delete),
+            export: Boolean(act.export || act.view),
+            approve: Boolean(act.approve || act.edit)
+          },
+          dataScope: 'ALL'
+        });
+      }
+    });
+  });
+
+  return backendList;
 };
 
 /**
@@ -195,24 +302,91 @@ export const normalizePermissions = (rawPermissions, role = null, fallbackToDefa
   }
 
   const base = getEmptyPermissions();
+  let hasAnyExplicitPermission = false;
+
+  const mapToFrontendKey = (key) => {
+    if (!key) return null;
+    const str = String(key).trim();
+    if (base[str] !== undefined) return str;
+    const upper = str.toUpperCase();
+    if (BACKEND_TO_FRONTEND_MODULE_MAP[upper]) return BACKEND_TO_FRONTEND_MODULE_MAP[upper];
+    const lower = str.toLowerCase();
+    if (base[lower] !== undefined) return lower;
+    return null;
+  };
 
   // 1. If rawPermissions exists as an object with key-value pairs
   if (rawPermissions && typeof rawPermissions === 'object' && !Array.isArray(rawPermissions) && Object.keys(rawPermissions).length > 0) {
-    let hasAnyExplicitPermission = false;
-    MODULE_LIST.forEach(m => {
-      const p = rawPermissions[m.id];
-      if (p !== undefined && p !== null) {
-        if (typeof p === 'boolean') {
-          base[m.id] = { view: p, create: p, edit: p, delete: p };
-          if (p) hasAnyExplicitPermission = true;
-        } else if (typeof p === 'object') {
-          base[m.id] = {
-            view: !!p.view,
-            create: !!p.create,
-            edit: !!p.edit,
-            delete: !!p.delete
+    Object.entries(rawPermissions).forEach(([rawKey, p]) => {
+      const fKey = mapToFrontendKey(rawKey);
+      if (!fKey || p === undefined || p === null) return;
+
+      if (typeof p === 'boolean') {
+        base[fKey] = {
+          view: base[fKey].view || p,
+          create: base[fKey].create || p,
+          edit: base[fKey].edit || p,
+          delete: base[fKey].delete || p
+        };
+        if (p) hasAnyExplicitPermission = true;
+      } else if (typeof p === 'object') {
+        const v = !!p.view;
+        const c = !!p.create;
+        const e = !!p.edit;
+        const d = !!p.delete;
+        base[fKey] = {
+          view: base[fKey].view || v,
+          create: base[fKey].create || c,
+          edit: base[fKey].edit || e,
+          delete: base[fKey].delete || d
+        };
+        if (v || c || e || d) hasAnyExplicitPermission = true;
+      }
+    });
+
+    if (hasAnyExplicitPermission) {
+      return base;
+    }
+  }
+
+  // 2. If array format (e.g. ['dashboard', 'products'] or backend UserPermission documents)
+  if (Array.isArray(rawPermissions) && rawPermissions.length > 0) {
+    rawPermissions.forEach(item => {
+      if (typeof item === 'string') {
+        if (item.includes(':')) {
+          const [mod, act] = item.split(':');
+          const fKey = mapToFrontendKey(mod);
+          if (fKey && base[fKey]) {
+            if (act === 'view' || act === 'read') { base[fKey].view = true; hasAnyExplicitPermission = true; }
+            if (act === 'create' || act === 'write' || act === 'add') { base[fKey].create = true; hasAnyExplicitPermission = true; }
+            if (act === 'edit' || act === 'update') { base[fKey].edit = true; hasAnyExplicitPermission = true; }
+            if (act === 'delete' || act === 'remove') { base[fKey].delete = true; hasAnyExplicitPermission = true; }
+          }
+        } else {
+          const fKey = mapToFrontendKey(item);
+          if (fKey && base[fKey]) {
+            base[fKey].view = true;
+            hasAnyExplicitPermission = true;
+          }
+        }
+      } else if (item && typeof item === 'object') {
+        const rawMod = item.moduleKey || item.module?.moduleKey || item.moduleName || item.moduleId || item.module || item.name || item.id;
+        const fKey = mapToFrontendKey(rawMod);
+        if (fKey && base[fKey]) {
+          const acts = item.actions || {};
+          const isArr = Array.isArray(acts);
+          const v = item.view !== undefined ? !!item.view : (isArr ? (acts.includes('view') || acts.includes('read')) : !!acts.view);
+          const c = item.create !== undefined ? !!item.create : (isArr ? (acts.includes('create') || acts.includes('write')) : !!acts.create);
+          const e = item.edit !== undefined ? !!item.edit : (isArr ? (acts.includes('edit') || acts.includes('update')) : !!acts.edit);
+          const d = item.delete !== undefined ? !!item.delete : (isArr ? acts.includes('delete') : !!acts.delete);
+
+          base[fKey] = {
+            view: base[fKey].view || v,
+            create: base[fKey].create || c,
+            edit: base[fKey].edit || e,
+            delete: base[fKey].delete || d
           };
-          if (p.view || p.create || p.edit || p.delete) hasAnyExplicitPermission = true;
+          if (v || c || e || d) hasAnyExplicitPermission = true;
         }
       }
     });
@@ -222,39 +396,8 @@ export const normalizePermissions = (rawPermissions, role = null, fallbackToDefa
     }
   }
 
-  // 2. If array format (e.g. ['dashboard', 'products'])
-  if (Array.isArray(rawPermissions) && rawPermissions.length > 0) {
-    rawPermissions.forEach(item => {
-      if (typeof item === 'string') {
-        if (item.includes(':')) {
-          const [mod, act] = item.split(':');
-          if (base[mod]) {
-            if (act === 'view' || act === 'read') base[mod].view = true;
-            if (act === 'create' || act === 'write' || act === 'add') base[mod].create = true;
-            if (act === 'edit' || act === 'update') base[mod].edit = true;
-            if (act === 'delete' || act === 'remove') base[mod].delete = true;
-          }
-        } else if (base[item]) {
-          base[item].view = true;
-        }
-      } else if (item && typeof item === 'object') {
-        const modKey = item.moduleId || item.module || item.name || item.id;
-        if (modKey && base[modKey]) {
-          const acts = item.actions || [];
-          base[modKey] = {
-            view: item.view !== undefined ? !!item.view : (acts.includes('view') || acts.includes('read') || true),
-            create: item.create !== undefined ? !!item.create : (acts.includes('create') || acts.includes('write')),
-            edit: item.edit !== undefined ? !!item.edit : (acts.includes('edit') || acts.includes('update')),
-            delete: item.delete !== undefined ? !!item.delete : acts.includes('delete')
-          };
-        }
-      }
-    });
-    return base;
-  }
-
   // 3. Fallback to role presets if no custom permissions exist or if raw was all-empty
-  if (DEFAULT_ROLE_PERMISSIONS[normRole]) {
+  if (fallbackToDefaults && normRole && DEFAULT_ROLE_PERMISSIONS[normRole]) {
     return JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS[normRole]));
   }
 
@@ -309,17 +452,14 @@ export const canCreate = (role, moduleId, userPermissions = null) => {
   if (isSuperAdminRole(role)) return true;
 
   if (userPermissions && typeof userPermissions === 'object' && Object.keys(userPermissions).length > 0) {
-    const hasAnyActive = Object.values(userPermissions).some(
-      p => p && (p === true || p.view || p.create || p.edit || p.delete)
-    );
-    if (hasAnyActive) {
-      if (userPermissions[moduleId] !== undefined) {
-        return !!userPermissions[moduleId]?.create;
-      }
-      if (moduleId === 'follow-ups' && userPermissions['quotations'] !== undefined) {
-        return !!userPermissions['quotations']?.create;
-      }
-      return false;
+    if (userPermissions[moduleId] !== undefined) {
+      return !!userPermissions[moduleId]?.create;
+    }
+    if (moduleId === 'follow-ups' && userPermissions['quotations'] !== undefined) {
+      return !!userPermissions['quotations']?.create;
+    }
+    if (moduleId === 'product-groups' && userPermissions['products'] !== undefined) {
+      return !!userPermissions['product-groups']?.create || !!userPermissions['products']?.create;
     }
   }
 
@@ -332,17 +472,14 @@ export const canEdit = (role, moduleId, userPermissions = null) => {
   if (isSuperAdminRole(role)) return true;
 
   if (userPermissions && typeof userPermissions === 'object' && Object.keys(userPermissions).length > 0) {
-    const hasAnyActive = Object.values(userPermissions).some(
-      p => p && (p === true || p.view || p.create || p.edit || p.delete)
-    );
-    if (hasAnyActive) {
-      if (userPermissions[moduleId] !== undefined) {
-        return !!userPermissions[moduleId]?.edit;
-      }
-      if (moduleId === 'follow-ups' && userPermissions['quotations'] !== undefined) {
-        return !!userPermissions['quotations']?.edit;
-      }
-      return false;
+    if (userPermissions[moduleId] !== undefined) {
+      return !!userPermissions[moduleId]?.edit;
+    }
+    if (moduleId === 'follow-ups' && userPermissions['quotations'] !== undefined) {
+      return !!userPermissions['quotations']?.edit;
+    }
+    if (moduleId === 'product-groups' && userPermissions['products'] !== undefined) {
+      return !!userPermissions['product-groups']?.edit || !!userPermissions['products']?.edit;
     }
   }
 
@@ -355,17 +492,14 @@ export const canDelete = (role, moduleId, userPermissions = null) => {
   if (isSuperAdminRole(role)) return true;
 
   if (userPermissions && typeof userPermissions === 'object' && Object.keys(userPermissions).length > 0) {
-    const hasAnyActive = Object.values(userPermissions).some(
-      p => p && (p === true || p.view || p.create || p.edit || p.delete)
-    );
-    if (hasAnyActive) {
-      if (userPermissions[moduleId] !== undefined) {
-        return !!userPermissions[moduleId]?.delete;
-      }
-      if (moduleId === 'follow-ups' && userPermissions['quotations'] !== undefined) {
-        return !!userPermissions['quotations']?.delete;
-      }
-      return false;
+    if (userPermissions[moduleId] !== undefined) {
+      return !!userPermissions[moduleId]?.delete;
+    }
+    if (moduleId === 'follow-ups' && userPermissions['quotations'] !== undefined) {
+      return !!userPermissions['quotations']?.delete;
+    }
+    if (moduleId === 'product-groups' && userPermissions['products'] !== undefined) {
+      return !!userPermissions['product-groups']?.delete || !!userPermissions['products']?.delete;
     }
   }
 
@@ -380,16 +514,18 @@ export const usePermissions = (moduleId) => {
   try {
     const auth = useContext(AuthContext);
     if (auth?.currentUser) {
-      role = auth.currentUser.role;
+      role = auth.currentUser.roleKey || auth.currentUser.rawRole || auth.currentUser.role;
       permissions = auth.currentUser.permissions;
     }
   } catch (e) {}
 
+  const isSuper = isSuperAdminRole(role);
+
   return {
-    canView: canView(role, moduleId, permissions),
-    canCreate: canCreate(role, moduleId, permissions),
-    canEdit: canEdit(role, moduleId, permissions),
-    canDelete: canDelete(role, moduleId, permissions),
-    isSuperAdmin: isSuperAdminRole(role)
+    canView: isSuper || canView(role, moduleId, permissions),
+    canCreate: isSuper || canCreate(role, moduleId, permissions),
+    canEdit: isSuper || canEdit(role, moduleId, permissions),
+    canDelete: isSuper || canDelete(role, moduleId, permissions),
+    isSuperAdmin: isSuper
   };
 };

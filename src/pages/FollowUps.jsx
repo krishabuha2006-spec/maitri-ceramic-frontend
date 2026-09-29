@@ -39,8 +39,10 @@ import {
   Filter,
   HelpCircle
 } from 'lucide-react';
+import { usePermissions } from '../utils/permissions';
 
 export const FollowUps = () => {
+  const { canCreate, canEdit, canDelete } = usePermissions('quotations');
   const [searchParams] = useSearchParams();
   const customerIdParam = searchParams.get('customerId') || '';
   const location = useLocation();
@@ -916,24 +918,26 @@ export const FollowUps = () => {
           </button>
 
           {/* Add Follow-Up Button */}
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => handleOpenAddForm()}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              borderRadius: '8px',
-              padding: '0.525rem 1.15rem',
-              fontWeight: 700,
-              fontSize: '0.85rem',
-              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.22)'
-            }}
-          >
-            <Plus size={17} />
-            <span>Log Follow-Up</span>
-          </button>
+          {canCreate && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => handleOpenAddForm()}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                borderRadius: '8px',
+                padding: '0.525rem 1.15rem',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.22)'
+              }}
+            >
+              <Plus size={17} />
+              <span>Log Follow-Up</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1210,15 +1214,17 @@ export const FollowUps = () => {
                     <td style={{ padding: '0.65rem 0.8rem', textAlign: 'center', verticalAlign: 'middle' }}>
                       <div className="action-btn-group" style={{ justifyContent: 'center' }}>
                         {/* Log New Follow-Up */}
-                        <button
-                          type="button"
-                          className="action-btn action-btn-view"
-                          onClick={() => handleOpenAddForm(f)}
-                          data-tooltip="Log Next Follow-Up"
-                          title="Log Another Follow-Up"
-                        >
-                          <PhoneCall size={14} style={{ color: '#2563eb' }} />
-                        </button>
+                        {canCreate && (
+                          <button
+                            type="button"
+                            className="action-btn action-btn-view"
+                            onClick={() => handleOpenAddForm(f)}
+                            data-tooltip="Log Next Follow-Up"
+                            title="Log Another Follow-Up"
+                          >
+                            <PhoneCall size={14} style={{ color: '#2563eb' }} />
+                          </button>
+                        )}
 
                         {/* View Chronological Timeline */}
                         <button
@@ -1232,26 +1238,30 @@ export const FollowUps = () => {
                         </button>
 
                         {/* Edit Record */}
-                        <button
-                          type="button"
-                          className="action-btn action-btn-edit"
-                          onClick={() => handleOpenEditForm(f)}
-                          data-tooltip="Edit Follow-Up"
-                          title="Edit Follow-Up"
-                        >
-                          <Edit3 size={14} style={{ color: '#d97706' }} />
-                        </button>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            className="action-btn action-btn-edit"
+                            onClick={() => handleOpenEditForm(f)}
+                            data-tooltip="Edit Follow-Up"
+                            title="Edit Follow-Up"
+                          >
+                            <Edit3 size={14} style={{ color: '#d97706' }} />
+                          </button>
+                        )}
 
                         {/* Delete Record */}
-                        <button
-                          type="button"
-                          className="action-btn action-btn-delete"
-                          onClick={() => handleDeleteClick(f)}
-                          data-tooltip="Delete Record"
-                          title="Delete Follow-Up"
-                        >
-                          <Trash2 size={14} style={{ color: '#dc2626' }} />
-                        </button>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            className="action-btn action-btn-delete"
+                            onClick={() => handleDeleteClick(f)}
+                            data-tooltip="Delete Record"
+                            title="Delete Follow-Up"
+                          >
+                            <Trash2 size={14} style={{ color: '#dc2626' }} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -5,10 +5,12 @@ import {
   CheckCircle2, AlertCircle, RefreshCw, X, Save, ArrowLeft, Phone, Mail, MapPin
 } from 'lucide-react';
 import { getVendors, createVendor, updateVendor, toggleVendorStatus } from '../services/vendorService';
+import { usePermissions } from '../utils/permissions';
 import StatusBadge from '../components/StatusBadge';
 import Pagination from '../components/Pagination';
 
 export const Vendors = () => {
+  const { canCreate, canEdit, canDelete } = usePermissions('vendors');
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -495,14 +497,16 @@ export const Vendors = () => {
             <span>Back to Products</span>
           </Link>
 
-          <button 
-            className="btn btn-primary" 
-            onClick={handleAddNew} 
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderRadius: '8px', padding: '0.6rem 1.25rem', fontWeight: 700 }}
-          >
-            <Plus size={18} />
-            <span>Add New Vendor</span>
-          </button>
+          {canCreate && (
+            <button 
+              className="btn btn-primary" 
+              onClick={handleAddNew} 
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderRadius: '8px', padding: '0.6rem 1.25rem', fontWeight: 700 }}
+            >
+              <Plus size={18} />
+              <span>Add New Vendor</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -626,47 +630,54 @@ export const Vendors = () => {
                   </td>
                   <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                      <button 
-                        onClick={() => handleEdit(v)} 
-                        className="action-btn action-btn-edit"
-                        data-tooltip="Edit Vendor Details"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '8px',
-                          border: '1px solid #cbd5e1',
-                          backgroundColor: '#ffffff',
-                          color: '#2563eb',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <Edit3 size={15} />
-                      </button>
-                      <button 
-                        onClick={() => handleToggleStatus(v)} 
-                        className="action-btn action-btn-toggle"
-                        data-tooltip={v.status === 'Active' || v.isActive !== false ? 'Deactivate Vendor' : 'Activate Vendor'}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '8px',
-                          border: '1px solid #cbd5e1',
-                          backgroundColor: (v.status === 'Active' || v.isActive !== false) ? '#f0fdf4' : '#f8fafc',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {v.status === 'Active' || v.isActive !== false ? (
-                          <ToggleRight size={18} style={{ color: '#16a34a' }} />
-                        ) : (
-                          <ToggleLeft size={18} style={{ color: '#94a3b8' }} />
-                        )}
-                      </button>
+                      {canEdit && (
+                        <button 
+                          onClick={() => handleEdit(v)} 
+                          className="action-btn action-btn-edit"
+                          data-tooltip="Edit Vendor Details"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '8px',
+                            border: '1px solid #cbd5e1',
+                            backgroundColor: '#ffffff',
+                            color: '#2563eb',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Edit3 size={15} />
+                        </button>
+                      )}
+                      {(canEdit || canDelete) && (
+                        <button 
+                          onClick={() => handleToggleStatus(v)} 
+                          className="action-btn action-btn-toggle"
+                          data-tooltip={v.status === 'Active' || v.isActive !== false ? 'Deactivate Vendor' : 'Activate Vendor'}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '8px',
+                            border: '1px solid #cbd5e1',
+                            backgroundColor: (v.status === 'Active' || v.isActive !== false) ? '#f0fdf4' : '#f8fafc',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {v.status === 'Active' || v.isActive !== false ? (
+                            <ToggleRight size={18} style={{ color: '#16a34a' }} />
+                          ) : (
+                            <ToggleLeft size={18} style={{ color: '#94a3b8' }} />
+                          )}
+                        </button>
+                      )}
+                      {!canEdit && !canDelete && (
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>View Only</span>
+                      )}
                     </div>
                   </td>
                 </tr>

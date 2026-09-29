@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { getPayments } from '../services/paymentService';
 import { formatCurrency, formatDate } from '../utils/formatters';
+import { usePermissions } from '../utils/permissions';
 import { Pagination } from '../components/Pagination';
 import { Plus, Search, Eye, Printer, CreditCard, RefreshCw, Download } from 'lucide-react';
 
@@ -21,6 +22,7 @@ const renderSafeText = (val, fallback = '') => {
 };
 
 export const Payments = () => {
+  const { canCreate, canEdit, canDelete } = usePermissions('payments');
   const [payments, setPayments] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -74,10 +76,12 @@ export const Payments = () => {
             <Download size={15} style={{ color: '#0f172a' }} />
             <span>Export Excel</span>
           </button>
-          <Link to="/payments/entry" className="btn btn-primary" style={{ borderRadius: '8px', padding: '0.525rem 1.15rem', fontWeight: 700, fontSize: '0.85rem' }}>
-            <Plus size={16} />
-            <span>Record Payment Receipt</span>
-          </Link>
+          {canCreate && (
+            <Link to="/payments/entry" className="btn btn-primary" style={{ borderRadius: '8px', padding: '0.525rem 1.15rem', fontWeight: 700, fontSize: '0.85rem' }}>
+              <Plus size={16} />
+              <span>Record Payment Receipt</span>
+            </Link>
+          )}
         </div>
       </div>
 

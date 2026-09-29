@@ -3,17 +3,18 @@ import { Outlet, useLocation } from 'react-router-dom';
 import Header from './Header';
 
 const titleMap = {
-  '/': 'Dashboard',
+  '/': 'Home - Ceramic & Luxury Tiles Showcase',
   '/products': 'Product Management',
   '/products/new': 'Add New Product',
-  '/product-groups': 'Product Groups',
+  '/product-types': 'Product Types & SubTypes',
+  '/product-groups': 'Product Types & SubTypes',
   '/companies': 'Companies & Brands',
   '/customers': 'Customer Directory & Hub',
   '/customers/new': 'Add New Customer',
   '/quotations': 'Quotation Management',
   '/quotations/create': 'Create Quotation',
   '/follow-ups': 'Quotation Follow-Ups',
-  '/stock': 'Stock & Inventory',
+  '/stock': 'Stock Management & Inventory',
   '/stock/entry': 'Stock Entry Form',
   '/challans': 'Delivery Challans',
   '/challans/create': 'Create Delivery Challan',
@@ -23,6 +24,7 @@ const titleMap = {
   '/payments/entry': 'Record Payment Receipt',
   '/returns': 'Returns Management',
   '/reports': 'Reports Hub',
+  '/settings': 'Settings & System Configuration',
   '/users': 'Users & Role Settings'
 };
 

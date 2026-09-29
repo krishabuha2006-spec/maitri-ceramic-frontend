@@ -616,47 +616,27 @@ export const Customers = () => {
       {/* Summary Cards */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
         gap: '1rem',
         marginBottom: '1.25rem'
       }}>
-        <div style={{ backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-          <div style={{ backgroundColor: '#eff6ff', padding: '0.6rem', borderRadius: '8px', color: '#2563eb' }}>
-            <Users size={20} />
+        <div style={{ backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0', padding: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.9rem', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+          <div style={{ backgroundColor: '#eff6ff', padding: '0.75rem', borderRadius: '8px', color: '#2563eb' }}>
+            <Users size={22} />
           </div>
           <div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Total Customers</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>{totalCustomers}</div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Total Customers</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a' }}>{totalCustomers}</div>
           </div>
         </div>
 
-        <div style={{ backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-          <div style={{ backgroundColor: '#f0fdf4', padding: '0.6rem', borderRadius: '8px', color: '#16a34a' }}>
-            <CheckCircle2 size={20} />
+        <div style={{ backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0', padding: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.9rem', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+          <div style={{ backgroundColor: '#f0fdf4', padding: '0.75rem', borderRadius: '8px', color: '#16a34a' }}>
+            <CheckCircle2 size={22} />
           </div>
           <div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Active Profiles</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#16a34a' }}>{activeCount}</div>
-          </div>
-        </div>
-
-        <div style={{ backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-          <div style={{ backgroundColor: '#fdf2f8', padding: '0.6rem', borderRadius: '8px', color: '#db2777' }}>
-            <IndianRupee size={20} />
-          </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Confirmed Sales Volume</div>
-            <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>{formatCurrency(totalSalesSum)}</div>
-          </div>
-        </div>
-
-        <div style={{ backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-          <div style={{ backgroundColor: '#fef2f2', padding: '0.6rem', borderRadius: '8px', color: '#dc2626' }}>
-            <AlertCircle size={20} />
-          </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Total Outstanding</div>
-            <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#dc2626' }}>{formatCurrency(totalOutstandingSum)}</div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Active Profiles</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#16a34a' }}>{activeCount}</div>
           </div>
         </div>
       </div>
@@ -1068,37 +1048,48 @@ export const Customers = () => {
                                             const isCancelled = ['Cancelled', 'Rejected'].includes(q.status);
 
                                             return (
-                                              <tr key={q.id || q._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', fontWeight: 700, fontFamily: 'monospace', color: '#0f172a' }}>
-                                                  <Link to={`/quotations/${q.id || q._id}`} style={{ color: '#2563eb', textDecoration: 'none' }} data-tooltip="View Quotation">
+                                              <tr 
+                                                key={q.id || q._id} 
+                                                style={{ 
+                                                  backgroundColor: isFinalized ? '#fef9c3' : '#ffffff', 
+                                                  borderBottom: isFinalized ? '1.5px solid #facc15' : '1px solid #f1f5f9',
+                                                  transition: 'background-color 0.2s ease'
+                                                }}
+                                              >
+                                                <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', fontWeight: 700, fontFamily: 'monospace', color: '#0f172a' }}>
+                                                  <Link 
+                                                    to={`/quotations/${q.id || q._id}`} 
+                                                    style={{ color: isFinalized ? '#a16207' : '#2563eb', textDecoration: 'none', fontWeight: 800 }} 
+                                                    data-tooltip="View Quotation"
+                                                  >
                                                     {q.quotationNumber}
                                                   </Link>
                                                 </td>
-                                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', color: '#475569' }}>
+                                                <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', color: isFinalized ? '#713f12' : '#475569', fontWeight: isFinalized ? 600 : 400 }}>
                                                   {formatDate(q.date)}
                                                 </td>
-                                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', color: '#64748b' }}>
+                                                <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', color: isFinalized ? '#854d0e' : '#64748b', fontWeight: isFinalized ? 700 : 400 }}>
                                                   {q.quotationType || 'STANDARD'}
                                                 </td>
-                                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', verticalAlign: 'middle', fontWeight: 700, color: isFinalized ? '#16a34a' : (isCancelled ? '#dc2626' : '#0f172a') }}>
+                                                <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', verticalAlign: 'middle', fontWeight: 800, color: isFinalized ? '#854d0e' : (isCancelled ? '#dc2626' : '#0f172a'), fontSize: '0.825rem' }}>
                                                   {formatCurrency(q.confirmedAmount || q.quotationAmount || q.grandTotal)}
                                                 </td>
-                                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center' }}>
+                                                <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center' }}>
                                                   {isFinalized ? (
                                                     <span style={{
-                                                      backgroundColor: '#f0fdf4',
-                                                      color: '#16a34a',
-                                                      border: '1px solid #bbf7d0',
+                                                      backgroundColor: '#fef08a',
+                                                      color: '#854d0e',
+                                                      border: '1px solid #eab308',
                                                       padding: '0.2rem 0.6rem',
                                                       borderRadius: '6px',
-                                                      fontWeight: 700,
+                                                      fontWeight: 800,
                                                       display: 'inline-flex',
                                                       alignItems: 'center',
                                                       gap: '0.35rem',
                                                       fontSize: '0.75rem'
                                                     }}>
-                                                      <CheckCircle2 size={14} style={{ color: '#16a34a' }} />
-                                                      <span>✓ Finalized / Confirmed</span>
+                                                      <CheckCircle2 size={14} style={{ color: '#ca8a04' }} />
+                                                      <span>✓ Finalized</span>
                                                     </span>
                                                   ) : (
                                                     <StatusBadge status={q.status} />

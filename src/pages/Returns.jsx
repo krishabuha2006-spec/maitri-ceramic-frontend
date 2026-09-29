@@ -14,6 +14,7 @@ import { formatDate } from '../utils/formatters';
 import StatusBadge from '../components/StatusBadge';
 import ConfirmModal from '../components/ConfirmModal';
 import * as XLSX from 'xlsx';
+import { usePermissions } from '../utils/permissions';
 import { 
   Plus, 
   RotateCcw, 
@@ -29,6 +30,7 @@ import {
 } from 'lucide-react';
 
 export const Returns = () => {
+  const { canCreate, canEdit, canDelete } = usePermissions('returns');
   const [activeTab, setActiveTab] = useState('purchase'); // 'purchase' or 'sales'
   const [returnsList, setReturnsList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -936,25 +938,27 @@ export const Returns = () => {
             <Download size={15} />
             <span>Export Excel</span>
           </button>
-          <button 
-            type="button"
-            className="btn btn-primary" 
-            onClick={() => handleOpenForm(activeTab)}
-            style={{
-              height: '38px',
-              padding: '0 1.1rem',
-              fontSize: '0.825rem',
-              fontWeight: 600,
-              borderRadius: '8px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              boxShadow: '0 4px 14px rgba(37, 99, 235, 0.28)'
-            }}
-          >
-            <Plus size={16} />
-            <span>Create {activeTab === 'purchase' ? 'Purchase Return' : 'Sales Return'}</span>
-          </button>
+          {canCreate && (
+            <button 
+              type="button"
+              className="btn btn-primary" 
+              onClick={() => handleOpenForm(activeTab)}
+              style={{
+                height: '38px',
+                padding: '0 1.1rem',
+                fontSize: '0.825rem',
+                fontWeight: 600,
+                borderRadius: '8px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                boxShadow: '0 4px 14px rgba(37, 99, 235, 0.28)'
+              }}
+            >
+              <Plus size={16} />
+              <span>Create {activeTab === 'purchase' ? 'Purchase Return' : 'Sales Return'}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1042,48 +1046,55 @@ export const Returns = () => {
                     <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
                       {isDraft ? (
                         <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleConfirm(r)}
-                            title="Confirm return & apply stock movement"
-                            style={{
-                              padding: '0.25rem 0.5rem',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              borderRadius: '6px',
-                              border: '1px solid #bbf7d0',
-                              backgroundColor: '#f0fdf4',
-                              color: '#16a34a',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.2rem'
-                            }}
-                          >
-                            <Check size={12} />
-                            <span>Confirm</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleCancel(r)}
-                            title="Cancel return"
-                            style={{
-                              padding: '0.25rem 0.5rem',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              borderRadius: '6px',
-                              border: '1px solid #fecaca',
-                              backgroundColor: '#fef2f2',
-                              color: '#dc2626',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.2rem'
-                            }}
-                          >
-                            <X size={12} />
-                            <span>Cancel</span>
-                          </button>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => handleConfirm(r)}
+                              title="Confirm return & apply stock movement"
+                              style={{
+                                padding: '0.25rem 0.5rem',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                borderRadius: '6px',
+                                border: '1px solid #bbf7d0',
+                                backgroundColor: '#f0fdf4',
+                                color: '#16a34a',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.2rem'
+                              }}
+                            >
+                              <Check size={12} />
+                              <span>Confirm</span>
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => handleCancel(r)}
+                              title="Cancel return"
+                              style={{
+                                padding: '0.25rem 0.5rem',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                borderRadius: '6px',
+                                border: '1px solid #fecaca',
+                                backgroundColor: '#fef2f2',
+                                color: '#dc2626',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.2rem'
+                              }}
+                            >
+                              <X size={12} />
+                              <span>Cancel</span>
+                            </button>
+                          )}
+                          {!canEdit && !canDelete && (
+                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Draft (View only)</span>
+                          )}
                         </div>
                       ) : (
                         <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 500 }}>Completed</span>

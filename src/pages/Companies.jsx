@@ -5,10 +5,12 @@ import {
   CheckCircle2, AlertCircle, RefreshCw, X, Save, ArrowLeft, ShieldCheck
 } from 'lucide-react';
 import { getCompanies, createCompany, updateCompany, toggleCompanyStatus } from '../services/productService';
+import { usePermissions } from '../utils/permissions';
 import StatusBadge from '../components/StatusBadge';
 import Pagination from '../components/Pagination';
 
 export const Companies = () => {
+  const { canCreate, canEdit, canDelete } = usePermissions('companies');
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -510,14 +512,16 @@ export const Companies = () => {
             <span>Back to Products</span>
           </Link>
 
-          <button 
-            className="btn btn-primary" 
-            onClick={handleAddNew} 
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderRadius: '8px', padding: '0.6rem 1.25rem', fontWeight: 700 }}
-          >
-            <Plus size={18} />
-            <span>Add New Company</span>
-          </button>
+          {canCreate && (
+            <button 
+              className="btn btn-primary" 
+              onClick={handleAddNew} 
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderRadius: '8px', padding: '0.6rem 1.25rem', fontWeight: 700 }}
+            >
+              <Plus size={18} />
+              <span>Add New Company</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -682,47 +686,54 @@ export const Companies = () => {
                   </td>
                   <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                      <button 
-                        onClick={() => handleEdit(comp)} 
-                        className="action-btn action-btn-edit"
-                        data-tooltip="Edit Company Details"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '8px',
-                          border: '1px solid #cbd5e1',
-                          backgroundColor: '#ffffff',
-                          color: '#2563eb',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <Edit3 size={15} />
-                      </button>
-                      <button 
-                        onClick={() => handleToggleStatus(comp)} 
-                        className="action-btn action-btn-toggle"
-                        data-tooltip={comp.status === 'Active' || comp.isActive !== false ? 'Deactivate Company' : 'Activate Company'}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '8px',
-                          border: '1px solid #cbd5e1',
-                          backgroundColor: (comp.status === 'Active' || comp.isActive !== false) ? '#f0fdf4' : '#f8fafc',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {comp.status === 'Active' || comp.isActive !== false ? (
-                          <ToggleRight size={18} style={{ color: '#16a34a' }} />
-                        ) : (
-                          <ToggleLeft size={18} style={{ color: '#94a3b8' }} />
-                        )}
-                      </button>
+                      {canEdit && (
+                        <button 
+                          onClick={() => handleEdit(comp)} 
+                          className="action-btn action-btn-edit"
+                          data-tooltip="Edit Company Details"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '8px',
+                            border: '1px solid #cbd5e1',
+                            backgroundColor: '#ffffff',
+                            color: '#2563eb',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Edit3 size={15} />
+                        </button>
+                      )}
+                      {(canEdit || canDelete) && (
+                        <button 
+                          onClick={() => handleToggleStatus(comp)} 
+                          className="action-btn action-btn-toggle"
+                          data-tooltip={comp.status === 'Active' || comp.isActive !== false ? 'Deactivate Company' : 'Activate Company'}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '8px',
+                            border: '1px solid #cbd5e1',
+                            backgroundColor: (comp.status === 'Active' || comp.isActive !== false) ? '#f0fdf4' : '#f8fafc',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {comp.status === 'Active' || comp.isActive !== false ? (
+                            <ToggleRight size={18} style={{ color: '#16a34a' }} />
+                          ) : (
+                            <ToggleLeft size={18} style={{ color: '#94a3b8' }} />
+                          )}
+                        </button>
+                      )}
+                      {!canEdit && !canDelete && (
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>View Only</span>
+                      )}
                     </div>
                   </td>
                 </tr>

@@ -21,9 +21,13 @@ import {
 } from 'lucide-react';
 
 import ConfirmModal from '../components/ConfirmModal';
+import { usePermissions } from '../utils/permissions';
 
 export const QuotationDetails = () => {
   const { id } = useParams();
+  const { canEdit, canDelete, canCreate } = usePermissions('quotations');
+  const challanPerms = usePermissions('challans');
+  const invoicePerms = usePermissions('invoices');
   const [quotation, setQuotation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [productsList, setProductsList] = useState([]);
@@ -333,18 +337,20 @@ export const QuotationDetails = () => {
         
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {/* Quick Status Update */}
-          <button 
-            type="button" 
-            className="btn btn-secondary btn-sm" 
-            onClick={handleOpenStatusModal}
-            disabled={actionLoading}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#f0f9ff', borderColor: '#bae6fd', color: '#0284c7' }}
-          >
-            <RefreshCw size={14} /> Update Status
-          </button>
+          {canEdit && (
+            <button 
+              type="button" 
+              className="btn btn-secondary btn-sm" 
+              onClick={handleOpenStatusModal}
+              disabled={actionLoading}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#f0f9ff', borderColor: '#bae6fd', color: '#0284c7' }}
+            >
+              <RefreshCw size={14} /> Update Status
+            </button>
+          )}
 
           {/* Send to customer */}
-          {quotation.status === 'Draft' && (
+          {(canEdit || canCreate) && quotation.status === 'Draft' && (
             <button 
               type="button" 
               className="btn btn-primary btn-sm" 
@@ -386,7 +392,7 @@ export const QuotationDetails = () => {
           </Link>
 
           {/* Approve confirmation */}
-          {quotation.pendingApproval && (
+          {canEdit && quotation.pendingApproval && (
             <button 
               type="button" 
               className="btn btn-primary btn-sm" 
@@ -398,7 +404,7 @@ export const QuotationDetails = () => {
           )}
 
           {/* Confirm */}
-          {quotation.status !== 'Confirmed' && quotation.status !== 'Cancelled' && (
+          {canEdit && quotation.status !== 'Confirmed' && quotation.status !== 'Cancelled' && (
             <button 
               type="button" 
               className="btn btn-primary btn-sm" 
@@ -412,26 +418,30 @@ export const QuotationDetails = () => {
           {/* Delivery Challan & Generate Invoice when Confirmed */}
           {quotation.status === 'Confirmed' && (
             <>
-              <Link
-                to={`/challans/create?customerId=${quotation.customerId}&quotationId=${quotation.id || quotation._id}`}
-                className="btn btn-secondary btn-sm"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#16a34a', backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}
-              >
-                <Truck size={15} /> Create Challan
-              </Link>
+              {challanPerms.canCreate && (
+                <Link
+                  to={`/challans/create?customerId=${quotation.customerId}&quotationId=${quotation.id || quotation._id}`}
+                  className="btn btn-secondary btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#16a34a', backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}
+                >
+                  <Truck size={15} /> Create Challan
+                </Link>
+              )}
 
-              <Link
-                to={`/invoices/create?customerId=${quotation.customerId}&quotationId=${quotation.id || quotation._id}`}
-                className="btn btn-primary btn-sm"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#059669', borderColor: '#059669' }}
-              >
-                <Receipt size={15} /> Generate Invoice
-              </Link>
+              {invoicePerms.canCreate && (
+                <Link
+                  to={`/invoices/create?customerId=${quotation.customerId}&quotationId=${quotation.id || quotation._id}`}
+                  className="btn btn-primary btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#059669', borderColor: '#059669' }}
+                >
+                  <Receipt size={15} /> Generate Invoice
+                </Link>
+              )}
             </>
           )}
 
           {/* Cancel Quotation */}
-          {quotation.status !== 'Cancelled' && (
+          {canDelete && quotation.status !== 'Cancelled' && (
             <button 
               type="button" 
               className="btn btn-secondary btn-sm" 

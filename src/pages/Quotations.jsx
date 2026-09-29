@@ -18,9 +18,11 @@ import {
   Plus, Search, Eye, Edit, PhoneCall, Printer, Download, 
   CheckCircle2, FileText, RefreshCw, Send, Clock, Package, ChevronDown, Check, X, AlertCircle
 } from 'lucide-react';
+import { usePermissions } from '../utils/permissions';
 
 export const Quotations = () => {
   const navigate = useNavigate();
+  const { canCreate, canEdit, canDelete } = usePermissions('quotations');
   const [quotations, setQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -208,23 +210,25 @@ export const Quotations = () => {
             <Printer size={15} />
             <span>Format Master (8 Formats)</span>
           </Link>
-          <Link 
-            to="/quotations/create" 
-            className="btn btn-primary" 
-            style={{ 
-              height: '36px', 
-              padding: '0 0.95rem', 
-              fontSize: '0.825rem', 
-              fontWeight: 600,
-              borderRadius: '8px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.4rem'
-            }}
-          >
-            <Plus size={15} />
-            <span>Create New Quotation</span>
-          </Link>
+          {canCreate && (
+            <Link 
+              to="/quotations/create" 
+              className="btn btn-primary" 
+              style={{ 
+                height: '36px', 
+                padding: '0 0.95rem', 
+                fontSize: '0.825rem', 
+                fontWeight: 600,
+                borderRadius: '8px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem'
+              }}
+            >
+              <Plus size={15} />
+              <span>Create New Quotation</span>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -458,29 +462,31 @@ export const Quotations = () => {
                           </Link>
 
                           {/* Quick Status Update */}
-                          <button
-                            type="button"
-                            onClick={() => handleOpenStatusModal(q)}
-                            className="action-btn action-btn-status"
-                            data-tooltip="Update Status"
-                            style={{
-                              height: '28px',
-                              width: '28px',
-                              borderRadius: '6px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              border: '1px solid #bae6fd',
-                              backgroundColor: '#f0f9ff',
-                              color: '#0284c7',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <RefreshCw size={13} />
-                          </button>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenStatusModal(q)}
+                              className="action-btn action-btn-status"
+                              data-tooltip="Update Status"
+                              style={{
+                                height: '28px',
+                                width: '28px',
+                                borderRadius: '6px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                border: '1px solid #bae6fd',
+                                backgroundColor: '#f0f9ff',
+                                color: '#0284c7',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <RefreshCw size={13} />
+                            </button>
+                          )}
 
                           {/* Edit */}
-                          {!String(q.status || '').toLowerCase().includes('confirm') && !String(q.status || '').toLowerCase().includes('cancel') && (
+                          {canEdit && !String(q.status || '').toLowerCase().includes('confirm') && !String(q.status || '').toLowerCase().includes('cancel') && (
                             <Link 
                               to={`/quotations/edit/${q.id}`} 
                               className="action-btn action-btn-edit"
@@ -502,7 +508,7 @@ export const Quotations = () => {
                           )}
 
                           {/* Send */}
-                          {(q.status === 'Draft' || q.status === 'DRAFT') && (
+                          {(canEdit || canCreate) && (q.status === 'Draft' || q.status === 'DRAFT') && (
                             <button
                               type="button"
                               onClick={() => handleOpenSendModal(q.id, q.quotationNumber)}
@@ -526,7 +532,7 @@ export const Quotations = () => {
                           )}
 
                           {/* Confirm */}
-                          {!String(q.status || '').toLowerCase().includes('confirm') && !String(q.status || '').toLowerCase().includes('cancel') && (
+                          {canEdit && !String(q.status || '').toLowerCase().includes('confirm') && !String(q.status || '').toLowerCase().includes('cancel') && (
                             <button
                               type="button"
                               onClick={() => handleOpenConfirmModal(q.id, q.quotationNumber)}
@@ -593,7 +599,7 @@ export const Quotations = () => {
                           </Link>
 
                           {/* Cancel */}
-                          {!String(q.status || '').toLowerCase().includes('confirm') && !String(q.status || '').toLowerCase().includes('cancel') && (
+                          {canDelete && !String(q.status || '').toLowerCase().includes('confirm') && !String(q.status || '').toLowerCase().includes('cancel') && (
                             <button
                               type="button"
                               onClick={() => handleOpenCancelModal(q.id, q.quotationNumber)}

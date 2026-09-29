@@ -350,14 +350,17 @@ export const Settings = () => {
     setShowPassword(false);
     if (user) {
       setEditingUserId(user.id);
-      const matchedRole = rolesList.find(r => r.roleName === user.role || r._id === user.roleId || r.id === user.roleId);
+      const matchedRole = rolesList.find(r => 
+        (r._id && (r._id === user.roleId || r.id === user.roleId)) ||
+        r.roleName === user.role
+      );
       setUserForm({
         name: user.name || '',
         mobile: user.mobile && user.mobile !== '-' ? user.mobile : '',
         email: user.email || '',
         password: '',
-        roleId: matchedRole?._id || matchedRole?.id || '',
-        roleName: user.role || 'SALES_EXECUTIVE',
+        roleId: matchedRole?._id || matchedRole?.id || user.roleId || '',
+        roleName: matchedRole?.roleName || user.role || 'SALES_EXECUTIVE',
         status: user.status || 'Active'
       });
     } else {
@@ -394,12 +397,20 @@ export const Settings = () => {
 
     setSavingUser(true);
     try {
+      // Find the exact MongoDB Role Object
+      const matchedRole = rolesList.find(r => 
+        (r._id && (r._id === userForm.roleId || r.id === userForm.roleId)) ||
+        r.roleName === userForm.roleName ||
+        r.roleName === userForm.roleId
+      );
+      const roleIdToSend = matchedRole?._id || matchedRole?.id || userForm.roleId;
+
       const payload = {
         name: userForm.name.trim(),
         mobile: userForm.mobile.trim(),
         email: userForm.email.trim() || undefined,
-        roleId: userForm.roleId || undefined,
-        role: userForm.roleName,
+        roleId: roleIdToSend || undefined,
+        role: matchedRole?.roleName || userForm.roleName,
         status: userForm.status,
         isActive: userForm.status === 'Active'
       };
@@ -407,10 +418,10 @@ export const Settings = () => {
       if (!editingUserId) {
         payload.password = userForm.password;
         await createUser(payload);
-        showToast(`User "${userForm.name}" created successfully.`);
+        showToast(`User "${userForm.name}" created with role "${payload.role}" successfully.`);
       } else {
         await updateUser(editingUserId, payload);
-        showToast(`User "${userForm.name}" updated successfully.`);
+        showToast(`User "${userForm.name}" updated with role "${payload.role}" successfully.`);
       }
       setUserModalOpen(false);
       loadUsersData();
@@ -496,7 +507,13 @@ export const Settings = () => {
         getRoles(),
         getSystemModules()
       ]);
-      const safeRoles = Array.isArray(rolesData) ? rolesData : [];
+      const safeRoles = Array.isArray(rolesData) && rolesData.length > 0 ? rolesData : [
+        { _id: 'SUPER_ADMIN', roleName: 'SUPER_ADMIN', description: 'Full system unrestricted access', isSystemRole: true, isActive: true },
+        { _id: 'ADMIN', roleName: 'ADMIN', description: 'Administrative manager with approval controls', isSystemRole: true, isActive: true },
+        { _id: 'SALES_EXECUTIVE', roleName: 'SALES_EXECUTIVE', description: 'Sales, quotations and follow-up entries', isSystemRole: true, isActive: true },
+        { _id: 'ACCOUNTANT', roleName: 'ACCOUNTANT', description: 'Billing, invoices and payment receipts', isSystemRole: true, isActive: true },
+        { _id: 'DISPATCH_MANAGER', roleName: 'DISPATCH_MANAGER', description: 'Challan generation and stock dispatch', isSystemRole: true, isActive: true }
+      ];
       setRolesList(safeRoles);
       
       const safeModules = Array.isArray(modulesData) && modulesData.length > 0 ? modulesData : [
@@ -519,8 +536,8 @@ export const Settings = () => {
       ];
       setSystemModules(safeModules);
 
-      if (safeRoles.length > 0 && !selectedRoleForPerms) {
-        handleSelectRoleForPermissions(safeRoles[0]);
+      if (safeRoles.length > 0) {
+        handleSelectRoleForPermissions(safeRoles[0], safeModules);
       }
     } catch (err) {
       console.error('Failed to load roles/modules:', err);
@@ -529,16 +546,17 @@ export const Settings = () => {
     }
   };
 
-  const handleSelectRoleForPermissions = async (role) => {
+  const handleSelectRoleForPermissions = async (role, modulesOverride = null) => {
     setSelectedRoleForPerms(role);
     setLoadingRolePerms(true);
+    const activeMods = modulesOverride || systemModules;
     try {
       const roleId = role._id || role.id;
       const defaultPerms = await getRoleDefaultPermissions(roleId);
       
       const matrix = {};
-      // Initialize with false
-      systemModules.forEach(m => {
+      // Initialize all modules with default false
+      activeMods.forEach(m => {
         matrix[m.moduleKey] = {
           view: false,
           create: false,
@@ -549,8 +567,8 @@ export const Settings = () => {
         };
       });
 
-      // Overlay fetched default permissions
-      if (Array.isArray(defaultPerms)) {
+      // Overlay fetched default permissions from backend
+      if (Array.isArray(defaultPerms) && defaultPerms.length > 0) {
         defaultPerms.forEach(dp => {
           const mKey = dp.module?.moduleKey || dp.moduleKey;
           if (mKey && dp.actions) {
@@ -566,9 +584,9 @@ export const Settings = () => {
         });
       }
 
-      // If Super Admin role, auto check everything
+      // If Super Admin role, auto-check everything
       if (isSuperAdminRole(role.roleName)) {
-        systemModules.forEach(m => {
+        activeMods.forEach(m => {
           matrix[m.moduleKey] = { view: true, create: true, edit: true, delete: true, export: true, approve: true };
         });
       }
@@ -1038,7 +1056,7 @@ export const Settings = () => {
                 className="form-control"
                 value={userRoleFilter}
                 onChange={e => setUserRoleFilter(e.target.value)}
-                style={{ width: '150px', height: '36px', fontSize: '0.8rem', borderRadius: '8px' }}
+                style={{ width: '160px', height: '36px', fontSize: '0.8rem', borderRadius: '8px' }}
               >
                 <option value="">All Roles</option>
                 {rolesList.map(r => (
@@ -1252,33 +1270,31 @@ export const Settings = () => {
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginLeft: '0.5rem' }}>
-                        {!isSys && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenRoleModal(r);
-                              }}
-                              className="btn btn-secondary"
-                              title="Edit Role"
-                              style={{ height: '26px', width: '26px', padding: 0, borderRadius: '5px' }}
-                            >
-                              <Edit3 size={12} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteRole(r);
-                              }}
-                              className="btn btn-secondary"
-                              title="Delete Role"
-                              style={{ height: '26px', width: '26px', padding: 0, borderRadius: '5px', color: '#dc2626' }}
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenRoleModal(r);
+                          }}
+                          className="btn btn-secondary"
+                          title="Edit Role Details"
+                          style={{ height: '26px', width: '26px', padding: 0, borderRadius: '5px' }}
+                        >
+                          <Edit3 size={12} />
+                        </button>
+                        {!isSuperAdminRole(r.roleName) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteRole(r);
+                            }}
+                            className="btn btn-secondary"
+                            title="Delete Role"
+                            style={{ height: '26px', width: '26px', padding: 0, borderRadius: '5px', color: '#dc2626' }}
+                          >
+                            <Trash2 size={12} />
+                          </button>
                         )}
                       </div>
                     </div>
@@ -1762,24 +1778,26 @@ export const Settings = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.85rem', marginBottom: '1.25rem' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
-                    Assigned Role
+                    Assigned Role (Live Backend Roles) <span style={{ color: '#dc2626' }}>*</span>
                   </label>
                   <select
                     className="form-control"
                     value={userForm.roleId || userForm.roleName}
                     onChange={e => {
                       const selVal = e.target.value;
-                      const matched = rolesList.find(r => r._id === selVal || r.id === selVal || r.roleName === selVal);
+                      const matched = rolesList.find(r => (r._id || r.id) === selVal || r.roleName === selVal);
                       setUserForm({
                         ...userForm,
                         roleId: matched?._id || matched?.id || selVal,
                         roleName: matched?.roleName || selVal
                       });
                     }}
-                    style={{ height: '38px', borderRadius: '8px', fontSize: '0.825rem' }}
+                    style={{ height: '38px', borderRadius: '8px', fontSize: '0.825rem', fontWeight: 600, color: '#0f172a' }}
                   >
                     {rolesList.map(r => (
-                      <option key={r._id || r.id} value={r._id || r.id}>{r.roleName}</option>
+                      <option key={r._id || r.id} value={r._id || r.id}>
+                        {r.roleName} {r.isSystemRole ? '(System)' : ''}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -1814,7 +1832,7 @@ export const Settings = () => {
                   disabled={savingUser}
                   style={{ padding: '0.45rem 1.25rem', borderRadius: '8px', fontWeight: 600 }}
                 >
-                  {savingUser ? 'Saving...' : (editingUserId ? 'Update User' : 'Create User')}
+                  {savingUser ? 'Saving...' : (editingUserId ? 'Update User & Role' : 'Create User & Assign Role')}
                 </button>
               </div>
             </form>
