@@ -610,17 +610,17 @@ export const Stock = () => {
       <div className="table-container" style={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', overflowX: 'auto', backgroundColor: '#ffffff' }}>
         {activeTab === 'inventory' && (
           <>
-            <table className="data-table" style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', fontSize: '0.785rem' }}>
+            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.785rem' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                   <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>SKU</th>
                   <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Product Description</th>
-                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Company</th>
-                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Product Type</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>Company</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>Product Type</th>
                   <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Actual Stock</th>
                   <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Mgmt Stock</th>
                   <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Available</th>
-                  <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', whiteSpace: 'nowrap' }}>Actions</th>
+                  <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', whiteSpace: 'nowrap', width: '120px' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -637,88 +637,63 @@ export const Stock = () => {
 
                     return (
                       <tr key={p._id || p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, fontFamily: 'monospace', color: '#0f172a' }}>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', fontWeight: 700, fontFamily: 'monospace', color: '#0f172a', whiteSpace: 'nowrap' }}>
                           {p.sku}
                         </td>
                         <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.8rem', color: '#1e293b' }}>
                           {p.productName}
                         </td>
-                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569' }}>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569', whiteSpace: 'nowrap' }}>
                           {p.company || '-'}
                         </td>
-                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569' }}>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569', whiteSpace: 'nowrap' }}>
                           {p.productType || p.productGroup || '-'}
                         </td>
-                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: actual < 50 ? '#dc2626' : '#0f172a', textAlign: 'center' }}>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', justifyContent: 'center' }}>
-                            <span style={{ fontWeight: 800, color: actual < 50 ? '#dc2626' : '#0f172a' }}>
-                              {actual} {p.unit || 'Sq.Ft'}
-                            </span>
-                            {canEdit && (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenAdjustModal(p)}
-                                data-tooltip="Quick Manage Stock Quantity"
-                                style={{
-                                  border: '1px solid #cbd5e1',
-                                  background: '#ffffff',
-                                  color: '#2563eb',
-                                  borderRadius: '5px',
-                                  padding: '0.15rem 0.35rem',
-                                  cursor: 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '0.2rem',
-                                  fontSize: '0.68rem',
-                                  fontWeight: 600,
-                                  lineHeight: 1
-                                }}
-                              >
-                                <Edit3 size={10} />
-                                <span>Edit</span>
-                              </button>
-                            )}
-                          </div>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 800, color: actual < 50 ? '#dc2626' : '#0f172a', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {actual} {p.unit || 'Sq.Ft'}
                         </td>
-                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 600, color: '#d97706', textAlign: 'center' }}>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 600, color: '#d97706', textAlign: 'center', whiteSpace: 'nowrap' }}>
                           {mgmt} {p.unit || 'Sq.Ft'}
                         </td>
-                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: '#16a34a', textAlign: 'center' }}>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: '#16a34a', textAlign: 'center', whiteSpace: 'nowrap' }}>
                           {avail} {p.unit || 'Sq.Ft'}
                         </td>
                         <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
+                          <div style={{ display: 'inline-flex', gap: '0.4rem', justifyContent: 'center', alignItems: 'center' }}>
                             {canEdit && (
                               <button
                                 type="button"
                                 onClick={() => handleOpenAdjustModal(p)}
-                                data-tooltip="Manage Stock Quantity (Set / In / Out)"
+                                data-tooltip="Manage Stock Qty"
+                                title="Manage Stock Quantity (Set / In / Out)"
                                 style={{
-                                  padding: '0.25rem 0.55rem',
-                                  fontSize: '0.725rem',
-                                  fontWeight: 700,
+                                  width: '30px',
+                                  height: '30px',
+                                  padding: 0,
                                   borderRadius: '6px',
                                   border: '1px solid #bbf7d0',
                                   background: '#f0fdf4',
-                                  color: '#15803d',
+                                  color: '#16a34a',
                                   cursor: 'pointer',
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: '0.25rem'
+                                  justifyContent: 'center',
+                                  transition: 'all 0.15s ease'
                                 }}
                               >
-                                <SlidersHorizontal size={12} />
-                                <span>Manage Stock</span>
+                                <SlidersHorizontal size={14} />
                               </button>
                             )}
                             <button
                               type="button"
                               onClick={() => handleOpenHistoryModal(p)}
-                              data-tooltip="View Stock Movement History"
+                              data-tooltip="Stock Movement Ledger"
+                              title="View Stock Movement History & Ledger"
                               style={{
-                                padding: '0.25rem 0.5rem',
+                                width: '30px',
+                                height: '30px',
+                                padding: 0,
                                 fontSize: '0.725rem',
-                                fontWeight: 600,
                                 borderRadius: '6px',
                                 border: '1px solid #cbd5e1',
                                 background: '#f8fafc',
@@ -726,22 +701,23 @@ export const Stock = () => {
                                 cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '0.25rem'
+                                justifyContent: 'center',
+                                transition: 'all 0.15s ease'
                               }}
                             >
-                              <History size={12} />
-                              <span>Ledger</span>
+                              <History size={14} />
                             </button>
                             <button
                               type="button"
                               onClick={() => handleReconcile(p)}
                               disabled={isReconciling}
-                              data-tooltip="Reconcile Product Stock Cache"
+                              data-tooltip="Reconcile Stock"
                               title="Reconcile product stock against ledger entries (Safety Net)"
                               style={{
-                                padding: '0.25rem 0.5rem',
+                                width: '30px',
+                                height: '30px',
+                                padding: 0,
                                 fontSize: '0.725rem',
-                                fontWeight: 600,
                                 borderRadius: '6px',
                                 border: '1px solid #dbeafe',
                                 background: '#eff6ff',
@@ -749,11 +725,15 @@ export const Stock = () => {
                                 cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '0.25rem'
+                                justifyContent: 'center',
+                                transition: 'all 0.15s ease'
                               }}
                             >
-                              <ShieldCheck size={12} />
-                              <span>{isReconciling ? '...' : 'Reconcile'}</span>
+                              {isReconciling ? (
+                                <RefreshCw size={13} className="spin-animation" />
+                              ) : (
+                                <ShieldCheck size={14} />
+                              )}
                             </button>
                           </div>
                         </td>
