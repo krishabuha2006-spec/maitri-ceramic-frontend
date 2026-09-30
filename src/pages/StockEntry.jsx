@@ -39,15 +39,17 @@ export const StockEntry = () => {
     setFormError('');
     const prd = products.find(p => p.sku === selectedSku);
     if (prd) {
+      const curStock = Number(prd.actualStock !== undefined ? prd.actualStock : (prd.currentStock || prd.openingStock || 0));
       setFormData(prev => ({
         ...prev,
         productId: prd._id || prd.id || '',
         sku: prd.sku,
         productName: prd.productName || '',
-        unit: prd.unit || 'Sq.Ft'
+        unit: prd.unit || 'Sq.Ft',
+        currentStock: curStock
       }));
     } else {
-      setFormData(prev => ({ ...prev, productId: '', sku: selectedSku, productName: '', unit: 'Sq.Ft' }));
+      setFormData(prev => ({ ...prev, productId: '', sku: selectedSku, productName: '', unit: 'Sq.Ft', currentStock: 0 }));
     }
   };
 
@@ -344,6 +346,44 @@ export const StockEntry = () => {
                 style={{ height: '42px', borderRadius: '8px' }}
               />
             </div>
+
+            {/* Live Stock Impact Summary */}
+            {formData.sku && (() => {
+              const cur = Number(formData.currentStock || 0);
+              const qty = Number(formData.quantity || 0);
+              const isOut = formData.type === 'Stock Out';
+              const projected = isOut ? (cur - qty) : (cur + qty);
+
+              return (
+                <div style={{
+                  gridColumn: 'span 12',
+                  padding: '0.85rem 1.15rem',
+                  borderRadius: '10px',
+                  backgroundColor: isOut ? '#fef2f2' : '#f0fdf4',
+                  border: `1px solid ${isOut ? '#fecaca' : '#bbf7d0'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '0.75rem'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '0.825rem', fontWeight: 700, color: isOut ? '#991b1b' : '#166534' }}>
+                      {isOut ? `Deducting -${qty} ${formData.unit}` : `Adding +${qty} ${formData.unit}`}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      Current Stock: <strong>{cur} {formData.unit}</strong>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Projected Stock After Post</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: projected < 0 ? '#dc2626' : (isOut ? '#dc2626' : '#15803d') }}>
+                      {projected} {formData.unit}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Remarks / Warehouse Notes */}
             <div style={{ gridColumn: 'span 12' }}>

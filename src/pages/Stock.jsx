@@ -8,7 +8,8 @@ import {
   exportStockReports,
   getProductStockSummary,
   getProductStockMovementHistory,
-  reconcileProductStock
+  reconcileProductStock,
+  adjustProductStock
 } from '../services/stockService';
 import { formatDate } from '../utils/formatters';
 import { usePermissions } from '../utils/permissions';
@@ -31,7 +32,12 @@ import {
   Info,
   Building2,
   Layers,
-  AlertCircle
+  AlertCircle,
+  Edit3,
+  PackagePlus,
+  PackageMinus,
+  Save,
+  Check
 } from 'lucide-react';
 
 export const Stock = () => {
@@ -62,6 +68,19 @@ export const Stock = () => {
   const [productSummary, setProductSummary] = useState(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [reconcilingId, setReconcilingId] = useState(null);
+
+  // Quick Stock Quantity Adjustment Modal State
+  const [adjustModalProduct, setAdjustModalProduct] = useState(null);
+  const [adjustData, setAdjustData] = useState({
+    mode: 'SET_EXACT', // 'SET_EXACT' | 'ADD' | 'DEDUCT'
+    targetQuantity: 0,
+    adjustmentQuantity: 10,
+    reason: 'MANUAL_ADDITION',
+    referenceDocNote: 'Manual Stock Update',
+    remarks: ''
+  });
+  const [adjustSaving, setAdjustSaving] = useState(false);
+  const [adjustError, setAdjustError] = useState('');
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -136,6 +155,48 @@ export const Stock = () => {
       console.error(err);
     } finally {
       setHistoryLoading(false);
+    }
+  };
+
+  const handleOpenAdjustModal = (p) => {
+    const actual = Number(p.actualStock !== undefined ? p.actualStock : (p.currentStock || p.openingStock || 0));
+    setAdjustModalProduct(p);
+    setAdjustData({
+      mode: 'SET_EXACT',
+      targetQuantity: actual,
+      adjustmentQuantity: 10,
+      reason: 'MANUAL_ADDITION',
+      referenceDocNote: 'Manual Stock Update',
+      remarks: ''
+    });
+    setAdjustError('');
+  };
+
+  const handleSaveStockAdjustment = async (e) => {
+    e.preventDefault();
+    if (!adjustModalProduct) return;
+    setAdjustSaving(true);
+    setAdjustError('');
+
+    try {
+      const id = adjustModalProduct._id || adjustModalProduct.id;
+      await adjustProductStock({
+        productId: id,
+        mode: adjustData.mode,
+        targetQuantity: Number(adjustData.targetQuantity),
+        adjustmentQuantity: Number(adjustData.adjustmentQuantity),
+        reason: adjustData.reason,
+        referenceDocNote: adjustData.referenceDocNote,
+        remarks: adjustData.remarks
+      });
+      showToast(`Stock updated successfully for ${adjustModalProduct.sku}!`);
+      setAdjustModalProduct(null);
+      await loadStockData();
+    } catch (err) {
+      console.error('Stock adjust error:', err);
+      setAdjustError(err.response?.data?.message || err.message || 'Failed to adjust stock.');
+    } finally {
+      setAdjustSaving(false);
     }
   };
 
@@ -589,7 +650,35 @@ export const Stock = () => {
                           {p.productType || p.productGroup || '-'}
                         </td>
                         <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: actual < 50 ? '#dc2626' : '#0f172a', textAlign: 'center' }}>
-                          {actual} {p.unit || 'Sq.Ft'}
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', justifyContent: 'center' }}>
+                            <span style={{ fontWeight: 800, color: actual < 50 ? '#dc2626' : '#0f172a' }}>
+                              {actual} {p.unit || 'Sq.Ft'}
+                            </span>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenAdjustModal(p)}
+                                data-tooltip="Quick Manage Stock Quantity"
+                                style={{
+                                  border: '1px solid #cbd5e1',
+                                  background: '#ffffff',
+                                  color: '#2563eb',
+                                  borderRadius: '5px',
+                                  padding: '0.15rem 0.35rem',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.2rem',
+                                  fontSize: '0.68rem',
+                                  fontWeight: 600,
+                                  lineHeight: 1
+                                }}
+                              >
+                                <Edit3 size={10} />
+                                <span>Edit</span>
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 600, color: '#d97706', textAlign: 'center' }}>
                           {mgmt} {p.unit || 'Sq.Ft'}
@@ -599,6 +688,29 @@ export const Stock = () => {
                         </td>
                         <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenAdjustModal(p)}
+                                data-tooltip="Manage Stock Quantity (Set / In / Out)"
+                                style={{
+                                  padding: '0.25rem 0.55rem',
+                                  fontSize: '0.725rem',
+                                  fontWeight: 700,
+                                  borderRadius: '6px',
+                                  border: '1px solid #bbf7d0',
+                                  background: '#f0fdf4',
+                                  color: '#15803d',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem'
+                                }}
+                              >
+                                <SlidersHorizontal size={12} />
+                                <span>Manage Stock</span>
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => handleOpenHistoryModal(p)}
@@ -1007,8 +1119,515 @@ export const Stock = () => {
           </div>
         </div>
       )}
+
+      {/* Quick Stock Quantity Adjustment Modal */}
+      {adjustModalProduct && (() => {
+        const currentActual = Number(adjustModalProduct.actualStock !== undefined ? adjustModalProduct.actualStock : (adjustModalProduct.currentStock || adjustModalProduct.openingStock || 0));
+        const currentMgmt = Number(adjustModalProduct.managementStock || 0);
+        const currentAvail = Math.max(0, currentActual - currentMgmt);
+        const unitLabel = adjustModalProduct.unit || 'Sq.Ft';
+
+        let projectedStock = currentActual;
+        let delta = 0;
+        if (adjustData.mode === 'SET_EXACT') {
+          projectedStock = Number(adjustData.targetQuantity) || 0;
+          delta = projectedStock - currentActual;
+        } else if (adjustData.mode === 'ADD') {
+          delta = Number(adjustData.adjustmentQuantity) || 0;
+          projectedStock = currentActual + delta;
+        } else if (adjustData.mode === 'DEDUCT') {
+          delta = -(Number(adjustData.adjustmentQuantity) || 0);
+          projectedStock = currentActual + delta;
+        }
+
+        return (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '1rem'
+          }}>
+            <div style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '560px',
+              maxHeight: '92vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+              overflow: 'hidden',
+              animation: 'fadeIn 0.2s ease-out'
+            }}>
+              {/* Modal Header */}
+              <div style={{
+                padding: '1.25rem 1.5rem',
+                borderBottom: '1px solid #e2e8f0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                backgroundColor: '#f8fafc'
+              }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                    <span style={{
+                      fontFamily: 'monospace',
+                      fontWeight: 800,
+                      fontSize: '0.8rem',
+                      padding: '0.15rem 0.5rem',
+                      borderRadius: '5px',
+                      backgroundColor: '#eff6ff',
+                      color: '#1d4ed8',
+                      border: '1px solid #bfdbfe'
+                    }}>
+                      {adjustModalProduct.sku}
+                    </span>
+                    <span style={{
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      padding: '0.15rem 0.45rem',
+                      borderRadius: '5px',
+                      backgroundColor: '#f1f5f9',
+                      color: '#475569'
+                    }}>
+                      {adjustModalProduct.company || 'Maitri Ceramic'}
+                    </span>
+                  </div>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                    Manage Stock Quantity
+                  </h3>
+                  <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>
+                    {adjustModalProduct.productName}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAdjustModalProduct(null)}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    color: '#64748b',
+                    padding: '0.25rem',
+                    borderRadius: '6px'
+                  }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Current Stock Metrics Bar */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '0.75rem',
+                padding: '0.85rem 1.5rem',
+                backgroundColor: '#f1f5f9',
+                borderBottom: '1px solid #e2e8f0'
+              }}>
+                <div style={{ background: '#ffffff', padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Current Actual</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: currentActual < 50 ? '#dc2626' : '#0f172a' }}>
+                    {currentActual} <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>{unitLabel}</span>
+                  </div>
+                </div>
+                <div style={{ background: '#ffffff', padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Management Reserved</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#d97706' }}>
+                    {currentMgmt} <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>{unitLabel}</span>
+                  </div>
+                </div>
+                <div style={{ background: '#ffffff', padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Available to Sell</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: currentAvail > 0 ? '#16a34a' : '#dc2626' }}>
+                    {currentAvail} <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>{unitLabel}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Form Content */}
+              <form onSubmit={handleSaveStockAdjustment} style={{ padding: '1.25rem 1.5rem', overflowY: 'auto', flex: 1 }}>
+                {adjustError && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    backgroundColor: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderRadius: '8px',
+                    padding: '0.65rem 0.85rem',
+                    color: '#991b1b',
+                    fontSize: '0.825rem',
+                    marginBottom: '1rem'
+                  }}>
+                    <AlertCircle size={16} style={{ flexShrink: 0, color: '#dc2626' }} />
+                    <span>{adjustError}</span>
+                  </div>
+                )}
+
+                {/* Adjustment Mode Segmented Control */}
+                <div style={{ marginBottom: '1.15rem' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.4rem' }}>
+                    Adjustment Action / Mode
+                  </label>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '0.35rem',
+                    backgroundColor: '#f1f5f9',
+                    padding: '0.25rem',
+                    borderRadius: '10px'
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => setAdjustData(prev => ({ ...prev, mode: 'SET_EXACT', reason: 'MANUAL_ADDITION' }))}
+                      style={{
+                        border: 'none',
+                        borderRadius: '7px',
+                        padding: '0.5rem 0.35rem',
+                        fontSize: '0.775rem',
+                        fontWeight: adjustData.mode === 'SET_EXACT' ? 700 : 600,
+                        backgroundColor: adjustData.mode === 'SET_EXACT' ? '#ffffff' : 'transparent',
+                        color: adjustData.mode === 'SET_EXACT' ? '#2563eb' : '#64748b',
+                        boxShadow: adjustData.mode === 'SET_EXACT' ? '0 2px 5px rgba(0,0,0,0.06)' : 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.3rem'
+                      }}
+                    >
+                      <SlidersHorizontal size={13} />
+                      <span>Set Exact Total</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdjustData(prev => ({ ...prev, mode: 'ADD', reason: 'PURCHASE_ENTRY' }))}
+                      style={{
+                        border: 'none',
+                        borderRadius: '7px',
+                        padding: '0.5rem 0.35rem',
+                        fontSize: '0.775rem',
+                        fontWeight: adjustData.mode === 'ADD' ? 700 : 600,
+                        backgroundColor: adjustData.mode === 'ADD' ? '#ffffff' : 'transparent',
+                        color: adjustData.mode === 'ADD' ? '#16a34a' : '#64748b',
+                        boxShadow: adjustData.mode === 'ADD' ? '0 2px 5px rgba(0,0,0,0.06)' : 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.3rem'
+                      }}
+                    >
+                      <PackagePlus size={14} />
+                      <span>+ Stock In (Add)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdjustData(prev => ({ ...prev, mode: 'DEDUCT', reason: 'MANUAL_DEDUCTION' }))}
+                      style={{
+                        border: 'none',
+                        borderRadius: '7px',
+                        padding: '0.5rem 0.35rem',
+                        fontSize: '0.775rem',
+                        fontWeight: adjustData.mode === 'DEDUCT' ? 700 : 600,
+                        backgroundColor: adjustData.mode === 'DEDUCT' ? '#ffffff' : 'transparent',
+                        color: adjustData.mode === 'DEDUCT' ? '#dc2626' : '#64748b',
+                        boxShadow: adjustData.mode === 'DEDUCT' ? '0 2px 5px rgba(0,0,0,0.06)' : 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.3rem'
+                      }}
+                    >
+                      <PackageMinus size={14} />
+                      <span>- Stock Out (Deduct)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Mode: SET_EXACT */}
+                {adjustData.mode === 'SET_EXACT' && (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ fontSize: '0.825rem', fontWeight: 700, color: '#1e293b', display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                      <span>New Exact Physical Stock ({unitLabel})</span>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Current: {currentActual} {unitLabel}</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      className="form-control"
+                      value={adjustData.targetQuantity}
+                      onChange={(e) => setAdjustData({ ...adjustData, targetQuantity: e.target.value })}
+                      onFocus={(e) => e.target.select()}
+                      required
+                      style={{ height: '44px', borderRadius: '8px', fontSize: '1rem', fontWeight: 800 }}
+                    />
+
+                    {/* Quick Preset Buttons */}
+                    <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.45rem', flexWrap: 'wrap' }}>
+                      {[0, 50, 100, 200, 500, 1000].map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setAdjustData({ ...adjustData, targetQuantity: val })}
+                          style={{
+                            border: '1px solid #e2e8f0',
+                            backgroundColor: Number(adjustData.targetQuantity) === val ? '#eff6ff' : '#ffffff',
+                            color: Number(adjustData.targetQuantity) === val ? '#2563eb' : '#475569',
+                            fontWeight: 600,
+                            fontSize: '0.725rem',
+                            padding: '0.2rem 0.5rem',
+                            borderRadius: '5px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Mode: ADD */}
+                {adjustData.mode === 'ADD' && (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ fontSize: '0.825rem', fontWeight: 700, color: '#166534', display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                      <span>Quantity to Add (+ Inflow)</span>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Current: {currentActual} {unitLabel}</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      className="form-control"
+                      value={adjustData.adjustmentQuantity}
+                      onChange={(e) => setAdjustData({ ...adjustData, adjustmentQuantity: e.target.value })}
+                      onFocus={(e) => e.target.select()}
+                      required
+                      style={{ height: '44px', borderRadius: '8px', fontSize: '1rem', fontWeight: 800, borderColor: '#bbf7d0', color: '#15803d' }}
+                    />
+
+                    {/* Quick Preset Add Buttons */}
+                    <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.45rem', flexWrap: 'wrap' }}>
+                      {[5, 10, 25, 50, 100, 250].map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setAdjustData({ ...adjustData, adjustmentQuantity: val })}
+                          style={{
+                            border: '1px solid #bbf7d0',
+                            backgroundColor: Number(adjustData.adjustmentQuantity) === val ? '#dcfce7' : '#ffffff',
+                            color: '#166534',
+                            fontWeight: 700,
+                            fontSize: '0.725rem',
+                            padding: '0.2rem 0.5rem',
+                            borderRadius: '5px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          +{val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Mode: DEDUCT */}
+                {adjustData.mode === 'DEDUCT' && (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ fontSize: '0.825rem', fontWeight: 700, color: '#991b1b', display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                      <span>Quantity to Deduct (- Outflow)</span>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Current: {currentActual} {unitLabel}</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={currentActual}
+                      step="1"
+                      className="form-control"
+                      value={adjustData.adjustmentQuantity}
+                      onChange={(e) => setAdjustData({ ...adjustData, adjustmentQuantity: e.target.value })}
+                      onFocus={(e) => e.target.select()}
+                      required
+                      style={{ height: '44px', borderRadius: '8px', fontSize: '1rem', fontWeight: 800, borderColor: '#fca5a5', color: '#dc2626' }}
+                    />
+
+                    {/* Quick Preset Deduct Buttons */}
+                    <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.45rem', flexWrap: 'wrap' }}>
+                      {[1, 5, 10, 20, 50].map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setAdjustData({ ...adjustData, adjustmentQuantity: val })}
+                          style={{
+                            border: '1px solid #fca5a5',
+                            backgroundColor: Number(adjustData.adjustmentQuantity) === val ? '#fee2e2' : '#ffffff',
+                            color: '#991b1b',
+                            fontWeight: 700,
+                            fontSize: '0.725rem',
+                            padding: '0.2rem 0.5rem',
+                            borderRadius: '5px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          -{val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Calculation Impact Callout */}
+                <div style={{
+                  padding: '0.75rem 1rem',
+                  borderRadius: '10px',
+                  backgroundColor: delta > 0 ? '#f0fdf4' : (delta < 0 ? '#fef2f2' : '#f8fafc'),
+                  border: `1px solid ${delta > 0 ? '#bbf7d0' : (delta < 0 ? '#fecaca' : '#e2e8f0')}`,
+                  marginBottom: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {delta > 0 ? (
+                      <TrendingUp size={18} style={{ color: '#16a34a' }} />
+                    ) : delta < 0 ? (
+                      <TrendingDown size={18} style={{ color: '#dc2626' }} />
+                    ) : (
+                      <Check size={18} style={{ color: '#64748b' }} />
+                    )}
+                    <div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: delta > 0 ? '#166534' : (delta < 0 ? '#991b1b' : '#334155') }}>
+                        {delta > 0 ? `+${delta} ${unitLabel} (Stock In)` : (delta < 0 ? `${delta} ${unitLabel} (Stock Out)` : 'No change in stock')}
+                      </div>
+                      <div style={{ fontSize: '0.725rem', color: '#64748b' }}>
+                        Ledger adjustment impact
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Resulting Actual Stock</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: projectedStock < 50 ? '#dc2626' : '#0f172a' }}>
+                      {projectedStock} {unitLabel}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ledger Reason */}
+                <div style={{ marginBottom: '0.85rem' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.3rem' }}>
+                    Ledger Reason *
+                  </label>
+                  <select
+                    className="form-control"
+                    value={adjustData.reason}
+                    onChange={(e) => setAdjustData({ ...adjustData, reason: e.target.value })}
+                    style={{ height: '40px', borderRadius: '8px', fontSize: '0.825rem', fontWeight: 600 }}
+                  >
+                    {delta >= 0 ? (
+                      <>
+                        <option value="MANUAL_ADDITION">MANUAL_ADDITION (Manual Count / Inventory Addition)</option>
+                        <option value="PURCHASE_ENTRY">PURCHASE_ENTRY (Purchase Consignment Received)</option>
+                        <option value="OPENING_STOCK">OPENING_STOCK (Opening Balance Correction)</option>
+                        <option value="OTHER">OTHER (Other Inflow)</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="MANUAL_DEDUCTION">MANUAL_DEDUCTION (Breakage / Scrap / Deduction)</option>
+                        <option value="OTHER">OTHER (Other Outflow)</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                {/* Reference Document / PO / Note */}
+                <div style={{ marginBottom: '0.85rem' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.3rem' }}>
+                    Reference Document / Note
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. Physical Count Audit 2026 / Vendor Bill #882"
+                    value={adjustData.referenceDocNote}
+                    onChange={(e) => setAdjustData({ ...adjustData, referenceDocNote: e.target.value })}
+                    style={{ height: '40px', borderRadius: '8px', fontSize: '0.825rem' }}
+                  />
+                </div>
+
+                {/* Warehouse Remarks */}
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.3rem' }}>
+                    Warehouse Remarks / Reason Notes
+                  </label>
+                  <textarea
+                    className="form-control"
+                    rows="2"
+                    placeholder="Optional warehouse internal remarks..."
+                    value={adjustData.remarks}
+                    onChange={(e) => setAdjustData({ ...adjustData, remarks: e.target.value })}
+                    style={{ borderRadius: '8px', fontSize: '0.825rem' }}
+                  />
+                </div>
+
+                {/* Modal Actions */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setAdjustModalProduct(null)}
+                    style={{ borderRadius: '8px', height: '38px', padding: '0 1.15rem', fontSize: '0.825rem', fontWeight: 600 }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={adjustSaving}
+                    style={{
+                      borderRadius: '8px',
+                      height: '38px',
+                      padding: '0 1.35rem',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      backgroundColor: '#2563eb'
+                    }}
+                  >
+                    {adjustSaving ? (
+                      <>
+                        <RefreshCw size={14} className="spin-animation" />
+                        <span>Updating Stock...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save size={15} />
+                        <span>Update Stock Quantity</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
 
 export default Stock;
+

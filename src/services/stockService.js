@@ -299,12 +299,74 @@ export const reconcileProductStock = async (productId) => {
   }
 };
 
+/**
+ * 10. Direct Stock Quantity Adjustment helper
+ * Updates product stock to a target quantity or adjusts by a delta
+ */
+export const adjustProductStock = async ({ productId, targetQuantity, adjustmentQuantity, mode = 'SET_EXACT', reason, referenceDocNote, remarks }) => {
+  if (!productId) throw new Error('Product ID is required.');
+
+  // If mode is ADD or DEDUCT
+  if (mode === 'ADD') {
+    const qty = Number(adjustmentQuantity);
+    if (qty <= 0) throw new Error('Quantity must be greater than 0.');
+    return await createStockInEntry({
+      productId,
+      quantity: qty,
+      reason: reason || 'MANUAL_ADDITION',
+      referenceDocNote: referenceDocNote || 'Stock In Adjustment',
+      remarks: remarks || ''
+    });
+  }
+
+  if (mode === 'DEDUCT') {
+    const qty = Number(adjustmentQuantity);
+    if (qty <= 0) throw new Error('Quantity must be greater than 0.');
+    return await createStockOutEntry({
+      productId,
+      quantity: qty,
+      reason: reason || 'MANUAL_DEDUCTION',
+      referenceDocNote: referenceDocNote || 'Stock Out Adjustment',
+      remarks: remarks || '',
+      allowNegative: true
+    });
+  }
+
+  // If mode is SET_EXACT
+  const summary = await getProductStockSummary(productId);
+  const currentActual = Number(summary?.actualStock || 0);
+  const target = Number(targetQuantity);
+  const diff = target - currentActual;
+
+  if (diff > 0) {
+    return await createStockInEntry({
+      productId,
+      quantity: diff,
+      reason: reason || 'MANUAL_ADDITION',
+      referenceDocNote: referenceDocNote || `Stock Set to ${target} (Added ${diff})`,
+      remarks: remarks || `Direct stock balance adjustment from ${currentActual} to ${target}`
+    });
+  } else if (diff < 0) {
+    return await createStockOutEntry({
+      productId,
+      quantity: Math.abs(diff),
+      reason: reason || 'MANUAL_DEDUCTION',
+      referenceDocNote: referenceDocNote || `Stock Set to ${target} (Deducted ${Math.abs(diff)})`,
+      remarks: remarks || `Direct stock balance adjustment from ${currentActual} to ${target}`,
+      allowNegative: true
+    });
+  }
+
+  return { success: true, message: 'Stock already at target quantity.' };
+};
+
 export default {
   getStockEntries,
   getStockMovements,
   createStockInEntry,
   createStockOutEntry,
   createStockEntry,
+  adjustProductStock,
   getLowStockReport,
   getPurchaseAlerts,
   exportStockReports,
@@ -313,3 +375,4 @@ export default {
   getProductStockMovementHistory,
   reconcileProductStock
 };
+
