@@ -860,8 +860,11 @@ export const CustomerDetails = () => {
               key={tab.id}
               type="button"
               className={`tab-btn ${isActive ? 'active' : ''}`}
-              onClick={() => handleTabChange(tab.id)}
-              data-tooltip={`View ${tab.label} (${tab.count})`}
+              onClick={(e) => {
+                e.currentTarget.blur();
+                handleTabChange(tab.id);
+              }}
+              data-tooltip={isActive ? undefined : `View ${tab.label} (${tab.count})`}
               style={{
                 flex: '1 0 auto',
                 minWidth: 'max-content',

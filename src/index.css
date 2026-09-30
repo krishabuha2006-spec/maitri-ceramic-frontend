@@ -1546,7 +1546,16 @@ img, svg, video {
 
 /* Disappear immediately when clicked / active */
 [data-tooltip]:active::before,
-[data-tooltip]:active::after {
+[data-tooltip]:active::after,
+.tab-btn.active::before,
+.tab-btn.active::after,
+.tab-btn.active:hover::before,
+.tab-btn.active:hover::after,
+[data-tooltip].active::before,
+[data-tooltip].active::after,
+[data-tooltip].active:hover::before,
+[data-tooltip].active:hover::after {
+  display: none !important;
   opacity: 0 !important;
   visibility: hidden !important;
   pointer-events: none !important;
