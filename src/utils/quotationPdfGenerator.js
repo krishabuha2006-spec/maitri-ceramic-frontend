@@ -15,16 +15,16 @@ import { formatCurrency, formatDate } from './formatters';
 export const printQuotationPdf = (quotation, activeFormat = null) => {
   if (!quotation) return;
 
-  const rawKey = (activeFormat || quotation.formatKey || quotation.quotationType || 'STANDARD').toUpperCase();
+  const rawKey = String(activeFormat || quotation.formatKey || quotation.quotationType || 'STANDARD').toUpperCase().trim();
   
-  const isFormat1 = rawKey === 'FORMAT_1' || rawKey === '1' || rawKey === 'STANDARD';
-  const isFormat2 = rawKey === 'FORMAT_2' || rawKey === '2' || rawKey === 'WITH_GST' || rawKey.includes('GST');
-  const isFormat3 = rawKey === 'FORMAT_3' || rawKey === '3' || rawKey === 'DISCOUNT';
-  const isFormat4 = rawKey === 'FORMAT_4' || rawKey === '4' || rawKey === 'REMARKS' || rawKey === 'MRP';
-  const isFormat5 = rawKey === 'FORMAT_5' || rawKey === '5' || rawKey === 'PLUMBER' || rawKey === 'DISPATCH';
-  const isFormat6 = rawKey === 'FORMAT_6' || rawKey === '6' || rawKey === 'COMPACT' || rawKey === 'DETAILED';
-  const isFormat7 = rawKey === 'FORMAT_7' || rawKey === '7' || rawKey === 'PENDING';
-  const isFormat8 = rawKey === 'FORMAT_8' || rawKey === '8' || rawKey === 'WITHOUT_SKU';
+  const isFormat8 = rawKey.includes('WITHOUT_SKU') || rawKey.includes('WITHOUT SKU') || rawKey.includes('NO_SKU') || rawKey === '8' || rawKey === 'FORMAT_8' || rawKey === 'FMT-06';
+  const isFormat7 = rawKey.includes('PENDING') || rawKey === '7' || rawKey === 'FORMAT_7' || rawKey === 'FMT-03';
+  const isFormat6 = rawKey.includes('DETAILED') || rawKey.includes('COMPACT') || rawKey === '6' || rawKey === 'FORMAT_6' || rawKey === 'FMT-08';
+  const isFormat5 = rawKey.includes('PLUMBER') || rawKey.includes('DISPATCH') || rawKey === '5' || rawKey === 'FORMAT_5' || rawKey === 'FMT-04';
+  const isFormat4 = (rawKey.includes('MRP') || rawKey.includes('REMARK')) && !isFormat7 && !isFormat8;
+  const isFormat3 = rawKey.includes('DISCOUNT') && !isFormat7 && !isFormat8;
+  const isFormat2 = (rawKey.includes('GST') || rawKey.includes('WITH_GST')) && !isFormat7 && !isFormat8;
+  const isFormat1 = (!isFormat2 && !isFormat3 && !isFormat4 && !isFormat5 && !isFormat6 && !isFormat7 && !isFormat8) || rawKey.includes('STANDARD') || rawKey === '1' || rawKey === 'FORMAT_1' || rawKey === 'FMT-07';
 
   const payWithGst = isFormat2 || Boolean(quotation.payWithGst);
 
@@ -35,11 +35,11 @@ export const printQuotationPdf = (quotation, activeFormat = null) => {
   const custAddress = quotation.customerAddress || quotation.customer?.billingAddress || quotation.address || '';
   const refName = quotation.reference || quotation.salesperson?.name || quotation.salesperson || '';
   const refMobile = quotation.referenceMobile || quotation.salespersonMobile || '';
-  const remarkText = quotation.remarks || quotation.termsAndConditions || 'PAYMENT 100% ADVANCED. TRANSPORTATION WILL BE EXTRA.';
+  const remarkText = quotation.remarks || quotation.termsAndConditions || 'PAYMENT 100% ADVANCED. GOODS ONCE SOLD WILL NOT BE RETURNED.';
 
   const rawItems = Array.isArray(quotation.items) ? quotation.items : [];
 
-  // Group items by Area (e.g., 'A. AT TOILET GENTS', 'B. AT TOILET', etc.)
+  // Group items by Area (if any)
   const areaMap = {};
   rawItems.forEach((item, originalIdx) => {
     const areaName = (item.area || 'General Area').trim();
@@ -49,20 +49,32 @@ export const printQuotationPdf = (quotation, activeFormat = null) => {
     areaMap[areaName].push({ ...item, originalIdx });
   });
 
-  // Calculate Area Totals
+  const distinctAreas = Object.keys(areaMap);
+  const hasMultipleAreas = distinctAreas.length > 1 && !(distinctAreas.length === 1 && (distinctAreas[0] === 'General Area' || distinctAreas[0] === 'General'));
+
+  // Calculate Area and Overall Totals
   const areaSummaries = [];
   let grandNetTotal = 0;
   let grandGrossTotal = 0;
   let grandDiscountTotal = 0;
   let grandTaxableTotal = 0;
   let grandGstTotal = 0;
+  let grandQuotedQty = 0;
+  let grandConfirmedQty = 0;
+  let grandPendingQty = 0;
+  let grandQuotedTotalAmt = 0;
+  let grandConfirmedTotalAmt = 0;
+  let grandPendingTotalAmt = 0;
 
   let areaIdxCounter = 1;
   for (const [areaName, areaItems] of Object.entries(areaMap)) {
     let areaNet = 0;
     areaItems.forEach(item => {
       const qty = Number(item.quantity ?? item.confirmedQty ?? 1);
+      const confQty = Number(item.confirmedQty ?? qty);
+      const pendQty = Math.max(0, qty - confQty);
       const mrp = Number(item.mrp ?? item.rate ?? item.quotedRate ?? item.mrpSnapshot ?? 0);
+      const rate = Number(item.rate ?? item.quotedRate ?? mrp);
       const discPct = Number(item.discountPercent ?? item.discountPct ?? 0);
       const gstPct = payWithGst ? Number(item.gstPercent ?? item.gstPctSnapshot ?? 18) : 0;
 
@@ -78,6 +90,13 @@ export const printQuotationPdf = (quotation, activeFormat = null) => {
       grandGstTotal += lineGst;
       grandNetTotal += lineNet;
       areaNet += lineNet;
+
+      grandQuotedQty += qty;
+      grandConfirmedQty += confQty;
+      grandPendingQty += pendQty;
+      grandQuotedTotalAmt += (qty * rate);
+      grandConfirmedTotalAmt += (confQty * rate);
+      grandPendingTotalAmt += (pendQty * rate);
     });
 
     areaSummaries.push({
@@ -87,13 +106,14 @@ export const printQuotationPdf = (quotation, activeFormat = null) => {
     });
   }
 
-  // Format Helper
+  // Format Helpers
   const fmtNum = (val) => Number(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const fmtQty = (val) => Number(val || 0).toFixed(2);
+  const fmtQty = (val) => Number(val || 0).toFixed(0);
 
-  // 1. Render Area Summary Table (Used in Formats 1, 2, 3, 4)
+  // 1. Render Area Summary Table (Used in Formats 1, 2, 3, 4, only if distinct areas exist)
   const renderAreaSummaryTable = () => {
-    if (isFormat5 || isFormat6) return '';
+    if (isFormat5 || isFormat6 || isFormat7 || isFormat8) return '';
+    if (!hasMultipleAreas) return '';
 
     return `
       <table class="summary-table">
@@ -121,188 +141,246 @@ export const printQuotationPdf = (quotation, activeFormat = null) => {
     `;
   };
 
-  // Render Line Items per Area
+  // 2. Render Pending Items Executive Summary Box
+  const renderPendingSummaryBox = () => {
+    if (!isFormat7) return '';
+
+    const supplyPercent = grandQuotedQty > 0 ? Math.round((grandConfirmedQty / grandQuotedQty) * 100) : 100;
+
+    return `
+      <div style="border: 1.5px solid #2563eb; background-color: #f8fafc; border-radius: 4px; padding: 6px 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 10px;">
+        <div style="flex: 1;">
+          <div style="font-size: 11px; font-weight: 800; color: #1e3a8a; text-transform: uppercase; margin-bottom: 3px;">
+            PENDING SUPPLY STATUS & ORDER REALIZATION BREAKDOWN
+          </div>
+          <div style="display: flex; gap: 15px; color: #334155;">
+            <div>Quoted Items: <strong>${rawItems.length}</strong></div>
+            <div>Total Quoted Qty: <strong>${grandQuotedQty}</strong></div>
+            <div>Supplied Qty: <strong style="color: #16a34a;">${grandConfirmedQty}</strong></div>
+            <div>Pending Balance Qty: <strong style="color: ${grandPendingQty > 0 ? '#dc2626' : '#16a34a'};">${grandPendingQty}</strong></div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; text-align: right;">
+          <div style="border-right: 1px solid #cbd5e1; padding-right: 10px;">
+            <div style="font-size: 8.5px; color: #64748b; font-weight: 700;">QUOTED TOTAL</div>
+            <div style="font-size: 12px; font-weight: 800; color: #1e293b;">₹${fmtNum(grandQuotedTotalAmt)}</div>
+          </div>
+          <div style="border-right: 1px solid #cbd5e1; padding-right: 10px;">
+            <div style="font-size: 8.5px; color: #16a34a; font-weight: 700;">SUPPLIED TOTAL</div>
+            <div style="font-size: 12px; font-weight: 800; color: #16a34a;">₹${fmtNum(grandConfirmedTotalAmt)}</div>
+          </div>
+          <div>
+            <div style="font-size: 8.5px; color: #dc2626; font-weight: 700;">PENDING BALANCE</div>
+            <div style="font-size: 12px; font-weight: 800; color: #dc2626;">₹${fmtNum(grandPendingTotalAmt)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  const resolveImageUrl = (img) => {
+    if (!img || typeof img !== 'string') return '';
+    const trimmed = img.trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('/')) {
+      return `${window.location.origin}${trimmed}`;
+    }
+    return `${window.location.origin}/${trimmed}`;
+  };
+
+  // Render Line Items per Area / Continuous Table
   const renderItemTables = () => {
-    // Format 6: Single compact continuous table for all items (No Images - Photo 2)
+    // Format 6: Single compact continuous table without images
     if (isFormat6) {
       let overallSr = 1;
       return `
         <table class="items-table">
           <thead>
             <tr>
-              <th style="width: 35px; text-align: center;">Sr.</th>
-              <th style="width: 140px; text-align: left;">SKU Code</th>
-              <th style="text-align: left;">Name</th>
-              <th style="width: 75px; text-align: right;">MRP</th>
-              <th style="width: 55px; text-align: right;">Qty</th>
-              <th style="width: 80px; text-align: right;">Total</th>
-              <th style="width: 65px; text-align: right;">Disc(%)</th>
-              <th style="width: 85px; text-align: right;">Net Amt.</th>
+              <th style="width: 30px; text-align: center;">Sr.</th>
+              <th style="width: 120px; text-align: left;">SKU Code</th>
+              <th style="text-align: left;">Product / Item Description</th>
+              <th style="width: 80px; text-align: left;">Brand</th>
+              <th style="width: 65px; text-align: right;">MRP (₹)</th>
+              <th style="width: 45px; text-align: center;">Qty</th>
+              <th style="width: 65px; text-align: right;">Rate (₹)</th>
+              <th style="width: 55px; text-align: right;">Disc%</th>
+              <th style="width: 75px; text-align: right;">Net Amt.</th>
             </tr>
           </thead>
           <tbody>
             ${rawItems.map(item => {
               const qty = Number(item.quantity ?? item.confirmedQty ?? 1);
               const mrp = Number(item.mrp ?? item.rate ?? item.mrpSnapshot ?? 0);
+              const rate = Number(item.rate ?? item.quotedRate ?? mrp);
               const discPct = Number(item.discountPercent ?? item.discountPct ?? 0);
-              const total = qty * mrp;
+              const total = qty * rate;
               const net = total * (1 - discPct / 100) * (payWithGst ? (1 + (Number(item.gstPercent || 18) / 100)) : 1);
               const sku = item.sku || item.companySku || item.skuCodeSnapshot || item.productCode || '-';
               const name = item.productName || item.productNameSnapshot || item.name || 'Ceramic Item';
+              const brand = item.company || item.brand || item.companySnapshot || '-';
 
               return `
                 <tr>
                   <td style="text-align: center;">${overallSr++}</td>
-                  <td style="font-weight: 600; font-family: monospace;">${sku}</td>
-                  <td>${name}</td>
+                  <td style="font-weight: 600; font-family: monospace; font-size: 9.5px;">${sku}</td>
+                  <td>
+                    <div style="font-weight: 600;">${name}</div>
+                    ${item.remarks ? `<div style="font-size: 8.5px; color: #64748b;">${item.remarks}</div>` : ''}
+                  </td>
+                  <td style="color: #374151;">${brand}</td>
                   <td style="text-align: right;">${fmtNum(mrp)}</td>
-                  <td style="text-align: right;">${fmtQty(qty)}</td>
-                  <td style="text-align: right;">${fmtNum(total)}</td>
-                  <td style="text-align: right;">${discPct.toFixed(2)}</td>
+                  <td style="text-align: center; font-weight: 600;">${fmtQty(qty)}</td>
+                  <td style="text-align: right;">${fmtNum(rate)}</td>
+                  <td style="text-align: right;">${discPct > 0 ? discPct.toFixed(1) + '%' : '-'}</td>
                   <td style="text-align: right; font-weight: 700;">${fmtNum(net)}</td>
                 </tr>
               `;
             }).join('')}
+            <tr class="total-row" style="background-color: #f3f4f6; font-weight: 800;">
+              <td colspan="8" style="text-align: right; padding-right: 10px;">GRAND TOTAL :</td>
+              <td style="text-align: right; font-size: 11px;">₹${fmtNum(grandNetTotal)}</td>
+            </tr>
           </tbody>
         </table>
       `;
     }
 
-    const resolveImageUrl = (img) => {
-      if (!img || typeof img !== 'string') return '';
-      const trimmed = img.trim();
-      if (!trimmed) return '';
-      if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
-        return trimmed;
-      }
-      if (trimmed.startsWith('/')) {
-        return `${window.location.origin}${trimmed}`;
-      }
-      return `${window.location.origin}/${trimmed}`;
-    };
-
-    // Formats 1, 2, 3, 4, 5, 7, 8: Grouped by Area Header
+    // Formats 1, 2, 3, 4, 5, 7, 8
     return Object.entries(areaMap).map(([areaName, items]) => {
       let areaItemSr = 1;
 
       // Table Header by Format
       const getTableHeader = () => {
         if (isFormat5) {
-          // Format 5 (Plumber / Dispatch): Sr | SKU Code | Name | Image | Qty | Remark
+          // Format 5 (Plumber / Dispatch): Sr | SKU Code | Image | Product Name | Brand | Qty | Remarks
           return `
             <tr>
-              <th style="width: 35px; text-align: center;">Sr.</th>
-              <th style="width: 130px; text-align: left;">SKU Code</th>
-              <th style="text-align: left;">Name</th>
-              <th style="width: 80px; text-align: center;">Image</th>
-              <th style="width: 55px; text-align: right;">Qty</th>
-              <th style="width: 120px; text-align: left;">Remark</th>
+              <th style="width: 30px; text-align: center;">Sr.</th>
+              <th style="width: 110px; text-align: left;">SKU Code</th>
+              <th style="width: 60px; text-align: center;">Image</th>
+              <th style="text-align: left;">Product / Item Description</th>
+              <th style="width: 75px; text-align: left;">Brand</th>
+              <th style="width: 45px; text-align: center;">Qty</th>
+              <th style="width: 110px; text-align: left;">Remarks / Instructions</th>
             </tr>
           `;
         }
 
         if (isFormat8) {
-          // Format 8 (Without SKU): Sr | Image | Name | MRP | Qty | Total | Net Amt.
+          // Format 8 (Without SKU Code): Clean customer quote without internal SKU codes
           return `
             <tr>
-              <th style="width: 35px; text-align: center;">Sr.</th>
-              <th style="width: 75px; text-align: center;">Image</th>
-              <th style="text-align: left;">Name</th>
-              <th style="width: 75px; text-align: right;">MRP</th>
-              <th style="width: 55px; text-align: right;">Qty</th>
-              <th style="width: 75px; text-align: right;">Total</th>
-              <th style="width: 80px; text-align: right;">Net Amt.</th>
-            </tr>
-          `;
-        }
-
-        if (isFormat2) {
-          // Format 2 (With GST): Sr | SKU Code | Image | Name | MRP | Qty | Total | GST% | GST Amt | Net Amt.
-          return `
-            <tr>
-              <th style="width: 35px; text-align: center;">Sr.</th>
-              <th style="width: 120px; text-align: left;">SKU Code</th>
-              <th style="width: 75px; text-align: center;">Image</th>
-              <th style="text-align: left;">Name</th>
-              <th style="width: 70px; text-align: right;">MRP</th>
-              <th style="width: 50px; text-align: right;">Qty</th>
-              <th style="width: 70px; text-align: right;">Total</th>
-              <th style="width: 55px; text-align: center;">GST%</th>
-              <th style="width: 65px; text-align: right;">GST Amt</th>
-              <th style="width: 80px; text-align: right;">Net Amt.</th>
-            </tr>
-          `;
-        }
-
-        if (isFormat3) {
-          // Format 3 (Discount): Sr | SKU Code | Image | Name | MRP | Qty | Total | Disc(%) | Net Amt.
-          return `
-            <tr>
-              <th style="width: 35px; text-align: center;">Sr.</th>
-              <th style="width: 120px; text-align: left;">SKU Code</th>
-              <th style="width: 75px; text-align: center;">Image</th>
-              <th style="text-align: left;">Name</th>
-              <th style="width: 75px; text-align: right;">MRP</th>
-              <th style="width: 55px; text-align: right;">Qty</th>
-              <th style="width: 75px; text-align: right;">Total</th>
-              <th style="width: 65px; text-align: right;">Disc(%)</th>
-              <th style="width: 80px; text-align: right;">Net Amt.</th>
-            </tr>
-          `;
-        }
-
-        if (isFormat4) {
-          // Format 4 (MRP / Remark): Sr | SKU Code | Image | Name | MRP | Qty | Total | Remark
-          return `
-            <tr>
-              <th style="width: 35px; text-align: center;">Sr.</th>
-              <th style="width: 120px; text-align: left;">SKU Code</th>
-              <th style="width: 75px; text-align: center;">Image</th>
-              <th style="text-align: left;">Name</th>
-              <th style="width: 75px; text-align: right;">MRP</th>
-              <th style="width: 55px; text-align: right;">Qty</th>
-              <th style="width: 75px; text-align: right;">Total</th>
-              <th style="width: 100px; text-align: left;">Remark</th>
+              <th style="width: 30px; text-align: center;">Sr.</th>
+              <th style="width: 65px; text-align: center;">Image</th>
+              <th style="text-align: left;">Product / Item Description</th>
+              <th style="width: 80px; text-align: left;">Brand</th>
+              <th style="width: 65px; text-align: right;">MRP (₹)</th>
+              <th style="width: 45px; text-align: center;">Qty</th>
+              <th style="width: 65px; text-align: right;">Rate (₹)</th>
+              <th style="width: 55px; text-align: right;">Disc%</th>
+              <th style="width: 75px; text-align: right;">Net Amt (₹)</th>
             </tr>
           `;
         }
 
         if (isFormat7) {
-          // Format 7 (Pending): Sr | SKU Code | Image | Name | MRP | Qty | Total | Confirmed | Pending | Net Amt.
+          // Format 7 (Pending Items Detailed Breakdown):
           return `
             <tr>
-              <th style="width: 35px; text-align: center;">Sr.</th>
-              <th style="width: 120px; text-align: left;">SKU Code</th>
-              <th style="width: 75px; text-align: center;">Image</th>
-              <th style="text-align: left;">Name</th>
-              <th style="width: 70px; text-align: right;">MRP</th>
-              <th style="width: 50px; text-align: right;">Qty</th>
-              <th style="width: 70px; text-align: right;">Total</th>
-              <th style="width: 60px; text-align: center;">Confirmed</th>
-              <th style="width: 60px; text-align: center;">Pending</th>
-              <th style="width: 75px; text-align: right;">Net Amt.</th>
+              <th style="width: 26px; text-align: center;">Sr.</th>
+              <th style="width: 85px; text-align: left;">SKU Code</th>
+              <th style="width: 55px; text-align: center;">Image</th>
+              <th style="text-align: left;">Product / Item Description</th>
+              <th style="width: 60px; text-align: left;">Brand</th>
+              <th style="width: 42px; text-align: center;">Quoted</th>
+              <th style="width: 45px; text-align: center;">Supplied</th>
+              <th style="width: 45px; text-align: center;">Pending</th>
+              <th style="width: 55px; text-align: right;">Rate (₹)</th>
+              <th style="width: 65px; text-align: right;">Quoted Total</th>
+              <th style="width: 65px; text-align: right;">Supplied Total</th>
+              <th style="width: 68px; text-align: right;">Pending Total</th>
+              <th style="width: 55px; text-align: center;">Status</th>
             </tr>
           `;
         }
 
-        // Format 1 / Standard Default: Sr | SKU Code | Image | Name | MRP | Qty | Total | Net Amt.
+        if (isFormat2) {
+          // Format 2 (With GST): Sr | SKU Code | Image | Name | Brand | MRP | Qty | Rate | GST% | GST Amt | Net Amt.
+          return `
+            <tr>
+              <th style="width: 28px; text-align: center;">Sr.</th>
+              <th style="width: 95px; text-align: left;">SKU Code</th>
+              <th style="width: 55px; text-align: center;">Image</th>
+              <th style="text-align: left;">Product / Item Description</th>
+              <th style="width: 65px; text-align: left;">Brand</th>
+              <th style="width: 55px; text-align: right;">MRP (₹)</th>
+              <th style="width: 40px; text-align: center;">Qty</th>
+              <th style="width: 55px; text-align: right;">Rate (₹)</th>
+              <th style="width: 45px; text-align: center;">GST%</th>
+              <th style="width: 55px; text-align: right;">GST (₹)</th>
+              <th style="width: 70px; text-align: right;">Net Amt (₹)</th>
+            </tr>
+          `;
+        }
+
+        if (isFormat3) {
+          // Format 3 (Discount): Sr | SKU Code | Image | Name | Brand | MRP | Qty | Rate | Disc% | Net Amt.
+          return `
+            <tr>
+              <th style="width: 28px; text-align: center;">Sr.</th>
+              <th style="width: 100px; text-align: left;">SKU Code</th>
+              <th style="width: 55px; text-align: center;">Image</th>
+              <th style="text-align: left;">Product / Item Description</th>
+              <th style="width: 75px; text-align: left;">Brand</th>
+              <th style="width: 65px; text-align: right;">MRP (₹)</th>
+              <th style="width: 45px; text-align: center;">Qty</th>
+              <th style="width: 65px; text-align: right;">Rate (₹)</th>
+              <th style="width: 55px; text-align: right;">Disc%</th>
+              <th style="width: 75px; text-align: right;">Net Amt (₹)</th>
+            </tr>
+          `;
+        }
+
+        if (isFormat4) {
+          // Format 4 (MRP / Remarks): Sr | SKU Code | Image | Name | Brand | MRP | Qty | Total | Remarks
+          return `
+            <tr>
+              <th style="width: 28px; text-align: center;">Sr.</th>
+              <th style="width: 100px; text-align: left;">SKU Code</th>
+              <th style="width: 55px; text-align: center;">Image</th>
+              <th style="text-align: left;">Product / Item Description</th>
+              <th style="width: 75px; text-align: left;">Brand</th>
+              <th style="width: 65px; text-align: right;">MRP (₹)</th>
+              <th style="width: 45px; text-align: center;">Qty</th>
+              <th style="width: 70px; text-align: right;">Total MRP</th>
+              <th style="width: 90px; text-align: left;">Remarks</th>
+            </tr>
+          `;
+        }
+
+        // Format 1 / Standard Default: Sr | SKU Code | Image | Name | Brand | MRP | Qty | Rate | Net Amt.
         return `
           <tr>
-            <th style="width: 35px; text-align: center;">Sr.</th>
-            <th style="width: 125px; text-align: left;">SKU Code</th>
-            <th style="width: 75px; text-align: center;">Image</th>
-            <th style="text-align: left;">Name</th>
-            <th style="width: 75px; text-align: right;">MRP</th>
-            <th style="width: 55px; text-align: right;">Qty</th>
-            <th style="width: 75px; text-align: right;">Total</th>
-            <th style="width: 80px; text-align: right;">Net Amt.</th>
+            <th style="width: 28px; text-align: center;">Sr.</th>
+            <th style="width: 100px; text-align: left;">SKU Code</th>
+            <th style="width: 55px; text-align: center;">Image</th>
+            <th style="text-align: left;">Product / Item Description</th>
+            <th style="width: 75px; text-align: left;">Brand</th>
+            <th style="width: 65px; text-align: right;">MRP (₹)</th>
+            <th style="width: 45px; text-align: center;">Qty</th>
+            <th style="width: 65px; text-align: right;">Rate (₹)</th>
+            <th style="width: 75px; text-align: right;">Net Amt (₹)</th>
           </tr>
         `;
       };
 
       return `
         <div class="area-section">
-          <div class="area-header-bar">${areaName}</div>
+          ${hasMultipleAreas ? `<div class="area-header-bar">${areaName}</div>` : ''}
           <table class="items-table">
             <thead>
               ${getTableHeader()}
@@ -313,6 +391,7 @@ export const printQuotationPdf = (quotation, activeFormat = null) => {
                 const confirmedQty = Number(item.confirmedQty ?? qty);
                 const pendingQty = Math.max(0, qty - confirmedQty);
                 const mrp = Number(item.mrp ?? item.rate ?? item.mrpSnapshot ?? 0);
+                const rate = Number(item.rate ?? item.quotedRate ?? mrp);
                 const discPct = Number(item.discountPercent ?? item.discountPct ?? 0);
                 const gstPct = payWithGst ? Number(item.gstPercent ?? item.gstPctSnapshot ?? 18) : 0;
 
@@ -322,61 +401,106 @@ export const printQuotationPdf = (quotation, activeFormat = null) => {
                 const lineGst = payWithGst ? (lineTaxable * gstPct) / 100 : 0;
                 const lineNet = lineTaxable + lineGst;
 
+                const quotedAmt = qty * rate;
+                const suppliedAmt = confirmedQty * rate;
+                const pendingAmt = pendingQty * rate;
+
                 const sku = item.sku || item.companySku || item.skuCodeSnapshot || item.productCode || '-';
                 const name = item.productName || item.productNameSnapshot || item.name || 'Ceramic Item';
+                const brand = item.company || item.brand || item.companySnapshot || item.product?.company || '-';
                 const rawImg = item.imageSnapshot || item.productImage || item.image || item.product?.imageUrl || item.imageUrl || item.product?.image || item.product?.drawingImage || item.drawingImage || item.photo || '';
                 const imageSrc = resolveImageUrl(rawImg);
                 const remark = item.remarks || item.remark || '';
 
                 const imageCell = `
-                  <td style="text-align: center; padding: 3px;">
+                  <td style="text-align: center; padding: 2px;">
                     ${imageSrc 
                       ? `<img src="${imageSrc}" class="item-thumbnail" alt="${sku}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='block';" /><div class="no-img-box" style="display:none;">No Img</div>` 
-                      : '<div class="no-img-box">No Img</div>'}
+                      : '<div class="no-img-box">-</div>'}
                   </td>
                 `;
 
-                // Format 5: Dispatch/Plumber (Photo 2)
+                // Format 5: Dispatch / Plumber
                 if (isFormat5) {
                   return `
                     <tr>
                       <td style="text-align: center;">${areaItemSr++}</td>
-                      <td style="font-weight: 600; font-family: monospace;">${sku}</td>
-                      <td style="font-weight: 600;">${name}</td>
+                      <td style="font-weight: 600; font-family: monospace; font-size: 9.5px;">${sku}</td>
                       ${imageCell}
-                      <td style="text-align: right; font-weight: 700;">${fmtQty(qty)}</td>
-                      <td>${remark}</td>
+                      <td style="font-weight: 600;">
+                        <div>${name}</div>
+                        ${remark ? `<div style="font-size: 8.5px; color: #64748b;">${remark}</div>` : ''}
+                      </td>
+                      <td style="color: #374151;">${brand}</td>
+                      <td style="text-align: center; font-weight: 700; font-size: 11px;">${fmtQty(qty)}</td>
+                      <td style="font-size: 9px; color: #4b5563;">${remark || '-'}</td>
                     </tr>
                   `;
                 }
 
-                // Format 8: Without SKU
+                // Format 8: Without SKU Code
                 if (isFormat8) {
                   return `
                     <tr>
                       <td style="text-align: center;">${areaItemSr++}</td>
                       ${imageCell}
-                      <td style="font-weight: 600;">${name}</td>
+                      <td style="font-weight: 600;">
+                        <div>${name}</div>
+                        ${remark ? `<div style="font-size: 8.5px; color: #64748b;">${remark}</div>` : ''}
+                      </td>
+                      <td style="color: #374151;">${brand}</td>
                       <td style="text-align: right;">${fmtNum(mrp)}</td>
-                      <td style="text-align: right;">${fmtQty(qty)}</td>
-                      <td style="text-align: right;">${fmtNum(lineGross)}</td>
+                      <td style="text-align: center; font-weight: 600;">${fmtQty(qty)}</td>
+                      <td style="text-align: right;">${fmtNum(rate)}</td>
+                      <td style="text-align: right;">${discPct > 0 ? discPct.toFixed(1) + '%' : '-'}</td>
                       <td style="text-align: right; font-weight: 700;">${fmtNum(lineNet)}</td>
                     </tr>
                   `;
                 }
 
-                // Format 4: With Remarks
+                // Format 7: Pending Items Detailed Breakdown
+                if (isFormat7) {
+                  const statusLabel = pendingQty === 0 
+                    ? `<span style="color: #16a34a; font-weight: 800; font-size: 8.5px;">COMPLETE</span>`
+                    : (confirmedQty > 0 
+                        ? `<span style="color: #d97706; font-weight: 800; font-size: 8.5px;">PARTIAL</span>` 
+                        : `<span style="color: #dc2626; font-weight: 800; font-size: 8.5px;">PENDING</span>`);
+
+                  return `
+                    <tr style="${pendingQty > 0 ? 'background-color: #fffcf0;' : ''}">
+                      <td style="text-align: center;">${areaItemSr++}</td>
+                      <td style="font-weight: 600; font-family: monospace; font-size: 9px;">${sku}</td>
+                      ${imageCell}
+                      <td>
+                        <div style="font-weight: 600;">${name}</div>
+                        ${remark ? `<div style="font-size: 8px; color: #64748b;">${remark}</div>` : ''}
+                      </td>
+                      <td style="color: #374151; font-size: 9px;">${brand}</td>
+                      <td style="text-align: center; font-weight: 600;">${fmtQty(qty)}</td>
+                      <td style="text-align: center; color: #16a34a; font-weight: 700;">${fmtQty(confirmedQty)}</td>
+                      <td style="text-align: center; color: ${pendingQty > 0 ? '#dc2626' : '#16a34a'}; font-weight: 800;">${fmtQty(pendingQty)}</td>
+                      <td style="text-align: right;">${fmtNum(rate)}</td>
+                      <td style="text-align: right;">${fmtNum(quotedAmt)}</td>
+                      <td style="text-align: right; color: #16a34a; font-weight: 600;">${fmtNum(suppliedAmt)}</td>
+                      <td style="text-align: right; color: ${pendingQty > 0 ? '#dc2626' : '#16a34a'}; font-weight: 800;">${fmtNum(pendingAmt)}</td>
+                      <td style="text-align: center;">${statusLabel}</td>
+                    </tr>
+                  `;
+                }
+
+                // Format 4: MRP / Remarks
                 if (isFormat4) {
                   return `
                     <tr>
                       <td style="text-align: center;">${areaItemSr++}</td>
-                      <td style="font-weight: 600; font-family: monospace;">${sku}</td>
+                      <td style="font-weight: 600; font-family: monospace; font-size: 9.5px;">${sku}</td>
                       ${imageCell}
-                      <td>${name}</td>
+                      <td style="font-weight: 600;">${name}</td>
+                      <td style="color: #374151;">${brand}</td>
                       <td style="text-align: right;">${fmtNum(mrp)}</td>
-                      <td style="text-align: right;">${fmtQty(qty)}</td>
-                      <td style="text-align: right; font-weight: 600;">${fmtNum(lineGross)}</td>
-                      <td>${remark}</td>
+                      <td style="text-align: center; font-weight: 600;">${fmtQty(qty)}</td>
+                      <td style="text-align: right; font-weight: 700;">${fmtNum(lineGross)}</td>
+                      <td style="font-size: 9px; color: #4b5563;">${remark || '-'}</td>
                     </tr>
                   `;
                 }
@@ -386,49 +510,39 @@ export const printQuotationPdf = (quotation, activeFormat = null) => {
                   return `
                     <tr>
                       <td style="text-align: center;">${areaItemSr++}</td>
-                      <td style="font-weight: 600; font-family: monospace;">${sku}</td>
+                      <td style="font-weight: 600; font-family: monospace; font-size: 9.5px;">${sku}</td>
                       ${imageCell}
-                      <td>${name}</td>
+                      <td style="font-weight: 600;">
+                        <div>${name}</div>
+                        ${remark ? `<div style="font-size: 8.5px; color: #64748b;">${remark}</div>` : ''}
+                      </td>
+                      <td style="color: #374151;">${brand}</td>
                       <td style="text-align: right;">${fmtNum(mrp)}</td>
-                      <td style="text-align: right;">${fmtQty(qty)}</td>
-                      <td style="text-align: right;">${fmtNum(lineGross)}</td>
-                      <td style="text-align: right;">${discPct.toFixed(2)}</td>
+                      <td style="text-align: center; font-weight: 600;">${fmtQty(qty)}</td>
+                      <td style="text-align: right;">${fmtNum(rate)}</td>
+                      <td style="text-align: right;">${discPct > 0 ? discPct.toFixed(1) + '%' : '-'}</td>
                       <td style="text-align: right; font-weight: 700;">${fmtNum(lineNet)}</td>
                     </tr>
                   `;
                 }
 
-                // Format 2: With GST Breakdown (With GST)
+                // Format 2: With GST Breakdown
                 if (isFormat2) {
                   return `
                     <tr>
                       <td style="text-align: center;">${areaItemSr++}</td>
-                      <td style="font-weight: 600; font-family: monospace;">${sku}</td>
+                      <td style="font-weight: 600; font-family: monospace; font-size: 9.5px;">${sku}</td>
                       ${imageCell}
-                      <td>${name}</td>
+                      <td style="font-weight: 600;">
+                        <div>${name}</div>
+                        ${remark ? `<div style="font-size: 8.5px; color: #64748b;">${remark}</div>` : ''}
+                      </td>
+                      <td style="color: #374151;">${brand}</td>
                       <td style="text-align: right;">${fmtNum(mrp)}</td>
-                      <td style="text-align: right;">${fmtQty(qty)}</td>
-                      <td style="text-align: right;">${fmtNum(lineGross)}</td>
+                      <td style="text-align: center; font-weight: 600;">${fmtQty(qty)}</td>
+                      <td style="text-align: right;">${fmtNum(rate)}</td>
                       <td style="text-align: center;">${gstPct}%</td>
                       <td style="text-align: right;">${fmtNum(lineGst)}</td>
-                      <td style="text-align: right; font-weight: 700;">${fmtNum(lineNet)}</td>
-                    </tr>
-                  `;
-                }
-
-                // Format 7: Pending items
-                if (isFormat7) {
-                  return `
-                    <tr>
-                      <td style="text-align: center;">${areaItemSr++}</td>
-                      <td style="font-weight: 600; font-family: monospace;">${sku}</td>
-                      ${imageCell}
-                      <td>${name}</td>
-                      <td style="text-align: right;">${fmtNum(mrp)}</td>
-                      <td style="text-align: right;">${fmtQty(qty)}</td>
-                      <td style="text-align: right;">${fmtNum(lineGross)}</td>
-                      <td style="text-align: center; color: #16a34a; font-weight: 700;">${confirmedQty}</td>
-                      <td style="text-align: center; color: #dc2626; font-weight: 700;">${pendingQty}</td>
                       <td style="text-align: right; font-weight: 700;">${fmtNum(lineNet)}</td>
                     </tr>
                   `;
@@ -438,16 +552,35 @@ export const printQuotationPdf = (quotation, activeFormat = null) => {
                 return `
                   <tr>
                     <td style="text-align: center;">${areaItemSr++}</td>
-                    <td style="font-weight: 600; font-family: monospace;">${sku}</td>
+                    <td style="font-weight: 600; font-family: monospace; font-size: 9.5px;">${sku}</td>
                     ${imageCell}
-                    <td>${name}</td>
+                    <td style="font-weight: 600;">
+                      <div>${name}</div>
+                      ${remark ? `<div style="font-size: 8.5px; color: #64748b;">${remark}</div>` : ''}
+                    </td>
+                    <td style="color: #374151;">${brand}</td>
                     <td style="text-align: right;">${fmtNum(mrp)}</td>
-                    <td style="text-align: right;">${fmtQty(qty)}</td>
-                    <td style="text-align: right;">${fmtNum(lineGross)}</td>
+                    <td style="text-align: center; font-weight: 600;">${fmtQty(qty)}</td>
+                    <td style="text-align: right;">${fmtNum(rate)}</td>
                     <td style="text-align: right; font-weight: 700;">${fmtNum(lineNet)}</td>
                   </tr>
                 `;
               }).join('')}
+              ${!isFormat5 ? `
+                <tr class="total-row" style="background-color: #f8fafc; font-weight: 800;">
+                  <td colspan="${isFormat7 ? 9 : (isFormat8 ? 7 : (isFormat2 ? 9 : 7))}" style="text-align: right; padding-right: 10px;">
+                    ${isFormat7 ? 'TOTALS :' : 'TOTAL AMOUNT :'}
+                  </td>
+                  ${isFormat7 ? `
+                    <td style="text-align: right;">₹${fmtNum(grandQuotedTotalAmt)}</td>
+                    <td style="text-align: right; color: #16a34a;">₹${fmtNum(grandConfirmedTotalAmt)}</td>
+                    <td style="text-align: right; color: #dc2626;">₹${fmtNum(grandPendingTotalAmt)}</td>
+                    <td></td>
+                  ` : `
+                    <td colspan="${isFormat2 ? 2 : 1}" style="text-align: right; font-size: 11px;">₹${fmtNum(grandNetTotal)}</td>
+                  `}
+                </tr>
+              ` : ''}
             </tbody>
           </table>
         </div>
@@ -645,6 +778,8 @@ export const printQuotationPdf = (quotation, activeFormat = null) => {
           <div class="meta-row"><span style="width: 50px; font-weight: 700;">Date</span><span class="meta-val">: ${qDate}</span></div>
         </div>
       </div>
+
+      ${renderPendingSummaryBox()}
 
       ${renderAreaSummaryTable()}
 

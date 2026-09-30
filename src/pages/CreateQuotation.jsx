@@ -594,14 +594,14 @@ export const CreateQuotation = () => {
                 }}
                 style={{ height: '42px', borderRadius: '8px', fontWeight: 600, color: '#2563eb' }}
               >
-                <option value="STANDARD">1. Standard Customer Quotation (STANDARD)</option>
-                <option value="WITH_GST">2. Quotation With GST Breakdown (WITH_GST)</option>
-                <option value="DISCOUNT">3. Discounted Quotation (DISCOUNT)</option>
-                <option value="MRP">4. MRP Quotation (MRP)</option>
-                <option value="PLUMBER">5. Plumber Quotation (PLUMBER)</option>
-                <option value="DETAILED">6. Detailed Breakdown Quotation (DETAILED)</option>
-                <option value="PENDING">7. Pending Items Quotation (PENDING)</option>
-                <option value="WITHOUT_SKU">8. Quotation Without SKU Code (WITHOUT_SKU)</option>
+                <option value="STANDARD">Standard Quotation</option>
+                <option value="WITH_GST">Quotation With GST</option>
+                <option value="DISCOUNT">Discounted Quotation</option>
+                <option value="MRP">MRP Quotation</option>
+                <option value="PLUMBER">Plumber / Dispatch</option>
+                <option value="DETAILED">Detailed Breakdown</option>
+                <option value="PENDING">Pending Items</option>
+                <option value="WITHOUT_SKU">Quotation Without SKU</option>
               </select>
             </div>
 
@@ -766,57 +766,20 @@ export const CreateQuotation = () => {
               <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                    <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '13%' }}>Area / Room</th>
-                    <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '28%' }}>Product / SKU Code</th>
-                    <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '10%' }}>Brand</th>
-                    <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '8%', textAlign: 'right' }}>MRP (₹)</th>
+                    <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '34%' }}>Product / SKU Code</th>
+                    <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '13%' }}>Brand</th>
+                    <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '10%', textAlign: 'right' }}>MRP (₹)</th>
                     <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '7%', textAlign: 'center' }}>Qty</th>
-                    <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '8%', textAlign: 'right' }}>Rate (₹)</th>
-                    <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '6%', textAlign: 'center' }}>Disc %</th>
-                    <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '6%', textAlign: 'center' }}>GST %</th>
-                    <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '10%', textAlign: 'right' }}>Net Amount</th>
+                    <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '10%', textAlign: 'right' }}>Rate (₹)</th>
+                    <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '7%', textAlign: 'center' }}>Disc %</th>
+                    <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '7%', textAlign: 'center' }}>GST %</th>
+                    <th style={{ padding: '0.65rem 0.5rem', fontSize: '0.735rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', width: '12%', textAlign: 'right' }}>Net Amount</th>
                     <th style={{ padding: '0.65rem 0.25rem', width: '4%', textAlign: 'center' }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {calculatedItems.map((item, idx) => (
                     <tr key={item.id || idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      {/* Area */}
-                      <td style={{ padding: '0.65rem 0.5rem', verticalAlign: 'top' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                          <input
-                            type="text"
-                            className="table-input"
-                            value={item.area}
-                            onChange={(e) => handleItemChange(idx, 'area', e.target.value)}
-                            placeholder="Area name"
-                            style={{ height: '36px', borderRadius: '6px', fontSize: '0.825rem' }}
-                          />
-                          {/* Quick Area Chips */}
-                          <div style={{ display: 'flex', gap: '0.2rem', flexWrap: 'wrap' }}>
-                            {COMMON_AREAS.slice(0, 3).map(areaChip => (
-                              <button
-                                key={areaChip}
-                                type="button"
-                                onClick={() => handleItemChange(idx, 'area', areaChip)}
-                                style={{
-                                  border: 'none',
-                                  background: item.area === areaChip ? '#eff6ff' : '#f1f5f9',
-                                  color: item.area === areaChip ? '#2563eb' : '#64748b',
-                                  fontSize: '0.65rem',
-                                  fontWeight: 600,
-                                  borderRadius: '4px',
-                                  padding: '1px 4px',
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                {areaChip}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </td>
-
                       {/* Product Selector */}
                       <td style={{ padding: '0.65rem 0.5rem', verticalAlign: 'top' }}>
                         {availableProducts.length > 0 ? (

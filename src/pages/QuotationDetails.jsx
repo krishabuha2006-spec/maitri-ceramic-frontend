@@ -71,14 +71,14 @@ export const QuotationDetails = () => {
   };
 
   const FORMAT_OPTIONS = [
-    { key: 'STANDARD', label: '1. Standard Customer Quotation (STANDARD)' },
-    { key: 'WITH_GST', label: '2. Quotation With GST Breakdown (WITH_GST)' },
-    { key: 'DISCOUNT', label: '3. Discounted Quotation (DISCOUNT)' },
-    { key: 'MRP', label: '4. MRP Quotation (MRP)' },
-    { key: 'PLUMBER', label: '5. Plumber Quotation (PLUMBER)' },
-    { key: 'DETAILED', label: '6. Detailed Breakdown Quotation (DETAILED)' },
-    { key: 'PENDING', label: '7. Pending Items Quotation (PENDING)' },
-    { key: 'WITHOUT_SKU', label: '8. Quotation Without SKU Code (WITHOUT_SKU)' }
+    { key: 'STANDARD', label: 'Standard Quotation' },
+    { key: 'WITH_GST', label: 'Quotation With GST' },
+    { key: 'DISCOUNT', label: 'Discounted Quotation' },
+    { key: 'MRP', label: 'MRP Quotation' },
+    { key: 'PLUMBER', label: 'Plumber / Dispatch' },
+    { key: 'DETAILED', label: 'Detailed Breakdown' },
+    { key: 'PENDING', label: 'Pending Items' },
+    { key: 'WITHOUT_SKU', label: 'Quotation Without SKU' }
   ];
 
   useEffect(() => {
@@ -329,145 +329,164 @@ export const QuotationDetails = () => {
   const totalActualAmount = confirmedAmount + extraProductAmount;
 
   return (
-    <div style={{ maxWidth: '1100px', margin: '0 auto', width: '100%', paddingBottom: '3rem' }}>
+    <div className="quotation-page-container">
 
-      {/* Top Action Controls */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+      {/* Top: Back to Quotations Button */}
+      <div style={{ marginBottom: '0.85rem' }}>
         <Link
           to={quotation.customerId ? `/customers/${quotation.customerId}?tab=quotations` : '/customers'}
           className="btn btn-secondary btn-sm"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, height: '36px', padding: '0 0.9rem', borderRadius: '8px' }}
         >
           <ArrowLeft size={16} />
-          <span>Back to Customer Quotations</span>
+          <span>Back to Quotations</span>
+        </Link>
+      </div>
+
+      {/* Action Buttons Toolbar Bar */}
+      <div className="quotation-action-toolbar">
+        {/* Format Selector Dropdown */}
+        <select
+          className="quotation-format-select"
+          value={selectedFormat}
+          onChange={(e) => {
+            const newFmt = e.target.value;
+            setSelectedFormat(newFmt);
+            handleFormatSelect(newFmt);
+            printQuotationPdf(quotation, newFmt);
+          }}
+          title="Select quotation format"
+        >
+          {FORMAT_OPTIONS.map(fmt => (
+            <option key={fmt.key} value={fmt.key}>{fmt.label}</option>
+          ))}
+        </select>
+
+        {/* Print PDF Button */}
+        <button
+          type="button"
+          className="btn btn-primary btn-sm quotation-action-btn"
+          onClick={() => printQuotationPdf(quotation, selectedFormat)}
+          title={`Print / Open PDF in ${selectedFormat} format`}
+        >
+          <Printer size={14} /> Print PDF
+        </button>
+
+        {/* PDF Download Button */}
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm quotation-action-btn"
+          onClick={() => handleExport('pdf')}
+          title="Download PDF"
+        >
+          <Download size={14} /> PDF
+        </button>
+
+        {/* Export Excel */}
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm quotation-action-btn"
+          onClick={() => handleExport('xlsx')}
+        >
+          <FileSpreadsheet size={14} /> Excel
+        </button>
+
+        {/* Quick Status Update */}
+        {canEdit && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm quotation-action-btn"
+            onClick={handleOpenStatusModal}
+            disabled={actionLoading}
+            style={{ backgroundColor: '#f0f9ff', borderColor: '#bae6fd', color: '#0284c7' }}
+          >
+            <RefreshCw size={13} /> Update Status
+          </button>
+        )}
+
+        {/* Send to customer */}
+        {(canEdit || canCreate) && quotation.status === 'Draft' && (
+          <button
+            type="button"
+            className="btn btn-primary btn-sm quotation-action-btn"
+            onClick={handleSendQuotation}
+            disabled={actionLoading}
+            style={{ backgroundColor: '#0284c7', borderColor: '#0284c7' }}
+          >
+            <Send size={13} /> Mark Sent
+          </button>
+        )}
+
+        {/* Confirm Items */}
+        {canEdit && quotation.status !== 'Confirmed' && quotation.status !== 'Cancelled' && (
+          <button
+            type="button"
+            className="btn btn-primary btn-sm quotation-action-btn"
+            onClick={() => setIsConfirmModalOpen(true)}
+            style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}
+          >
+            <CheckCircle2 size={14} /> Confirm Items
+          </button>
+        )}
+
+        {/* Follow up button */}
+        <Link
+          to={quotation.customerId ? `/customers/${quotation.customerId}?tab=follow-ups` : '/customers'}
+          className="btn btn-secondary btn-sm quotation-action-btn"
+          style={{ color: '#c2410c', backgroundColor: '#fff7ed', borderColor: '#fed7aa' }}
+        >
+          <Send size={13} style={{ transform: 'rotate(45deg)' }} /> Follow-Up
         </Link>
 
-        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Quick Status Update */}
-          {canEdit && (
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={handleOpenStatusModal}
-              disabled={actionLoading}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#f0f9ff', borderColor: '#bae6fd', color: '#0284c7' }}
-            >
-              <RefreshCw size={14} /> Update Status
-            </button>
-          )}
-
-          {/* Send to customer */}
-          {(canEdit || canCreate) && quotation.status === 'Draft' && (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={handleSendQuotation}
-              disabled={actionLoading}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#0284c7', borderColor: '#0284c7' }}
-            >
-              <Send size={15} /> Mark as Sent
-            </button>
-          )}
-
-          {/* Print / PDF Buttons */}
+        {/* Approve confirmation */}
+        {canEdit && quotation.pendingApproval && (
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => printQuotationPdf(quotation, selectedFormat)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+            className="btn btn-primary btn-sm quotation-action-btn"
+            onClick={handleApproveConfirmation}
+            style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}
           >
-            <Printer size={15} /> Print
+            <ShieldCheck size={14} /> Approve
           </button>
+        )}
 
+        {/* Delivery Challan & Generate Invoice when Confirmed */}
+        {quotation.status === 'Confirmed' && (
+          <>
+            {challanPerms.canCreate && (
+              <Link
+                to={`/challans/create?customerId=${quotation.customerId}&quotationId=${quotation.id || quotation._id}`}
+                className="btn btn-secondary btn-sm quotation-action-btn"
+                style={{ color: '#16a34a', backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}
+              >
+                <Truck size={14} /> Create Challan
+              </Link>
+            )}
+
+            {invoicePerms.canCreate && (
+              <Link
+                to={`/invoices/create?customerId=${quotation.customerId}&quotationId=${quotation.id || quotation._id}`}
+                className="btn btn-primary btn-sm quotation-action-btn"
+                style={{ backgroundColor: '#059669', borderColor: '#059669' }}
+              >
+                <Receipt size={14} /> Generate Invoice
+              </Link>
+            )}
+          </>
+        )}
+
+        {/* Cancel Quotation */}
+        {canDelete && quotation.status !== 'Cancelled' && (
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => handleExport('pdf')}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+            className="btn btn-secondary btn-sm quotation-action-btn"
+            onClick={handleCancelQuotation}
+            disabled={actionLoading}
+            style={{ color: '#dc2626', borderColor: '#fecaca' }}
           >
-            <Download size={15} /> PDF
+            <XCircle size={14} /> Cancel
           </button>
-
-          {/* Export Excel */}
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => handleExport('xlsx')}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-          >
-            <FileSpreadsheet size={15} /> Excel
-          </button>
-
-          {/* Follow up button */}
-          <Link
-            to={quotation.customerId ? `/customers/${quotation.customerId}?tab=follow-ups` : '/customers'}
-            className="btn btn-secondary btn-sm"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#c2410c', backgroundColor: '#fff7ed', borderColor: '#fed7aa' }}
-          >
-            <Send size={14} style={{ transform: 'rotate(45deg)' }} /> Follow-Up
-          </Link>
-
-          {/* Approve confirmation */}
-          {canEdit && quotation.pendingApproval && (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={handleApproveConfirmation}
-              style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}
-            >
-              <ShieldCheck size={16} /> Approve Confirmation
-            </button>
-          )}
-
-          {/* Confirm */}
-          {canEdit && quotation.status !== 'Confirmed' && quotation.status !== 'Cancelled' && (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={() => setIsConfirmModalOpen(true)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-            >
-              <CheckCircle2 size={15} /> Confirm Items
-            </button>
-          )}
-
-          {/* Delivery Challan & Generate Invoice when Confirmed */}
-          {quotation.status === 'Confirmed' && (
-            <>
-              {challanPerms.canCreate && (
-                <Link
-                  to={`/challans/create?customerId=${quotation.customerId}&quotationId=${quotation.id || quotation._id}`}
-                  className="btn btn-secondary btn-sm"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#16a34a', backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}
-                >
-                  <Truck size={15} /> Create Challan
-                </Link>
-              )}
-
-              {invoicePerms.canCreate && (
-                <Link
-                  to={`/invoices/create?customerId=${quotation.customerId}&quotationId=${quotation.id || quotation._id}`}
-                  className="btn btn-primary btn-sm"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#059669', borderColor: '#059669' }}
-                >
-                  <Receipt size={15} /> Generate Invoice
-                </Link>
-              )}
-            </>
-          )}
-
-          {/* Cancel Quotation */}
-          {canDelete && quotation.status !== 'Cancelled' && (
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={handleCancelQuotation}
-              disabled={actionLoading}
-              style={{ color: '#dc2626', borderColor: '#fecaca', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
-            >
-              <XCircle size={15} /> Cancel
-            </button>
-          )}
-        </div>
+        )}
       </div>
 
       {/* Header Info Card */}
@@ -508,44 +527,6 @@ export const QuotationDetails = () => {
         </div>
       </div>
 
-      {/* Presentation Format Switcher Bar (Module 5 Spec: 8 Formats) */}
-      <div className="card" style={{ padding: '0.75rem 1rem', marginBottom: '1.25rem', backgroundColor: '#ffffff' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <LayoutTemplate size={16} style={{ color: '#2563eb' }} />
-            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              MULTI-FORMAT PRESENTATION RENDERING ENGINE (8 FORMATS)
-            </span>
-          </div>
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            onClick={() => printQuotationPdf(quotation, selectedFormat)}
-            style={{ fontSize: '0.78rem', padding: '0.3rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-          >
-            <Printer size={14} /> Print Selected ({selectedFormat})
-          </button>
-        </div>
-        <div style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', paddingBottom: '0.2rem' }}>
-          {FORMAT_OPTIONS.map(fmt => (
-            <button
-              key={fmt.key}
-              type="button"
-              onClick={() => handleFormatSelect(fmt.key)}
-              className={`btn ${selectedFormat === fmt.key ? 'btn-primary' : 'btn-secondary'}`}
-              style={{
-                fontSize: '0.78rem',
-                padding: '0.35rem 0.65rem',
-                borderRadius: '6px',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {fmt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Amount Comparison Summary Card */}
       <div className="card" style={{ background: '#f8fafc', borderLeft: '4px solid #2563eb', marginBottom: '1.25rem' }}>
         <h3 className="card-title" style={{ fontSize: '0.95rem', marginBottom: '0.75rem' }}>Quotation vs Actual Realized Amount Summary</h3>
@@ -578,12 +559,13 @@ export const QuotationDetails = () => {
         <table className="data-table">
           <thead>
             <tr>
-              <th>AREA</th>
               {selectedFormat !== 'WITHOUT_SKU' && <th>COMPANY SKU</th>}
               <th>PRODUCT DETAILS</th>
+              <th>BRAND</th>
               {selectedFormat !== 'PLUMBER' && <th>MRP</th>}
               <th>QUOTED QTY</th>
               <th>CONFIRMED QTY</th>
+              {selectedFormat === 'PENDING' && <th>PENDING QTY</th>}
               {(selectedFormat === 'STANDARD' || selectedFormat === 'PLUMBER' || selectedFormat === 'PENDING') && <th>EXTRA QTY</th>}
               {selectedFormat === 'DISCOUNT' && <th>TOTAL MRP</th>}
               {selectedFormat === 'DISCOUNT' && <th>DISCOUNT%</th>}
@@ -594,7 +576,10 @@ export const QuotationDetails = () => {
               {selectedFormat === 'DETAILED' && <th>DISC%</th>}
               {selectedFormat === 'DETAILED' && <th>TAXABLE</th>}
               {selectedFormat === 'DETAILED' && <th>GST%</th>}
-              {selectedFormat === 'PENDING' && <th>PENDING SUPPLY</th>}
+              {selectedFormat === 'PENDING' && <th>RATE (₹)</th>}
+              {selectedFormat === 'PENDING' && <th>QUOTED AMT</th>}
+              {selectedFormat === 'PENDING' && <th>SUPPLIED AMT</th>}
+              {selectedFormat === 'PENDING' && <th>PENDING AMT</th>}
               {selectedFormat === 'PENDING' && <th>STATUS</th>}
               {(selectedFormat === 'MRP' || selectedFormat === 'PLUMBER') && <th>REMARKS</th>}
               {selectedFormat !== 'PLUMBER' && selectedFormat !== 'PENDING' && <th>UNIT RATE</th>}
@@ -618,23 +603,35 @@ export const QuotationDetails = () => {
               const gstAmt = (taxableAmt * gstPct) / 100;
               const netAmount = (selectedFormat === 'WITH_GST' || quotation.payWithGst) ? (taxableAmt + gstAmt) : taxableAmt;
 
+              const quotedAmt = quotedQty * rate;
+              const suppliedAmt = confirmedQty * rate;
+              const pendingAmt = pendingQty * rate;
+              const brand = item.company || item.brand || item.companySnapshot || '-';
+
               return (
-                <tr key={idx}>
-                  <td>{item.area || 'General'}</td>
+                <tr key={idx} style={selectedFormat === 'PENDING' && pendingQty > 0 ? { backgroundColor: '#fffcf0' } : {}}>
                   {selectedFormat !== 'WITHOUT_SKU' && (
-                    <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{item.sku || item.companySku || item.skuCodeSnapshot || 'No SKU'}</td>
+                    <td style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.8rem' }}>
+                      {item.sku || item.companySku || item.skuCodeSnapshot || 'No SKU'}
+                    </td>
                   )}
                   <td style={{ fontWeight: 600 }}>
                     <div>{item.productName || item.productNameSnapshot || item.name}</div>
                     {item.remarks && <div style={{ fontSize: '0.75rem', color: '#64748b', fontStyle: 'italic' }}>{item.remarks}</div>}
                   </td>
+                  <td style={{ color: '#475569', fontSize: '0.82rem' }}>{brand}</td>
                   {selectedFormat !== 'PLUMBER' && <td>{formatCurrency(mrp)}</td>}
-                  <td>{quotedQty}</td>
-                  <td style={{ fontWeight: 700, color: confirmedQty === 0 ? '#dc2626' : '#16a34a' }}>
+                  <td style={{ textAlign: 'center' }}>{quotedQty}</td>
+                  <td style={{ fontWeight: 700, color: confirmedQty === 0 ? '#dc2626' : '#16a34a', textAlign: 'center' }}>
                     {confirmedQty}
                   </td>
+                  {selectedFormat === 'PENDING' && (
+                    <td style={{ fontWeight: 800, color: pendingQty > 0 ? '#dc2626' : '#16a34a', textAlign: 'center' }}>
+                      {pendingQty}
+                    </td>
+                  )}
                   {(selectedFormat === 'STANDARD' || selectedFormat === 'PLUMBER' || selectedFormat === 'PENDING') && (
-                    <td style={{ color: extraQty ? '#d97706' : '#94a3b8', fontWeight: extraQty ? 600 : 400 }}>{extraQty}</td>
+                    <td style={{ color: extraQty ? '#d97706' : '#94a3b8', fontWeight: extraQty ? 600 : 400, textAlign: 'center' }}>{extraQty}</td>
                   )}
                   {selectedFormat === 'DISCOUNT' && <td>{formatCurrency(grossAmt)}</td>}
                   {selectedFormat === 'DISCOUNT' && <td>{discPct}%</td>}
@@ -645,15 +642,19 @@ export const QuotationDetails = () => {
                   {selectedFormat === 'DETAILED' && <td>{discPct}%</td>}
                   {selectedFormat === 'DETAILED' && <td>{formatCurrency(taxableAmt)}</td>}
                   {selectedFormat === 'DETAILED' && <td>{gstPct}%</td>}
+                  
+                  {selectedFormat === 'PENDING' && <td>{formatCurrency(rate)}</td>}
+                  {selectedFormat === 'PENDING' && <td>{formatCurrency(quotedAmt)}</td>}
+                  {selectedFormat === 'PENDING' && <td style={{ color: '#16a34a', fontWeight: 600 }}>{formatCurrency(suppliedAmt)}</td>}
                   {selectedFormat === 'PENDING' && (
-                    <td style={{ fontWeight: 700, color: pendingQty > 0 ? '#dc2626' : '#16a34a' }}>
-                      {pendingQty}
+                    <td style={{ color: pendingQty > 0 ? '#dc2626' : '#16a34a', fontWeight: 800 }}>
+                      {formatCurrency(pendingAmt)}
                     </td>
                   )}
                   {selectedFormat === 'PENDING' && (
                     <td>
-                      <span className={`badge ${pendingQty === 0 ? 'badge-success' : 'badge-warning'}`}>
-                        {pendingQty === 0 ? 'Full' : 'Partial'}
+                      <span className={`badge ${pendingQty === 0 ? 'badge-success' : (confirmedQty > 0 ? 'badge-warning' : 'badge-danger')}`}>
+                        {pendingQty === 0 ? 'Complete' : (confirmedQty > 0 ? 'Partial' : 'Pending')}
                       </span>
                     </td>
                   )}
@@ -670,6 +671,40 @@ export const QuotationDetails = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Pending Items Detailed Supply Summary Box */}
+      {selectedFormat === 'PENDING' && (
+        <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+          <div className="card" style={{ width: '420px', padding: '0.85rem 1.15rem', background: '#f8fafc', borderLeft: '4px solid #d97706' }}>
+            <h4 style={{ fontSize: '0.88rem', fontWeight: 700, margin: '0 0 0.65rem 0', color: '#0f172a' }}>
+              Pending Supply Material & Balance Summary
+            </h4>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.35rem' }}>
+              <span style={{ color: '#64748b' }}>Total Quoted Material Value:</span>
+              <strong style={{ color: '#0f172a' }}>
+                {formatCurrency(quotation.items?.reduce((sum, i) => sum + ((i.rate || i.quotedRate || i.mrp || 0) * (i.quantity || 0)), 0) || 0)}
+              </strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.35rem' }}>
+              <span style={{ color: '#64748b' }}>Total Confirmed / Supplied Value:</span>
+              <strong style={{ color: '#16a34a' }}>
+                {formatCurrency(quotation.items?.reduce((sum, i) => sum + ((i.rate || i.quotedRate || i.mrp || 0) * (i.confirmedQty ?? i.quantity ?? 0)), 0) || 0)}
+              </strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.92rem', paddingTop: '0.5rem', borderTop: '1.5px solid #e2e8f0', marginTop: '0.4rem' }}>
+              <strong style={{ color: '#dc2626' }}>Pending Balance to Supply:</strong>
+              <strong style={{ color: '#dc2626', fontSize: '1.05rem', fontWeight: 800 }}>
+                {formatCurrency(quotation.items?.reduce((sum, i) => {
+                  const qty = Number(i.quantity || 0);
+                  const conf = Number(i.confirmedQty ?? qty);
+                  const pend = Math.max(0, qty - conf);
+                  return sum + ((i.rate || i.quotedRate || i.mrp || 0) * pend);
+                }, 0) || 0)}
+              </strong>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* GST Breakdown Summary Box for WITH_GST format */}
       {selectedFormat === 'WITH_GST' && (

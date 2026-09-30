@@ -69,29 +69,39 @@ export const normalizeQuotation = (q) => {
   const qId = q._id || q.id;
   const qNum = q.quotationNumber || `QT-${qId ? String(qId).slice(-6).toUpperCase() : '001'}`;
 
-  const rawItems = Array.isArray(q.items) ? q.items : [];
+  const rawItems = Array.isArray(q.items) ? q.items : (Array.isArray(q.quotationItems) ? q.quotationItems : []);
   const normalizedItems = rawItems.map((i, idx) => {
-    const qty = Number(i.quantity ?? 0);
-    const rate = Number(i.rate ?? i.mrpSnapshot ?? i.mrp ?? 0);
-    const mrp = Number(i.mrpSnapshot ?? i.mrp ?? rate);
+    const qty = Number(i.quantity ?? 1);
+    const rate = Number(i.quotedRate ?? i.rate ?? i.mrpSnapshot ?? i.mrp ?? 0);
+    const mrp = Number(i.mrpSnapshot ?? i.mrp ?? i.product?.mrp ?? rate);
     const discPct = Number(i.discountPct ?? i.discountPercent ?? 0);
     const gstPct = Number(i.gstPctSnapshot ?? i.gstPercent ?? 18);
-    const gross = Number(i.grossAmount || (rate * qty));
+    const gross = Number(i.grossAmount || (mrp * qty));
     const discAmt = Number(i.discountAmount || (gross * discPct / 100));
-    const taxable = Number(i.taxableAmount || i.netAmount || (gross - discAmt));
+    const taxable = Number(i.taxableAmount || (gross - discAmt));
     const gstAmt = Number(i.gstAmount || (taxable * gstPct / 100));
-    const net = Number(i.totalAmount || (taxable + gstAmt));
+    const net = Number(i.netAmount || i.totalAmount || (taxable + gstAmt));
+
+    const prodObj = (typeof i.product === 'object' && i.product !== null) ? i.product : {};
+    const skuCode = i.skuCodeSnapshot || i.sku || i.companySku || prodObj.companySkuCode || prodObj.sku || prodObj.vendorSkuCode || '';
+    const prodName = i.productNameSnapshot || i.productName || prodObj.productName || i.name || 'Ceramic Item';
+    const brandName = i.companySnapshot || i.company || prodObj.company?.companyName || prodObj.company || q.company?.companyName || 'Maitri';
+    const imgUrl = i.imageSnapshot || i.productImage || prodObj.productImage || prodObj.imageUrl || '';
 
     return {
       id: i._id || i.id || `item-${idx}`,
       _id: i._id || i.id,
-      productId: i.product?._id || i.product || i.productId,
+      productId: prodObj._id || prodObj.id || i.product || i.productId,
       area: i.area || 'General Area',
-      sku: i.skuCodeSnapshot || i.sku || i.companySku || '',
-      companySku: i.companySku || i.skuCodeSnapshot || i.sku || '',
-      productName: i.productNameSnapshot || i.productName || i.product?.productName || 'Ceramic Item',
-      company: i.companySnapshot || i.company || i.product?.company || 'Maitri',
+      sku: skuCode,
+      companySku: skuCode,
+      productName: prodName,
+      company: brandName,
+      brand: brandName,
+      imageSnapshot: imgUrl,
+      productImage: imgUrl,
       description: i.remarks || i.description || '',
+      remarks: i.remarks || '',
       mrp: mrp,
       quantity: qty,
       rate: rate,
@@ -108,11 +118,11 @@ export const normalizeQuotation = (q) => {
     };
   });
 
-  const grossTotal = Number(q.totalGrossAmount || q.grossTotal || 0);
-  const discountTotal = Number(q.totalDiscountAmount || q.discountTotal || 0);
-  const taxableTotal = Number(q.totalNetAmount || q.taxableTotal || 0);
-  const gstTotal = Number(q.totalGstAmount || q.gstTotal || 0);
-  const finalTotal = Number(q.grandTotal || q.quotationAmount || 0);
+  const grossTotal = Number(q.totalGrossAmount || q.grossTotal || normalizedItems.reduce((acc, it) => acc + it.grossAmount, 0));
+  const discountTotal = Number(q.totalDiscountAmount || q.discountTotal || normalizedItems.reduce((acc, it) => acc + it.discountAmount, 0));
+  const taxableTotal = Number(q.totalTaxableAmount || q.taxableTotal || (grossTotal - discountTotal));
+  const gstTotal = Number(q.totalGstAmount || q.gstTotal || normalizedItems.reduce((acc, it) => acc + it.gstAmount, 0));
+  const finalTotal = Number(q.grandTotal || q.quotationAmount || (taxableTotal + gstTotal));
 
   return {
     id: qId,
