@@ -51,8 +51,7 @@ export const Header = () => {
       path: '/stock', 
       label: 'Stock Management', 
       icon: Boxes, 
-      badge: lowStockCount > 0 ? `${lowStockCount} Low` : null,
-      badgeColor: '#ef4444'
+      badgeCount: lowStockCount > 0 ? lowStockCount : 0
     },
     { id: 'companies', path: '/companies', label: 'Company', icon: Building2 },
     { id: 'product-groups', path: '/product-types', label: 'Product Types', icon: FolderTree },
@@ -129,26 +128,31 @@ export const Header = () => {
               to={item.path}
               end={item.path === '/'}
               className={({ isActive }) => `top-nav-item ${isActive ? 'active' : ''}`}
+              style={{ position: 'relative' }}
             >
               <Icon size={16} />
               <span>{item.label}</span>
-              {item.badge && (
-                <span style={{
-                  marginLeft: '0.35rem',
-                  fontSize: '0.65rem',
-                  fontWeight: 800,
-                  backgroundColor: '#fee2e2',
-                  color: '#dc2626',
-                  border: '1px solid #fca5a5',
-                  padding: '0.1rem 0.45rem',
-                  borderRadius: '12px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.2rem',
-                  lineHeight: 1.2
-                }}>
-                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#dc2626', display: 'inline-block' }}></span>
-                  {item.badge}
+              {item.badgeCount > 0 && (
+                <span 
+                  title={`${item.badgeCount} products in low stock alert`}
+                  style={{
+                    marginLeft: '0.45rem',
+                    minWidth: '20px',
+                    height: '20px',
+                    padding: '0 5px',
+                    borderRadius: '50%',
+                    backgroundColor: '#ef4444',
+                    color: '#ffffff',
+                    fontSize: '0.7rem',
+                    fontWeight: 800,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 6px rgba(239, 68, 68, 0.4)',
+                    lineHeight: 1
+                  }}
+                >
+                  {item.badgeCount}
                 </span>
               )}
             </NavLink>
@@ -191,18 +195,23 @@ export const Header = () => {
                         <Icon size={18} />
                       </div>
                       <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>{item.label}</span>
-                      {item.badge && (
+                      {item.badgeCount > 0 && (
                         <span style={{
-                          marginLeft: '0.25rem',
-                          fontSize: '0.68rem',
+                          marginLeft: '0.35rem',
+                          minWidth: '20px',
+                          height: '20px',
+                          padding: '0 5px',
+                          borderRadius: '50%',
+                          backgroundColor: '#ef4444',
+                          color: '#ffffff',
+                          fontSize: '0.7rem',
                           fontWeight: 800,
-                          backgroundColor: '#fee2e2',
-                          color: '#dc2626',
-                          border: '1px solid #fca5a5',
-                          padding: '0.1rem 0.45rem',
-                          borderRadius: '12px'
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: '0 2px 6px rgba(239, 68, 68, 0.4)'
                         }}>
-                          {item.badge}
+                          {item.badgeCount}
                         </span>
                       )}
                     </div>

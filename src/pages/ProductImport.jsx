@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 import { previewImportFile, commitImportBatch, getImportBatches } from '../services/importService';
 import { createProduct, getCompanies, getProductGroups } from '../services/productService';
+import { generateTileTitle } from './ProductForm';
 import StatusBadge from '../components/StatusBadge';
 import {
   UploadCloud, FileSpreadsheet, CheckCircle2, AlertCircle, Download,
@@ -22,8 +24,8 @@ export const ProductImport = () => {
 
   useEffect(() => {
     loadHistory();
-    getCompanies().then(c => Array.isArray(c) && setCompaniesList(c)).catch(() => {});
-    getProductGroups().then(g => Array.isArray(g) && setGroupsList(g)).catch(() => {});
+    getCompanies().then(c => Array.isArray(c) && setCompaniesList(c)).catch(() => { });
+    getProductGroups().then(g => Array.isArray(g) && setGroupsList(g)).catch(() => { });
   }, []);
 
   const loadHistory = async () => {
@@ -39,83 +41,208 @@ export const ProductImport = () => {
   const handleDownloadSampleExcel = () => {
     const sampleData = [
       {
-        'Item Code': 'KAJ-STAT-60120',
-        'Product Name': 'Kajaria Statuario White Glazed Vitrified Tile 600x1200mm',
-        'Category': 'Tiles',
-        'Product Type': 'Vitrified Tiles',
-        'SubType': 'GVT / PGVT High Gloss',
-        'Company / Brand': 'Kajaria',
-        'Tile Size / Dimensions': '600x1200mm (2x4 Ft)',
-        'Range / Collection': 'The Royal Marble Series',
-        'Finish / Color': 'Statuario White Marble',
+        'SKUCODE': 'SOM-STAT-60120',
+        'Product Category': 'Tiles',
+        'RANGE/ SIZE': '600x1200mm (2x4 Ft)',
+        'FULL DESCRIPTION': '', // Blank for tiles, system automatically builds name from Size & Finish
+        'Product Type': 'Glazed Vitrified Tiles',
+        'Product Sub Type': 'High Gloss GVT',
+        'COLOUR NAME': 'Statuario White',
+        'COMPANY': 'Somany',
+        'HSN Code': '69072100',
+        'Purchase Price (₹)': 480,
+        'MRP (₹)': 790,
+        'Stock Qty': 150,
         'Pcs Per Box': 2,
         'Coverage Area (Sq.Ft)': 15.5,
-        'Weight Per Box (kg)': 29.5,
-        'Purchase Price (₹)': 620,
-        'Sale Price (₹)': 980,
-        'GST Rate (%)': 18,
-        'Opening Stock (Boxes)': 120,
-        'Min Alert Stock': 20
+        'Weight Per Box (kg)': 29.0,
+        'PRODUCT IMAGE': 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=600&auto=format&fit=crop&q=80'
       },
       {
-        'Item Code': 'ROCA-L90-BASIN',
-        'Product Name': 'Roca L90 Single Lever Countertop Basin',
-        'Category': 'Sanitaryware',
+        'SKUCODE': 'SOM-ONYX-120240',
+        'Product Category': 'Tiles',
+        'RANGE/ SIZE': '1200x2400mm (4x8 Ft)',
+        'FULL DESCRIPTION': '', // Blank for tiles
+        'Product Type': 'Porcelain Slabs',
+        'Product Sub Type': 'Bookmatch Slabs',
+        'COLOUR NAME': 'Royal Onyx Jade Gold',
+        'COMPANY': 'Somany',
+        'HSN Code': '69072100',
+        'Purchase Price (₹)': 2400,
+        'MRP (₹)': 3850,
+        'Stock Qty': 40,
+        'Pcs Per Box': 1,
+        'Coverage Area (Sq.Ft)': 31.0,
+        'Weight Per Box (kg)': 62.0,
+        'PRODUCT IMAGE': 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=600&auto=format&fit=crop&q=80'
+      },
+      {
+        'SKUCODE': 'ROCA-INSP-WC-01',
+        'Product Category': 'Sanitaryware',
+        'RANGE/ SIZE': 'Inspira',
+        'FULL DESCRIPTION': 'Roca Inspira Round Rimless Wall Hung Water Closet with UF Soft Close Seat Cover White',
+        'Product Type': 'Water Closet',
+        'Product Sub Type': 'Wall Hung WC',
+        'COLOUR NAME': 'Glossy White',
+        'COMPANY': 'ROCA',
+        'HSN Code': '69109000',
+        'Purchase Price (₹)': 14500,
+        'MRP (₹)': 22500,
+        'Stock Qty': 25,
+        'Pcs Per Box': 1,
+        'Coverage Area (Sq.Ft)': 0,
+        'Weight Per Box (kg)': 24.5,
+        'PRODUCT IMAGE': 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=600&auto=format&fit=crop&q=80'
+      },
+      {
+        'SKUCODE': 'ROCA-L90-BASIN',
+        'Product Category': 'Sanitaryware',
+        'RANGE/ SIZE': 'L90',
+        'FULL DESCRIPTION': 'Roca L90 Countertop Vessel Wash Basin 550x420mm White',
         'Product Type': 'Wash Basin',
-        'SubType': 'Countertop Basin',
-        'Company / Brand': 'Roca',
-        'Tile Size / Dimensions': '-',
-        'Range / Collection': 'L90 Premium Collection',
-        'Finish / Color': 'Glossy White',
+        'Product Sub Type': 'Countertop Basin',
+        'COLOUR NAME': 'White',
+        'COMPANY': 'ROCA',
+        'HSN Code': '69109000',
+        'Purchase Price (₹)': 4800,
+        'MRP (₹)': 7400,
+        'Stock Qty': 30,
         'Pcs Per Box': 1,
         'Coverage Area (Sq.Ft)': 0,
-        'Weight Per Box (kg)': 14.5,
-        'Purchase Price (₹)': 4800,
-        'Sale Price (₹)': 7200,
-        'GST Rate (%)': 18,
-        'Opening Stock (Boxes)': 25,
-        'Min Alert Stock': 5
+        'Weight Per Box (kg)': 12.0,
+        'PRODUCT IMAGE': 'https://images.unsplash.com/photo-1584622781564-1d987f7333c1?w=600&auto=format&fit=crop&q=80'
       },
       {
-        'Item Code': 'ROCA-INSP-FAUCET',
-        'Product Name': 'Roca Inspira High Basin Mixer Chrome',
-        'Category': 'Faucets',
-        'Product Type': 'Basin Mixers',
-        'SubType': 'Tall Body Mixer',
-        'Company / Brand': 'Roca',
-        'Tile Size / Dimensions': '-',
-        'Range / Collection': 'Inspira Round',
-        'Finish / Color': 'Evershine Chrome',
+        'SKUCODE': 'ROCA-INSP-FAUCET',
+        'Product Category': 'Faucets',
+        'RANGE/ SIZE': 'Inspira Round',
+        'FULL DESCRIPTION': 'Roca Inspira High Neck Basin Mixer with Cold Start Chrome',
+        'Product Type': 'Basin Mixer',
+        'Product Sub Type': 'Tall Body Mixer',
+        'COLOUR NAME': 'Chrome',
+        'COMPANY': 'ROCA',
+        'HSN Code': '84818020',
+        'Purchase Price (₹)': 3200,
+        'MRP (₹)': 5100,
+        'Stock Qty': 50,
         'Pcs Per Box': 1,
         'Coverage Area (Sq.Ft)': 0,
-        'Weight Per Box (kg)': 2.8,
-        'Purchase Price (₹)': 3200,
-        'Sale Price (₹)': 5100,
-        'GST Rate (%)': 18,
-        'Opening Stock (Boxes)': 40,
-        'Min Alert Stock': 8
+        'Weight Per Box (kg)': 2.5,
+        'PRODUCT IMAGE': 'https://images.unsplash.com/photo-1584622781867-1c5c7d81a966?w=600&auto=format&fit=crop&q=80'
       }
     ];
 
     const ws = XLSX.utils.json_to_sheet(sampleData);
+    ws['!cols'] = [
+      { wch: 18 }, // SKUCODE
+      { wch: 18 }, // Product Category
+      { wch: 22 }, // RANGE/ SIZE
+      { wch: 45 }, // FULL DESCRIPTION
+      { wch: 24 }, // Product Type
+      { wch: 20 }, // Product Sub Type
+      { wch: 20 }, // COLOUR NAME
+      { wch: 15 }, // COMPANY
+      { wch: 14 }, // HSN Code
+      { wch: 18 }, // Purchase Price (₹)
+      { wch: 14 }, // MRP (₹)
+      { wch: 12 }, // Stock Qty
+      { wch: 12 }, // Pcs Per Box
+      { wch: 20 }, // Coverage Area (Sq.Ft)
+      { wch: 18 }, // Weight Per Box (kg)
+      { wch: 16 }  // PRODUCT IMAGE
+    ];
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Products Template');
-    XLSX.writeFile(wb, 'Maitri_Ceramic_Product_Import_Template.xlsx');
+    XLSX.writeFile(wb, 'Maitri_Ceramic_Master_Product_Import_Sample.xlsx');
   };
 
-  // Parse Excel File on Selection
+  // Parse Excel File on Selection (With Embedded Images Extraction)
   const processExcelFile = (file) => {
     setSelectedFile(file);
     setCommitResult(null);
     setLoading(true);
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
-        const data = new Uint8Array(e.target.result);
+        const buffer = e.target.result;
+        const data = new Uint8Array(buffer);
         const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
+
+        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+          alert('Uploaded Excel workbook contains no sheets.');
+          setLoading(false);
+          return;
+        }
+
+        // Auto-detect the sheet with the most rows (e.g. Roca Portfolio V instead of pivot summary)
+        let bestSheetName = workbook.SheetNames[0];
+        let maxRowCount = 0;
+
+        for (const sheetName of workbook.SheetNames) {
+          const s = workbook.Sheets[sheetName];
+          if (s && s['!ref']) {
+            const range = XLSX.utils.decode_range(s['!ref']);
+            const rowCount = range.e.r - range.s.r + 1;
+            if (rowCount > maxRowCount) {
+              maxRowCount = rowCount;
+              bestSheetName = sheetName;
+            }
+          }
+        }
+
+        // Extract embedded drawing images from xlsx zip archive
+        const rowImageMap = {};
+        try {
+          const zip = await JSZip.loadAsync(buffer);
+          const drawingRelsFiles = Object.keys(zip.files).filter(f => f.startsWith('xl/drawings/_rels/'));
+
+          for (const relsFile of drawingRelsFiles) {
+            const relsXml = await zip.file(relsFile)?.async('text');
+            const drawingXmlFile = relsFile.replace('_rels/', '').replace('.rels', '');
+            const drawingXml = await zip.file(drawingXmlFile)?.async('text');
+
+            if (relsXml && drawingXml) {
+              const relMap = {};
+              const relRegex = /Id="([^"]+)"[^>]*Target="([^"]+)"/g;
+              let rm;
+              while ((rm = relRegex.exec(relsXml)) !== null) {
+                let target = rm[2];
+                if (target.startsWith('../media/')) {
+                  target = 'xl/media/' + target.replace('../media/', '');
+                } else if (!target.startsWith('xl/')) {
+                  target = 'xl/' + target;
+                }
+                relMap[rm[1]] = target;
+              }
+
+              const anchorRegex = /<xdr:(?:twoCellAnchor|oneCellAnchor)[^>]*>([\s\S]*?)<\/xdr:(?:twoCellAnchor|oneCellAnchor)>/g;
+              let am;
+              while ((am = anchorRegex.exec(drawingXml)) !== null) {
+                const anchorContent = am[1];
+                const rowMatch = anchorContent.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/);
+                const blipMatch = anchorContent.match(/<a:blip[^>]*r:embed="([^"]+)"/);
+
+                if (rowMatch && blipMatch) {
+                  const rowIdx = parseInt(rowMatch[1], 10);
+                  const rId = blipMatch[1];
+                  const imagePath = relMap[rId];
+                  if (imagePath && zip.file(imagePath)) {
+                    const imgFile = zip.file(imagePath);
+                    const b64 = await imgFile.async('base64');
+                    const ext = imagePath.toLowerCase().endsWith('.png') ? 'png' : 'jpeg';
+                    rowImageMap[rowIdx] = `data:image/${ext};base64,${b64}`;
+                  }
+                }
+              }
+            }
+          }
+        } catch (zipErr) {
+          console.warn('[ProductImport] Embedded image extraction:', zipErr);
+        }
+
+        const worksheet = workbook.Sheets[bestSheetName];
         const rawJson = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
         if (!rawJson || rawJson.length === 0) {
@@ -124,41 +251,100 @@ export const ProductImport = () => {
           return;
         }
 
+        const normalizeKey = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        // Helper to lookup row field ignoring leading/trailing spaces, case, and special characters
+        const getField = (row, candidates) => {
+          const rowKeys = Object.keys(row);
+          // Pass 1: exact trimmed lowercase match
+          for (const cand of candidates) {
+            const cleanCand = cand.trim().toLowerCase();
+            const matchedKey = rowKeys.find(k => k.trim().toLowerCase() === cleanCand);
+            if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null && String(row[matchedKey]).trim() !== '') {
+              return String(row[matchedKey]).trim();
+            }
+          }
+          // Pass 2: normalized alphanumeric match (e.g. "mrp (₹)" matches "mrp" or "mrp(inr)")
+          for (const cand of candidates) {
+            const normCand = normalizeKey(cand);
+            const matchedKey = rowKeys.find(k => normalizeKey(k) === normCand);
+            if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null && String(row[matchedKey]).trim() !== '') {
+              return String(row[matchedKey]).trim();
+            }
+          }
+          // Pass 3: substring match
+          for (const cand of candidates) {
+            const normCand = normalizeKey(cand);
+            if (normCand.length >= 3) {
+              const matchedKey = rowKeys.find(k => normalizeKey(k).includes(normCand));
+              if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null && String(row[matchedKey]).trim() !== '') {
+                return String(row[matchedKey]).trim();
+              }
+            }
+          }
+          return '';
+        };
+
         const parsed = rawJson.map((row, idx) => {
-          const sku = String(row['Item Code'] || row['Item Code (SKU)'] || row['SKU'] || row['Code'] || `SKU-${idx + 1}`).trim();
-          const productName = String(row['Product Name'] || row['Item Name'] || row['Description'] || '').trim();
-          const category = String(row['Category'] || 'Tiles').trim();
-          const productType = String(row['Product Type'] || row['Group'] || 'Vitrified Tiles').trim();
-          const subType = String(row['SubType'] || row['Sub Type'] || '').trim();
-          const company = String(row['Company / Brand'] || row['Company'] || row['Brand'] || 'General').trim();
-          const tileSize = String(row['Tile Size / Dimensions'] || row['Size'] || row['Dimensions'] || '').trim();
-          const range = String(row['Range / Collection'] || row['Range'] || row['Collection'] || '').trim();
-          const finish = String(row['Finish / Color'] || row['Finish'] || row['Color'] || '').trim();
-          const pcsPerBox = Number(row['Pcs Per Box'] || row['Pieces'] || 1);
-          const coverageArea = Number(row['Coverage Area (Sq.Ft)'] || row['SqFt'] || row['Area'] || 0);
-          const weight = Number(row['Weight Per Box (kg)'] || row['Weight'] || 0);
-          const purchasePrice = Number(row['Purchase Price (₹)'] || row['Purchase Rate'] || row['Cost'] || 0);
-          const salePrice = Number(row['Sale Price (₹)'] || row['MRP'] || row['Rate'] || 0);
-          const gstPercent = Number(row['GST Rate (%)'] || row['GST'] || 18);
-          const openingStock = Number(row['Opening Stock (Boxes)'] || row['Stock'] || row['Quantity'] || 0);
-          const alertStock = Number(row['Min Alert Stock'] || row['Alert Qty'] || 10);
+          const sku = getField(row, ['SKUCODE', 'SKU CODE', 'Item Code', 'Item Code (SKU)', 'SKU', 'Code', 'Product code', 'Item No', 'Sr.NO', 'SR.NO']) || `SKU-${idx + 1}`;
+          const productName = getField(row, ['FULL DESCRIPTION', 'Product Name', 'Item Name', 'Description', 'Product Description', 'Title', 'Name', 'PRODUCT NAME', 'DESCRIPTION']);
+          const category = getField(row, ['Product Category', 'Category', 'PRODUCT CATEGORY', 'Main Category']) || 'Sanitaryware';
+          const productType = getField(row, ['Product Type', 'PRODUCT TYPE', 'Group', 'Product Group', 'PRODUCT GROUP', 'Type']) || 'Sanitaryware';
+          const subType = getField(row, ['Product Sub Type', 'PRODUCT SUB TYPE', 'SubType', 'Sub Type', 'Sub-Type', 'SUB TYPE']) || '';
+          const company = getField(row, ['COMPANY', 'COMPANY NAME', 'Company Name', 'Company / Brand', 'Company', 'Brand', 'Brand Name', 'BRAND', 'Manufacturer', 'Mfg']) || 'ROCA';
+          const tileSize = getField(row, ['RANGE/ SIZE', 'RANGE / SIZE', 'Tile Size / Dimensions', 'Size', 'Dimensions', 'Dimension', 'SIZE']) || '';
+          const range = getField(row, ['RANGE/ SIZE', 'RANGE / SIZE', 'Range / Collection', 'Range', 'Collection', 'RANGE']) || '';
+          const finish = getField(row, ['COLOUR NAME', 'COLOR NAME', 'Colour Name', 'Color Name', 'Finish / Color', 'Finish', 'Color', 'Colour', 'FINISH']) || '';
+          const hsnCode = getField(row, ['HSN Code', 'HSN', 'HSN/SAC', 'HSNCODE', 'Hsn']) || '69109000';
+
+          // Use embedded drawing image if present, fallback to image URL text
+          const embeddedImg = rowImageMap[idx + 1] || rowImageMap[idx] || '';
+          const image = embeddedImg || getField(row, ['PRODUCT IMAGE', 'Product Image / URL', 'Product Image', 'Image URL', 'Image', 'Photo', 'Image Link', 'Picture', 'URL', 'IMAGE']);
+
+          const pcsPerBox = Number(getField(row, ['Pcs Per Box', 'Pieces', 'Pcs', 'PCS', 'Pieces/Box']) || 1);
+          const coverageArea = Number(getField(row, ['Coverage Area (Sq.Ft)', 'SqFt', 'Area', 'Sq.Ft', 'SQFT']) || 0);
+          const weight = Number(getField(row, ['Weight Per Box (kg)', 'Weight', 'Weight Kg', 'WEIGHT', 'Weight (Kg)']) || 0);
+          const purchasePrice = Number(getField(row, ['Purchase Price (₹)', 'Purchase Rate (₹)', 'Purchase Rate', 'Purchase Price', 'Cost (₹)', 'Cost Rate', 'Cost', 'PURCHASE RATE', 'PURCHASE PRICE']) || 0);
+          const salePrice = Number(getField(row, ['MRP (₹)', 'MRP(₹)', 'MRP', 'MRP RATE', 'MRP Rate (₹)', 'Sale Price (₹)', 'Sale Price', 'Rate (₹)', 'Rate', 'Price (₹)', 'Price', 'SALE PRICE', 'RATE', 'PRICE', 'List Price', 'UnitPrice']) || 0);
+          const gstPercent = Number(getField(row, ['GST Rate (%)', 'GST', 'GST Rate', 'Tax %', 'GST (%)', 'GST %']) || 18);
+          const openingStock = Number(getField(row, ['Stock Qty', 'STOCK QTY', 'Stock Quantity', 'Stock', 'STOCK', 'Opening Stock (Boxes)', 'Opening Stock', 'Current Stock', 'Available Stock', 'Total Stock', 'Quantity', 'Qty', 'QTY']) || 0);
+          const alertStock = Number(getField(row, ['Alert Stock Qty', 'Alert Stock', 'Alert Stock Quantity', 'Reorder Level', 'Reorder Alert Qty', 'Min Stock', 'Alert Qty', 'Alert', 'Alert Stock (Boxes)']) || 10);
+          const status = getField(row, ['Status', 'Status (Active/Inactive)', 'Active', 'Is Active', 'STATUS']) || 'Active';
+          const isTileCategory = category.toLowerCase().includes('tile') || productType.toLowerCase().includes('tile');
+          const effectiveTileSize = tileSize || (isTileCategory ? range : '');
+
+          let finalProductName = productName;
+          if (!finalProductName && isTileCategory) {
+            finalProductName = generateTileTitle({
+              company,
+              productType,
+              productSubType: subType,
+              size: effectiveTileSize,
+              finish,
+              colourName: finish
+            });
+          } else if (!finalProductName) {
+            finalProductName = `${company} ${sku} ${productType}`.trim();
+          }
 
           const errors = [];
-          if (!productName) errors.push('Product Name is required');
+          if (!finalProductName) errors.push('Product Name / Description is required');
           if (!sku) errors.push('Item Code / SKU is required');
           if (isNaN(salePrice) || salePrice < 0) errors.push('Invalid Sale Price');
 
           return {
             rowNumber: idx + 1,
             sku,
-            productName,
+            productName: finalProductName,
             category,
             productType,
             subType,
             company,
-            tileSize,
-            range,
+            tileSize: effectiveTileSize,
+            range: isTileCategory ? '' : range,
             finish,
+            hsnCode,
+            image,
             pcsPerBox,
             coverageArea,
             weight,
@@ -167,6 +353,8 @@ export const ProductImport = () => {
             gstPercent,
             openingStock,
             alertStock,
+            status: status || 'Active',
+            isActive: true,
             isValid: errors.length === 0,
             errors
           };
@@ -177,6 +365,7 @@ export const ProductImport = () => {
 
         setPreviewRows(parsed);
         setSummary({
+          sheetName: bestSheetName,
           totalRows: parsed.length,
           validRowsCount: validCount,
           invalidRowsCount: invalidCount,
@@ -214,21 +403,40 @@ export const ProductImport = () => {
     for (let i = 0; i < validRows.length; i++) {
       const row = validRows[i];
       try {
+        const matchedComp = companiesList.find(c => (c.companyName || '').toLowerCase().trim() === (row.company || '').toLowerCase().trim());
+        const matchedGroup = groupsList.find(g => (g.groupName || g.typeName || '').toLowerCase().trim() === (row.productType || '').toLowerCase().trim());
+
         const payload = {
           productName: row.productName,
           companySkuCode: row.sku,
           sku: row.sku,
+          hsnCode: row.hsnCode || '69109000',
           category: row.category,
           productType: row.productType,
           subType: row.subType,
-          companyName: row.company,
+          productSubType: row.subType,
+          company: matchedComp?._id || matchedComp?.id || null,
+          companyName: row.company || null,
+          productGroup: matchedGroup?._id || matchedGroup?.id || null,
+          groupName: row.productType || null,
           tileSize: row.tileSize,
+          size: row.tileSize,
+          rangeOrSize: row.tileSize || row.range,
+          range: row.range,
           rangeName: row.range,
+          finish: row.finish,
+          colourName: row.finish,
           finishColor: row.finish,
+          fullDescription: row.productName,
+          productImage: row.image || null,
+          image: row.image || null,
           piecesPerBox: row.pcsPerBox,
           coverageAreaSqFt: row.coverageArea,
+          sqftPerBox: row.coverageArea,
           weightKg: row.weight,
+          weightPerBox: row.weight,
           purchaseRate: row.purchasePrice,
+          costRate: row.purchasePrice,
           salePrice: row.salePrice,
           mrp: row.salePrice,
           gstPct: row.gstPercent,
@@ -236,6 +444,8 @@ export const ProductImport = () => {
           actualStock: row.openingStock,
           currentStock: row.openingStock,
           reorderAlertQty: row.alertStock,
+          unit: 'PCS',
+          status: 'Active',
           isActive: true
         };
 
@@ -364,9 +574,9 @@ export const ProductImport = () => {
             Drag and drop your file here, or click below to browse from your device.
           </p>
 
-          <input 
-            type="file" 
-            accept=".xlsx,.xls,.csv" 
+          <input
+            type="file"
+            accept=".xlsx,.xls,.csv"
             onChange={handleFileChange}
             style={{ display: 'none' }}
             id="excel-upload-input"
@@ -516,6 +726,7 @@ export const ProductImport = () => {
               <thead>
                 <tr>
                   <th>#</th>
+                  <th>Image</th>
                   <th>Item Code</th>
                   <th>Product Name</th>
                   <th>Category</th>
@@ -530,6 +741,18 @@ export const ProductImport = () => {
                 {previewRows.map((row) => (
                   <tr key={row.rowNumber} style={{ backgroundColor: !row.isValid ? '#fef2f2' : 'inherit' }}>
                     <td>{row.rowNumber}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      {row.image ? (
+                        <img
+                          src={row.image}
+                          alt={row.productName}
+                          style={{ width: '34px', height: '34px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #cbd5e1' }}
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      ) : (
+                        <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>-</span>
+                      )}
+                    </td>
                     <td style={{ fontWeight: 600, color: '#0f172a' }}>{row.sku}</td>
                     <td style={{ fontWeight: 600 }}>{row.productName}</td>
                     <td><span className="badge badge-info">{row.category}</span></td>

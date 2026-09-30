@@ -97,25 +97,22 @@ export const createPayment = async (paymentData) => {
   const isMongoId = (v) => typeof v === 'string' && /^[0-9a-fA-F]{24}$/.test(v.trim());
 
   // Dynamically resolve paymentModeId
-  let modeId = isMongoId(paymentData.paymentModeId) ? paymentData.paymentModeId : null;
-  if (!modeId) {
-    try {
-      const modes = await getPaymentModes();
-      const searchStr = (paymentData.paymentMode || paymentData.modeName || '').toLowerCase();
-      const found = modes.find(m => 
-        (m.modeName || '').toLowerCase() === searchStr || 
-        (m.modeCode || '').toLowerCase() === searchStr ||
-        m._id === paymentData.paymentModeId ||
-        m.id === paymentData.paymentModeId
-      );
-      if (found && isMongoId(found._id || found.id)) {
-        modeId = found._id || found.id;
-      } else if (modes.length > 0 && isMongoId(modes[0]._id || modes[0].id)) {
-        modeId = modes[0]._id || modes[0].id;
-      }
-    } catch (e) {}
-  }
-  if (!modeId) modeId = '6aa7c9ec612a410d893bcbc0';
+  let modeId = paymentData.paymentModeId || null;
+  try {
+    const modes = await getPaymentModes();
+    const searchStr = (paymentData.paymentMode || paymentData.modeName || '').toLowerCase().trim();
+    const found = modes.find(m => 
+      (m._id && m._id === paymentData.paymentModeId) ||
+      (m.id && m.id === paymentData.paymentModeId) ||
+      (m.modeName && m.modeName.toLowerCase() === searchStr) || 
+      (m.modeCode && m.modeCode.toLowerCase() === searchStr)
+    );
+    if (found && isMongoId(found._id || found.id)) {
+      modeId = found._id || found.id;
+    } else if (!modeId && modes.length > 0 && isMongoId(modes[0]._id || modes[0].id)) {
+      modeId = modes[0]._id || modes[0].id;
+    }
+  } catch (e) {}
 
   // Format allocations
   let allocations = [];

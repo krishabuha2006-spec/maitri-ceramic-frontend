@@ -1,0 +1,51 @@
+const mongoose = require('mongoose');
+
+const actionsSchema = new mongoose.Schema(
+  {
+    view: { type: Boolean, default: false },
+    create: { type: Boolean, default: false },
+    edit: { type: Boolean, default: false },
+    delete: { type: Boolean, default: false },
+    export: { type: Boolean, default: false },
+    approve: { type: Boolean, default: false }
+  },
+  { _id: false }
+);
+
+const userPermissionSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: [true, 'User reference is required']
+    },
+    module: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'SystemModule',
+      required: [true, 'Module reference is required']
+    },
+    actions: {
+      type: actionsSchema,
+      default: () => ({})
+    },
+    dataScope: {
+      type: String,
+      enum: ['ALL', 'OWN', 'TEAM'],
+      default: 'OWN'
+    },
+    grantedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: [true, 'GrantedBy reference is required']
+    },
+    isActive: {
+      type: Boolean,
+      default: true
+    }
+  },
+  { timestamps: true }
+);
+
+userPermissionSchema.index({ user: 1, module: 1 }, { unique: true });
+
+module.exports = mongoose.model('UserPermission', userPermissionSchema);

@@ -218,6 +218,7 @@ export const CustomerForm = () => {
     state: 'Gujarat',
     gstNumber: '',
     customerType: 'RETAIL',
+    reference: '',
     notes: ''
   });
 
@@ -585,7 +586,7 @@ export const CustomerForm = () => {
             </div>
 
             {/* Alternate Phone */}
-            <div className="form-group" style={{ gridColumn: 'span 6' }}>
+            <div className="form-group" style={{ gridColumn: 'span 4' }}>
               <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
                 Alternate Phone Number
               </label>
@@ -613,7 +614,7 @@ export const CustomerForm = () => {
             </div>
 
             {/* Email Address */}
-            <div className="form-group" style={{ gridColumn: 'span 6' }}>
+            <div className="form-group" style={{ gridColumn: 'span 4' }}>
               <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
                 Email Address
               </label>
@@ -636,6 +637,25 @@ export const CustomerForm = () => {
                   <AlertCircle size={14} /> <span>{errors.email}</span>
                 </div>
               )}
+            </div>
+
+            {/* Reference / Referred By */}
+            <div className="form-group" style={{ gridColumn: 'span 4' }}>
+              <label style={{ fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>
+                Reference / Referred By
+              </label>
+              <input
+                type="text"
+                name="reference"
+                className="form-control"
+                placeholder="e.g. Architect, Builder, Plumber, Walk-in"
+                value={formData.reference || ''}
+                onChange={handleChange}
+                style={{
+                  height: '46px',
+                  borderRadius: '10px'
+                }}
+              />
             </div>
           </div>
         </div>

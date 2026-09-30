@@ -194,6 +194,10 @@ body {
   scrollbar-width: thin;
 }
 
+.content-body.content-body-flush {
+  padding: 0 !important;
+}
+
 .role-switcher-container {
   display: flex;
   align-items: center;
@@ -300,8 +304,7 @@ body {
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  overflow-x: auto !important;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
   box-shadow: var(--shadow-sm);
   width: 100%;
   max-width: 100%;
@@ -686,6 +689,25 @@ select option:checked, select option:hover {
   border-bottom-color: var(--primary-color);
   font-weight: 600;
 }
+
+/* Workstation / Hub Responsive Tabs - Clean Wrap with No Scroll Clipping */
+.workstation-tabs-container {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  overflow: visible !important;
+  width: 100%;
+  max-width: 100%;
+  position: relative;
+  z-index: 30;
+}
+
+.workstation-tabs-container::-webkit-scrollbar {
+  display: none;
+  height: 0px;
+}
+
 
 /* Printable Views & Page Print Settings */
 @media print {
@@ -1464,61 +1486,72 @@ img, svg, video {
    ========================================================================== */
 [data-tooltip] {
   position: relative;
-  --tooltip-bg: #334155;
+  --tooltip-bg: #1e293b;
   --tooltip-color: #ffffff;
-  --tooltip-shadow: rgba(51, 65, 85, 0.35);
+  --tooltip-shadow: rgba(15, 23, 42, 0.4);
 }
 
-/* Base Tooltip Bubble */
+[data-tooltip]:hover {
+  z-index: 999999 !important;
+}
+
+/* Base Tooltip Bubble (Displays on TOP by default with elevated z-index) */
 [data-tooltip]::before {
   content: attr(data-tooltip);
   position: absolute;
-  bottom: calc(100% + 7px);
+  bottom: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%) translateY(4px);
-  background-color: var(--tooltip-bg, #334155);
+  background-color: var(--tooltip-bg, #1e293b);
   color: var(--tooltip-color, #ffffff);
   font-size: 0.735rem;
   font-weight: 600;
   line-height: 1.2;
-  padding: 5px 9px;
+  padding: 6px 10px;
   border-radius: 6px;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  z-index: 99999;
-  box-shadow: 0 4px 14px var(--tooltip-shadow, rgba(51, 65, 85, 0.35));
+  transition: opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1), transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 99999999 !important;
+  box-shadow: 0 6px 18px var(--tooltip-shadow, rgba(15, 23, 42, 0.4));
   letter-spacing: 0.01em;
 }
 
-/* Base Tooltip Arrow */
+/* Base Tooltip Arrow (Pointing Down towards button) */
 [data-tooltip]::after {
   content: '';
   position: absolute;
-  bottom: calc(100% + 2px);
+  bottom: calc(100% + 3px);
   left: 50%;
   transform: translateX(-50%) translateY(4px);
   border-width: 5px 5px 0 5px;
   border-style: solid;
-  border-color: var(--tooltip-bg, #334155) transparent transparent transparent;
+  border-color: var(--tooltip-bg, #1e293b) transparent transparent transparent;
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  z-index: 99999;
+  transition: opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1), transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 99999999 !important;
 }
 
+/* Show strictly on mouse hover */
 [data-tooltip]:hover::before,
-[data-tooltip]:hover::after,
-[data-tooltip]:focus-visible::before,
-[data-tooltip]:focus-visible::after,
-[data-tooltip]:focus::before,
-[data-tooltip]:focus::after {
+[data-tooltip]:hover::after {
   opacity: 1;
   visibility: visible;
   transform: translateX(-50%) translateY(0);
+}
+
+/* Disappear immediately when clicked / active */
+[data-tooltip]:active::before,
+[data-tooltip]:active::after {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transform: translateX(-50%) translateY(4px) !important;
+  transition: none !important;
 }
 
 /* --------------------------------------------------------------------------
@@ -1648,6 +1681,28 @@ img, svg, video {
 [data-tooltip-pos="right"]:hover::before,
 [data-tooltip-pos="right"]:hover::after {
   transform: translateY(-50%) translateX(0);
+}
+
+/* Explicit Tooltip on bottom (Only when data-tooltip-pos="bottom" is explicitly added) */
+[data-tooltip-pos="bottom"]::before {
+  bottom: auto;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+[data-tooltip-pos="bottom"]::after {
+  bottom: auto;
+  top: calc(100% + 3px);
+  left: 50%;
+  border-width: 0 5px 5px 5px;
+  border-color: transparent transparent var(--tooltip-bg, #1e293b) transparent;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+[data-tooltip-pos="bottom"]:hover::before,
+[data-tooltip-pos="bottom"]:hover::after {
+  transform: translateX(-50%) translateY(0);
 }
 
 /* ==========================================================================

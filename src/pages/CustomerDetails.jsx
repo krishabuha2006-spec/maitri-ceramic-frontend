@@ -744,6 +744,19 @@ export const CustomerDetails = () => {
               <span className={`badge ${customer.isActive !== false ? 'badge-success' : 'badge-danger'}`}>
                 {customer.isActive !== false ? 'Active' : 'Inactive'}
               </span>
+              {(customer.reference || customer.referenceBy) && (
+                <span style={{
+                  fontSize: '0.75rem',
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '6px',
+                  backgroundColor: '#fef3c7',
+                  color: '#92400e',
+                  border: '1px solid #fde68a',
+                  fontWeight: 600
+                }}>
+                  Ref: {customer.reference || customer.referenceBy}
+                </span>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: '1.5rem', color: '#475569', fontSize: '0.85rem', flexWrap: 'wrap', marginTop: '0.65rem' }}>
@@ -763,6 +776,12 @@ export const CustomerDetails = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <FileCheck size={15} style={{ color: '#16a34a' }} />
                   <span>GSTIN: <strong>{customer.gstNumber}</strong></span>
+                </div>
+              )}
+              {(customer.reference || customer.referenceBy) && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <UserCheck size={15} style={{ color: '#d97706' }} />
+                  <span>Reference: <strong>{customer.reference || customer.referenceBy}</strong></span>
                 </div>
               )}
             </div>
@@ -802,21 +821,27 @@ export const CustomerDetails = () => {
         </div>
       </div>
 
-      {/* 9 Workstation Tabs: Compact 1-Line Layout */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '0.25rem',
-        flexWrap: 'nowrap',
-        marginBottom: '1.25rem',
-        padding: '0.35rem',
-        backgroundColor: '#ffffff',
-        borderRadius: '10px',
-        border: '1px solid #e2e8f0',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-        width: '100%'
-      }}>
+      {/* 9 Workstation Tabs: Responsive Smooth Scroll Layout */}
+      <div 
+        className="workstation-tabs-container"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.4rem',
+          flexWrap: 'wrap',
+          overflow: 'visible',
+          marginBottom: '1.25rem',
+          padding: '0.5rem',
+          backgroundColor: '#ffffff',
+          borderRadius: '10px',
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+          width: '100%',
+          maxWidth: '100%',
+          position: 'relative',
+          zIndex: 40
+        }}
+      >
         {[
           { id: 'quotations', label: 'Quotations', count: quotations.length, icon: FileText },
           { id: 'follow-ups', label: 'Follow-Ups', count: followUps.length, icon: PhoneCall },
@@ -836,33 +861,36 @@ export const CustomerDetails = () => {
               type="button"
               className={`tab-btn ${isActive ? 'active' : ''}`}
               onClick={() => handleTabChange(tab.id)}
-              data-tooltip={`Open ${tab.label}`}
+              data-tooltip={`View ${tab.label} (${tab.count})`}
               style={{
-                flex: 1,
+                flex: '1 0 auto',
+                minWidth: 'max-content',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '0.35rem',
-                fontSize: '0.78rem',
+                gap: '0.4rem',
+                fontSize: '0.8rem',
                 fontWeight: isActive ? 700 : 600,
-                padding: '0.45rem 0.4rem',
-                borderRadius: '7px',
-                border: isActive ? '1px solid #bfdbfe' : '1px solid transparent',
-                backgroundColor: isActive ? '#eff6ff' : 'transparent',
-                color: isActive ? '#2563eb' : '#475569',
+                padding: '0.5rem 0.75rem',
+                borderRadius: '8px',
+                border: isActive ? '1px solid #93c5fd' : '1px solid #f1f5f9',
+                backgroundColor: isActive ? '#eff6ff' : '#ffffff',
+                color: isActive ? '#1d4ed8' : '#475569',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
+                userSelect: 'none',
+                position: 'relative'
               }}
             >
-              <Icon size={14} style={{ color: isActive ? '#2563eb' : '#64748b', flexShrink: 0 }} />
+              <Icon size={15} style={{ color: isActive ? '#2563eb' : '#64748b', flexShrink: 0 }} />
               <span>{tab.label}</span>
               <span style={{
-                fontSize: '0.675rem',
+                fontSize: '0.7rem',
                 fontWeight: 700,
                 backgroundColor: isActive ? '#dbeafe' : '#f1f5f9',
                 color: isActive ? '#1e40af' : '#64748b',
-                padding: '0.08rem 0.38rem',
+                padding: '0.1rem 0.45rem',
                 borderRadius: '10px'
               }}>
                 {tab.count}

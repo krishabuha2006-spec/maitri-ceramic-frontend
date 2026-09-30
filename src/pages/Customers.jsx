@@ -642,7 +642,7 @@ export const Customers = () => {
       </div>
 
       {/* Main Table Card */}
-      <div className="table-container" style={{ width: '100%', overflowX: 'auto' }}>
+      <div className="table-container" style={{ width: '100%', overflow: 'hidden' }}>
         {/* Filter Bar */}
         <div className="table-header-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', padding: '0.85rem 1rem', borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}>
           <div style={{ position: 'relative', minWidth: '220px', flex: '1 1 280px', maxWidth: '420px' }}>
@@ -772,11 +772,21 @@ export const Customers = () => {
                           </td>
 
                           <td style={{ padding: '0.6rem 0.75rem', verticalAlign: 'middle', fontWeight: 700, color: '#0f172a' }}>
-                            <div 
-                              onClick={() => toggleCustomerExpand(c)} 
-                              style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-                            >
-                              <span>{c.name}</span>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <div 
+                                onClick={() => toggleCustomerExpand(c)} 
+                                style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                              >
+                                <span>{c.name}</span>
+                              </div>
+                              {c.reference && (
+                                <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.15rem' }}>
+                                  <span style={{ color: '#2563eb', fontWeight: 700 }}>Ref:</span>
+                                  <span style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.reference}>
+                                    {c.reference}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </td>
 
@@ -1051,44 +1061,44 @@ export const Customers = () => {
                                               <tr 
                                                 key={q.id || q._id} 
                                                 style={{ 
-                                                  backgroundColor: isFinalized ? '#fef9c3' : '#ffffff', 
-                                                  borderBottom: isFinalized ? '1.5px solid #facc15' : '1px solid #f1f5f9',
+                                                  backgroundColor: isFinalized ? '#fefce8' : '#ffffff', 
+                                                  borderBottom: isFinalized ? '1px solid #fef08a' : '1px solid #f1f5f9',
                                                   transition: 'background-color 0.2s ease'
                                                 }}
                                               >
                                                 <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', fontWeight: 700, fontFamily: 'monospace', color: '#0f172a' }}>
                                                   <Link 
                                                     to={`/quotations/${q.id || q._id}`} 
-                                                    style={{ color: isFinalized ? '#a16207' : '#2563eb', textDecoration: 'none', fontWeight: 800 }} 
+                                                    style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 700 }} 
                                                     data-tooltip="View Quotation"
                                                   >
                                                     {q.quotationNumber}
                                                   </Link>
                                                 </td>
-                                                <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', color: isFinalized ? '#713f12' : '#475569', fontWeight: isFinalized ? 600 : 400 }}>
+                                                <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', color: '#475569', fontWeight: 500 }}>
                                                   {formatDate(q.date)}
                                                 </td>
-                                                <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', color: isFinalized ? '#854d0e' : '#64748b', fontWeight: isFinalized ? 700 : 400 }}>
+                                                <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', verticalAlign: 'middle', color: '#64748b', fontWeight: 500 }}>
                                                   {q.quotationType || 'STANDARD'}
                                                 </td>
-                                                <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', verticalAlign: 'middle', fontWeight: 800, color: isFinalized ? '#854d0e' : (isCancelled ? '#dc2626' : '#0f172a'), fontSize: '0.825rem' }}>
+                                                <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', verticalAlign: 'middle', fontWeight: 700, color: isCancelled ? '#dc2626' : '#0f172a', fontSize: '0.825rem' }}>
                                                   {formatCurrency(q.confirmedAmount || q.quotationAmount || q.grandTotal)}
                                                 </td>
                                                 <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center' }}>
                                                   {isFinalized ? (
                                                     <span style={{
-                                                      backgroundColor: '#fef08a',
-                                                      color: '#854d0e',
-                                                      border: '1px solid #eab308',
+                                                      backgroundColor: '#fffbeb',
+                                                      color: '#b45309',
+                                                      border: '1px solid #fde68a',
                                                       padding: '0.2rem 0.6rem',
                                                       borderRadius: '6px',
-                                                      fontWeight: 800,
+                                                      fontWeight: 700,
                                                       display: 'inline-flex',
                                                       alignItems: 'center',
                                                       gap: '0.35rem',
-                                                      fontSize: '0.75rem'
+                                                      fontSize: '0.725rem'
                                                     }}>
-                                                      <CheckCircle2 size={14} style={{ color: '#ca8a04' }} />
+                                                      <CheckCircle2 size={13} style={{ color: '#d97706' }} />
                                                       <span>✓ Finalized</span>
                                                     </span>
                                                   ) : (

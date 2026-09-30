@@ -162,16 +162,18 @@ export const CreateQuotation = () => {
 
     // Auto-populate product details when product or SKU is selected
     if (field === 'productId' || field === 'sku') {
-      const prd = availableProducts.find(p => String(p.id || p._id) === String(value) || p.sku === value);
+      const prd = availableProducts.find(p => String(p.id || p._id) === String(value) || p.sku === value || p.companySkuCode === value);
       if (prd) {
+        const prodMrp = Number(prd.mrp || prd.salePrice || prd.purchaseRate || 0);
+        const prodRate = Number(prd.salePrice || prd.mrp || prd.purchaseRate || 0);
         updated[index].productId = prd._id || prd.id;
-        updated[index].sku = prd.sku || '';
+        updated[index].sku = prd.sku || prd.companySkuCode || '';
         updated[index].productName = prd.productName || '';
-        updated[index].company = prd.company || '';
-        updated[index].companySku = prd.companySku || prd.sku || '';
-        updated[index].mrp = Number(prd.mrp || prd.salePrice || 0);
-        updated[index].rate = Number(prd.salePrice || prd.mrp || 0);
-        updated[index].gstPercent = Number(prd.gstPercent || 18);
+        updated[index].company = prd.company || prd.companyName || '';
+        updated[index].companySku = prd.companySku || prd.companySkuCode || prd.sku || '';
+        updated[index].mrp = prodMrp;
+        updated[index].rate = prodRate;
+        updated[index].gstPercent = Number(prd.gstPercent || prd.gstPct || 18);
       }
     }
 
@@ -182,22 +184,24 @@ export const CreateQuotation = () => {
   const addItemWithSku = (preselectedProduct = null) => {
     setFormError('');
     const prd = preselectedProduct || availableProducts[0] || {};
+    const prodMrp = Number(prd.mrp || prd.salePrice || prd.purchaseRate || 0);
+    const prodRate = Number(prd.salePrice || prd.mrp || prd.purchaseRate || 0);
     setItems([
       ...items,
       {
         id: Date.now(),
         productId: prd._id || prd.id || '',
         area: 'Living Room',
-        sku: prd.sku || '',
+        sku: prd.sku || prd.companySkuCode || '',
         productName: prd.productName || '',
-        company: prd.company || '',
-        companySku: prd.companySku || prd.sku || '',
+        company: prd.company || prd.companyName || '',
+        companySku: prd.companySku || prd.companySkuCode || prd.sku || '',
         description: '',
-        mrp: Number(prd.mrp || prd.salePrice || 0),
+        mrp: prodMrp,
         quantity: 1,
-        rate: Number(prd.salePrice || prd.mrp || 0),
+        rate: prodRate,
         discountPercent: 0,
-        gstPercent: Number(prd.gstPercent || 18)
+        gstPercent: Number(prd.gstPercent || prd.gstPct || 18)
       }
     ]);
   };
@@ -988,9 +992,9 @@ export const CreateQuotation = () => {
               <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', display: 'block', textTransform: 'uppercase' }}>Gross Total</span>
               <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', marginTop: '0.2rem' }}>{formatCurrency(totals.grossTotal)}</div>
             </div>
-            <div style={{ padding: '0.85rem', borderRadius: '10px', backgroundColor: '#fffbe6', border: '1px solid #fef3c7' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#d97706', display: 'block', textTransform: 'uppercase' }}>Total Discount</span>
-              <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#b45309', marginTop: '0.2rem' }}>- {formatCurrency(totals.discountTotal)}</div>
+            <div style={{ padding: '0.85rem', borderRadius: '10px', backgroundColor: '#fefce8', border: '1px solid #fef9c3' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#a16207', display: 'block', textTransform: 'uppercase' }}>Total Discount</span>
+              <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#854d0e', marginTop: '0.2rem' }}>- {formatCurrency(totals.discountTotal)}</div>
             </div>
             <div style={{ padding: '0.85rem', borderRadius: '10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
               <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', display: 'block', textTransform: 'uppercase' }}>Taxable Amount</span>

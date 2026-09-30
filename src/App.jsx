@@ -38,6 +38,7 @@ import Settings from './pages/Settings';
 import Companies from './pages/Companies';
 import Vendors from './pages/Vendors';
 import ProductGroups from './pages/ProductGroups';
+import Categories from './pages/Categories';
 import QuotationFormats from './pages/QuotationFormats';
 
 const ProtectedRoute = ({ children }) => {
@@ -127,9 +128,19 @@ export function App() {
                 <ProductForm />
               </PermissionRoute>
             } />
+            <Route path="products/:id/edit" element={
+              <PermissionRoute moduleId="products" action="edit">
+                <ProductForm />
+              </PermissionRoute>
+            } />
             <Route path="products/:id" element={
               <PermissionRoute moduleId="products">
                 <ProductDetails />
+              </PermissionRoute>
+            } />
+            <Route path="categories" element={
+              <PermissionRoute moduleId="products">
+                <Categories />
               </PermissionRoute>
             } />
             <Route path="product-types" element={

@@ -19,6 +19,8 @@ export const normalizeCustomer = (c) => {
     state: c.state || 'Gujarat',
     gstNumber: c.gstNumber || '',
     customerType: (c.customerType || 'RETAIL').toUpperCase(),
+    reference: c.reference || c.referenceBy || '',
+    referenceBy: c.referenceBy || c.reference || '',
     notes: c.notes || '',
     totalSales: Number(c.totalSales || c.totalInvoiced || 0),
     totalInvoiced: Number(c.totalInvoiced || c.totalSales || 0),
@@ -80,6 +82,7 @@ const formatCustomerPayload = (customerData) => {
   const city = customerData.city;
   const state = customerData.state;
   const gst = customerData.gstNumber;
+  const reference = customerData.reference || customerData.referenceBy;
   const notes = customerData.notes;
 
   return {
@@ -93,6 +96,8 @@ const formatCustomerPayload = (customerData) => {
     state: state && String(state).trim() ? String(state).trim() : null,
     gstNumber: gst && String(gst).trim() ? String(gst).trim().toUpperCase() : null,
     customerType: mapCustomerType(customerData.customerType),
+    reference: reference && String(reference).trim() ? String(reference).trim() : null,
+    referenceBy: reference && String(reference).trim() ? String(reference).trim() : null,
     notes: notes && String(notes).trim() ? String(notes).trim() : null
   };
 };

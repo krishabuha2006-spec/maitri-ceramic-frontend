@@ -1,23 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { 
-  getQuotationById, 
-  confirmQuotation, 
-  approveConfirmation, 
-  sendQuotation, 
-  cancelQuotation, 
+import {
+  getQuotationById,
+  confirmQuotation,
+  approveConfirmation,
+  sendQuotation,
+  cancelQuotation,
   updateQuotationStatus,
-  renderQuotationFormat, 
-  exportQuotationDocument 
+  renderQuotationFormat,
+  exportQuotationDocument
 } from '../services/quotationService';
 import { getProducts } from '../services/productService';
 import { formatCurrency, formatDate } from '../utils/formatters';
+import { printQuotationPdf } from '../utils/quotationPdfGenerator';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
-import { 
-  ArrowLeft, CheckCircle2, FileText, Printer, Plus, Trash2, ShieldCheck, 
+import {
+  ArrowLeft, CheckCircle2, FileText, Printer, Plus, Trash2, ShieldCheck,
   Download, LayoutTemplate, Send, XCircle, FileSpreadsheet, RefreshCw,
-  Receipt, Truck, Check, AlertCircle 
+  Receipt, Truck, Check, AlertCircle, ChevronDown
 } from 'lucide-react';
 
 import ConfirmModal from '../components/ConfirmModal';
@@ -34,9 +35,10 @@ export const QuotationDetails = () => {
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState('success');
 
-  // Active Presentation Format Layout (Module 5 Spec: 8 Formats)
   const [selectedFormat, setSelectedFormat] = useState('STANDARD');
   const [actionLoading, setActionLoading] = useState(false);
+  const [isPrintMenuOpen, setIsPrintMenuOpen] = useState(false);
+  const printMenuRef = useRef(null);
 
   // Status Change Modal state
   const [statusModal, setStatusModal] = useState({
@@ -92,15 +94,15 @@ export const QuotationDetails = () => {
       if (data?.formatKey) {
         setSelectedFormat(data.formatKey);
       }
-      
+
       const mappedItems = (data.items || []).map((item, idx) => ({
         originalQuotationItemId: item.id || item._id || `item_${idx}`,
-        sku: item.sku || item.companySku || '',
-        productName: item.productName || item.name || '',
+        sku: item.sku || item.companySku || item.skuCodeSnapshot || '',
+        productName: item.productName || item.productNameSnapshot || item.name || '',
         originalQuantity: Number(item.quantity || 0),
         confirmedQuantity: Number(item.confirmedQty ?? item.quantity ?? 0),
         extraQuantity: Number(item.extraQty || 0),
-        rate: Number(item.rate || item.quotedRate || 0),
+        rate: Number(item.rate || item.quotedRate || item.mrpSnapshot || item.mrp || 0),
         remarks: item.remarks || ''
       }));
       setConfirmationItems(mappedItems);
@@ -287,6 +289,10 @@ export const QuotationDetails = () => {
   };
 
   const handleExport = async (format) => {
+    if (format === 'pdf') {
+      printQuotationPdf(quotation, selectedFormat);
+      return;
+    }
     try {
       showToast(`Generating ${format.toUpperCase()} export...`);
       await exportQuotationDocument(id, format, quotation.quotationNumber, quotation);
@@ -316,31 +322,31 @@ export const QuotationDetails = () => {
   if (!quotation) return <div style={{ padding: '2rem', color: '#dc2626' }}>Quotation not found.</div>;
 
   // Financial Calculations
-  const originalQuotationAmount = quotation.quotationAmount || 0;
-  const confirmedAmount = quotation.items?.reduce((sum, i) => sum + ((i.confirmedQty ?? i.quantity) * (i.rate || i.mrp || 0)), 0) || originalQuotationAmount;
-  const extraProductAmount = quotation.items?.reduce((sum, i) => sum + ((i.extraQty || 0) * (i.rate || i.mrp || 0)), 0) || 0;
+  const originalQuotationAmount = quotation.grandTotal || quotation.totalNetAmount || quotation.quotationAmount || 0;
+  const confirmedAmount = quotation.items?.reduce((sum, i) => sum + ((i.confirmedQty ?? i.quantity) * (i.rate || i.quotedRate || i.mrpSnapshot || i.mrp || 0)), 0) || originalQuotationAmount;
+  const extraProductAmount = quotation.items?.reduce((sum, i) => sum + ((i.extraQty || 0) * (i.rate || i.quotedRate || i.mrpSnapshot || i.mrp || 0)), 0) || 0;
   const differenceAmount = originalQuotationAmount - confirmedAmount;
   const totalActualAmount = confirmedAmount + extraProductAmount;
 
   return (
-    <div style={{ maxWidth: '1050px', margin: '0 auto', width: '100%', paddingBottom: '3rem' }}>
-      
+    <div style={{ maxWidth: '1100px', margin: '0 auto', width: '100%', paddingBottom: '3rem' }}>
+
       {/* Top Action Controls */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <Link 
-          to={quotation.customerId ? `/customers/${quotation.customerId}?tab=quotations` : '/customers'} 
+        <Link
+          to={quotation.customerId ? `/customers/${quotation.customerId}?tab=quotations` : '/customers'}
           className="btn btn-secondary btn-sm"
         >
           <ArrowLeft size={16} />
           <span>Back to Customer Quotations</span>
         </Link>
-        
+
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {/* Quick Status Update */}
           {canEdit && (
-            <button 
-              type="button" 
-              className="btn btn-secondary btn-sm" 
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
               onClick={handleOpenStatusModal}
               disabled={actionLoading}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#f0f9ff', borderColor: '#bae6fd', color: '#0284c7' }}
@@ -351,9 +357,9 @@ export const QuotationDetails = () => {
 
           {/* Send to customer */}
           {(canEdit || canCreate) && quotation.status === 'Draft' && (
-            <button 
-              type="button" 
-              className="btn btn-primary btn-sm" 
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
               onClick={handleSendQuotation}
               disabled={actionLoading}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#0284c7', borderColor: '#0284c7' }}
@@ -362,10 +368,19 @@ export const QuotationDetails = () => {
             </button>
           )}
 
-          {/* Export PDF */}
-          <button 
-            type="button" 
-            className="btn btn-secondary btn-sm" 
+          {/* Print / PDF Buttons */}
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => printQuotationPdf(quotation, selectedFormat)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+          >
+            <Printer size={15} /> Print
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
             onClick={() => handleExport('pdf')}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
           >
@@ -373,9 +388,9 @@ export const QuotationDetails = () => {
           </button>
 
           {/* Export Excel */}
-          <button 
-            type="button" 
-            className="btn btn-secondary btn-sm" 
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
             onClick={() => handleExport('xlsx')}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
           >
@@ -383,9 +398,9 @@ export const QuotationDetails = () => {
           </button>
 
           {/* Follow up button */}
-          <Link 
+          <Link
             to={quotation.customerId ? `/customers/${quotation.customerId}?tab=follow-ups` : '/customers'}
-            className="btn btn-secondary btn-sm" 
+            className="btn btn-secondary btn-sm"
             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#c2410c', backgroundColor: '#fff7ed', borderColor: '#fed7aa' }}
           >
             <Send size={14} style={{ transform: 'rotate(45deg)' }} /> Follow-Up
@@ -393,9 +408,9 @@ export const QuotationDetails = () => {
 
           {/* Approve confirmation */}
           {canEdit && quotation.pendingApproval && (
-            <button 
-              type="button" 
-              className="btn btn-primary btn-sm" 
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
               onClick={handleApproveConfirmation}
               style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}
             >
@@ -405,10 +420,10 @@ export const QuotationDetails = () => {
 
           {/* Confirm */}
           {canEdit && quotation.status !== 'Confirmed' && quotation.status !== 'Cancelled' && (
-            <button 
-              type="button" 
-              className="btn btn-primary btn-sm" 
-              onClick={() => setIsConfirmModalOpen(true)} 
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => setIsConfirmModalOpen(true)}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
             >
               <CheckCircle2 size={15} /> Confirm Items
@@ -442,9 +457,9 @@ export const QuotationDetails = () => {
 
           {/* Cancel Quotation */}
           {canDelete && quotation.status !== 'Cancelled' && (
-            <button 
-              type="button" 
-              className="btn btn-secondary btn-sm" 
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
               onClick={handleCancelQuotation}
               disabled={actionLoading}
               style={{ color: '#dc2626', borderColor: '#fecaca', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
@@ -472,17 +487,17 @@ export const QuotationDetails = () => {
               <span className="badge badge-info">{selectedFormat}</span>
             </div>
             <div style={{ color: '#475569', fontSize: '0.88rem', marginTop: '0.5rem', lineHeight: 1.6 }}>
-              <div><strong>Customer Name:</strong> {quotation.customerName} ({quotation.customerContact})</div>
+              <div><strong>Customer Name:</strong> {quotation.customerName || quotation.partyName} ({quotation.customerContact || quotation.mobile || 'N/A'})</div>
               <div><strong>Billing Address:</strong> {quotation.customerAddress || 'N/A'}</div>
-              <div><strong>Salesperson:</strong> {quotation.salesperson}</div>
-              <div><strong>Quotation Date:</strong> {formatDate(quotation.date)} | <strong>Validity:</strong> {quotation.validity}</div>
+              <div><strong>Salesperson:</strong> {quotation.salesperson || 'N/A'}</div>
+              <div><strong>Quotation Date:</strong> {formatDate(quotation.date || quotation.quotationDate)} | <strong>Validity:</strong> {quotation.validity || '30 Days'}</div>
               {quotation.reference && <div><strong>Reference:</strong> {quotation.reference}</div>}
               {quotation.remarks && <div><strong>Remarks:</strong> {quotation.remarks}</div>}
             </div>
           </div>
 
           <div style={{ textAlign: 'right' }}>
-            <span className="stat-label">Original Quoted Amount</span>
+            <span className="stat-label">ORIGINAL QUOTED AMOUNT</span>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#2563eb' }}>
               {formatCurrency(originalQuotationAmount)}
             </div>
@@ -495,15 +510,25 @@ export const QuotationDetails = () => {
 
       {/* Presentation Format Switcher Bar (Module 5 Spec: 8 Formats) */}
       <div className="card" style={{ padding: '0.75rem 1rem', marginBottom: '1.25rem', backgroundColor: '#ffffff' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-          <LayoutTemplate size={16} style={{ color: '#2563eb' }} />
-          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Multi-Format Presentation Rendering Engine (8 Formats)
-          </span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <LayoutTemplate size={16} style={{ color: '#2563eb' }} />
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              MULTI-FORMAT PRESENTATION RENDERING ENGINE (8 FORMATS)
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => printQuotationPdf(quotation, selectedFormat)}
+            style={{ fontSize: '0.78rem', padding: '0.3rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+          >
+            <Printer size={14} /> Print Selected ({selectedFormat})
+          </button>
         </div>
         <div style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', paddingBottom: '0.2rem' }}>
           {FORMAT_OPTIONS.map(fmt => (
-            <button 
+            <button
               key={fmt.key}
               type="button"
               onClick={() => handleFormatSelect(fmt.key)}
@@ -526,19 +551,19 @@ export const QuotationDetails = () => {
         <h3 className="card-title" style={{ fontSize: '0.95rem', marginBottom: '0.75rem' }}>Quotation vs Actual Realized Amount Summary</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '1rem' }}>
           <div>
-            <span className="stat-label">Original Quoted Total</span>
+            <span className="stat-label">ORIGINAL QUOTED TOTAL</span>
             <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>{formatCurrency(originalQuotationAmount)}</div>
           </div>
           <div>
-            <span className="stat-label">Confirmed Items Total</span>
+            <span className="stat-label">CONFIRMED ITEMS TOTAL</span>
             <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#16a34a' }}>{formatCurrency(confirmedAmount)}</div>
           </div>
           <div>
-            <span className="stat-label">Extra Products Amount</span>
+            <span className="stat-label">EXTRA PRODUCTS AMOUNT</span>
             <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#d97706' }}>{formatCurrency(extraProductAmount)}</div>
           </div>
           <div>
-            <span className="stat-label">Total Actual Material</span>
+            <span className="stat-label">TOTAL ACTUAL MATERIAL</span>
             <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#2563eb' }}>{formatCurrency(totalActualAmount)}</div>
           </div>
         </div>
@@ -553,43 +578,123 @@ export const QuotationDetails = () => {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Area</th>
-              {selectedFormat !== 'WITHOUT_SKU' && <th>Company SKU</th>}
-              <th>Product Details</th>
-              <th>MRP</th>
-              <th>Quoted Qty</th>
-              <th>Confirmed Qty</th>
-              <th>Extra Qty</th>
-              <th>Unit Rate</th>
-              <th>Net Amount</th>
+              <th>AREA</th>
+              {selectedFormat !== 'WITHOUT_SKU' && <th>COMPANY SKU</th>}
+              <th>PRODUCT DETAILS</th>
+              {selectedFormat !== 'PLUMBER' && <th>MRP</th>}
+              <th>QUOTED QTY</th>
+              <th>CONFIRMED QTY</th>
+              {(selectedFormat === 'STANDARD' || selectedFormat === 'PLUMBER' || selectedFormat === 'PENDING') && <th>EXTRA QTY</th>}
+              {selectedFormat === 'DISCOUNT' && <th>TOTAL MRP</th>}
+              {selectedFormat === 'DISCOUNT' && <th>DISCOUNT%</th>}
+              {selectedFormat === 'DISCOUNT' && <th>DISCOUNT AMT</th>}
+              {selectedFormat === 'WITH_GST' && <th>TAXABLE VALUE</th>}
+              {selectedFormat === 'WITH_GST' && <th>GST%</th>}
+              {selectedFormat === 'WITH_GST' && <th>GST AMT</th>}
+              {selectedFormat === 'DETAILED' && <th>DISC%</th>}
+              {selectedFormat === 'DETAILED' && <th>TAXABLE</th>}
+              {selectedFormat === 'DETAILED' && <th>GST%</th>}
+              {selectedFormat === 'PENDING' && <th>PENDING SUPPLY</th>}
+              {selectedFormat === 'PENDING' && <th>STATUS</th>}
+              {(selectedFormat === 'MRP' || selectedFormat === 'PLUMBER') && <th>REMARKS</th>}
+              {selectedFormat !== 'PLUMBER' && selectedFormat !== 'PENDING' && <th>UNIT RATE</th>}
+              {selectedFormat !== 'PLUMBER' && selectedFormat !== 'PENDING' && <th>NET AMOUNT</th>}
             </tr>
           </thead>
           <tbody>
             {quotation.items?.map((item, idx) => {
               const totalCommitted = Number(item.confirmedQty ?? item.quantity) + Number(item.extraQty || 0);
-              const confirmedNet = (item.rate * totalCommitted) * (1 - (item.discountPercent || 0) / 100);
+              const quotedQty = Number(item.quantity || 0);
+              const confirmedQty = Number(item.confirmedQty ?? quotedQty);
+              const extraQty = Number(item.extraQty || 0);
+              const pendingQty = Math.max(0, quotedQty - confirmedQty);
+              const mrp = Number(item.mrp || item.mrpSnapshot || item.rate || 0);
+              const rate = Number(item.rate || item.quotedRate || mrp || 0);
+              const discPct = Number(item.discountPercent || item.discountPct || 0);
+              const grossAmt = mrp * totalCommitted;
+              const discAmt = (grossAmt * discPct) / 100;
+              const taxableAmt = grossAmt - discAmt;
+              const gstPct = Number(item.gstPercent || item.gstPctSnapshot || 18);
+              const gstAmt = (taxableAmt * gstPct) / 100;
+              const netAmount = (selectedFormat === 'WITH_GST' || quotation.payWithGst) ? (taxableAmt + gstAmt) : taxableAmt;
 
               return (
                 <tr key={idx}>
                   <td>{item.area || 'General'}</td>
                   {selectedFormat !== 'WITHOUT_SKU' && (
-                    <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{item.sku || item.companySku || 'No SKU'}</td>
+                    <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{item.sku || item.companySku || item.skuCodeSnapshot || 'No SKU'}</td>
                   )}
-                  <td style={{ fontWeight: 600 }}>{item.productName}</td>
-                  <td>{formatCurrency(item.mrp)}</td>
-                  <td>{item.quantity}</td>
-                  <td style={{ fontWeight: 700, color: item.confirmedQty === 0 ? '#dc2626' : '#16a34a' }}>
-                    {item.confirmedQty ?? item.quantity}
+                  <td style={{ fontWeight: 600 }}>
+                    <div>{item.productName || item.productNameSnapshot || item.name}</div>
+                    {item.remarks && <div style={{ fontSize: '0.75rem', color: '#64748b', fontStyle: 'italic' }}>{item.remarks}</div>}
                   </td>
-                  <td style={{ color: '#d97706' }}>{item.extraQty || 0}</td>
-                  <td>{formatCurrency(item.rate)}</td>
-                  <td style={{ fontWeight: 700 }}>{formatCurrency(confirmedNet)}</td>
+                  {selectedFormat !== 'PLUMBER' && <td>{formatCurrency(mrp)}</td>}
+                  <td>{quotedQty}</td>
+                  <td style={{ fontWeight: 700, color: confirmedQty === 0 ? '#dc2626' : '#16a34a' }}>
+                    {confirmedQty}
+                  </td>
+                  {(selectedFormat === 'STANDARD' || selectedFormat === 'PLUMBER' || selectedFormat === 'PENDING') && (
+                    <td style={{ color: extraQty ? '#d97706' : '#94a3b8', fontWeight: extraQty ? 600 : 400 }}>{extraQty}</td>
+                  )}
+                  {selectedFormat === 'DISCOUNT' && <td>{formatCurrency(grossAmt)}</td>}
+                  {selectedFormat === 'DISCOUNT' && <td>{discPct}%</td>}
+                  {selectedFormat === 'DISCOUNT' && <td style={{ color: '#dc2626' }}>{formatCurrency(discAmt)}</td>}
+                  {selectedFormat === 'WITH_GST' && <td>{formatCurrency(taxableAmt)}</td>}
+                  {selectedFormat === 'WITH_GST' && <td>{gstPct}%</td>}
+                  {selectedFormat === 'WITH_GST' && <td style={{ color: '#2563eb' }}>{formatCurrency(gstAmt)}</td>}
+                  {selectedFormat === 'DETAILED' && <td>{discPct}%</td>}
+                  {selectedFormat === 'DETAILED' && <td>{formatCurrency(taxableAmt)}</td>}
+                  {selectedFormat === 'DETAILED' && <td>{gstPct}%</td>}
+                  {selectedFormat === 'PENDING' && (
+                    <td style={{ fontWeight: 700, color: pendingQty > 0 ? '#dc2626' : '#16a34a' }}>
+                      {pendingQty}
+                    </td>
+                  )}
+                  {selectedFormat === 'PENDING' && (
+                    <td>
+                      <span className={`badge ${pendingQty === 0 ? 'badge-success' : 'badge-warning'}`}>
+                        {pendingQty === 0 ? 'Full' : 'Partial'}
+                      </span>
+                    </td>
+                  )}
+                  {(selectedFormat === 'MRP' || selectedFormat === 'PLUMBER') && (
+                    <td style={{ color: '#64748b' }}>{item.remarks || '-'}</td>
+                  )}
+                  {selectedFormat !== 'PLUMBER' && selectedFormat !== 'PENDING' && <td>{formatCurrency(rate)}</td>}
+                  {selectedFormat !== 'PLUMBER' && selectedFormat !== 'PENDING' && (
+                    <td style={{ fontWeight: 700 }}>{formatCurrency(netAmount)}</td>
+                  )}
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+
+      {/* GST Breakdown Summary Box for WITH_GST format */}
+      {selectedFormat === 'WITH_GST' && (
+        <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+          <div className="card" style={{ width: '340px', padding: '0.75rem 1rem', background: '#f8fafc', borderLeft: '4px solid #0284c7' }}>
+            <h4 style={{ fontSize: '0.85rem', fontWeight: 700, margin: '0 0 0.5rem 0', color: '#0f172a' }}>GST Tax Summary Breakdown</h4>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.35rem' }}>
+              <span style={{ color: '#64748b' }}>Total Taxable Value:</span>
+              <strong style={{ color: '#0f172a' }}>{formatCurrency(quotation.items?.reduce((sum, i) => sum + ((i.rate || i.mrp || 0) * (i.confirmedQty ?? i.quantity) * (1 - (i.discountPercent || 0)/100)), 0) || 0)}</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.35rem' }}>
+              <span style={{ color: '#64748b' }}>CGST (9%):</span>
+              <strong style={{ color: '#2563eb' }}>{formatCurrency((quotation.items?.reduce((sum, i) => sum + ((i.rate || i.mrp || 0) * (i.confirmedQty ?? i.quantity) * (1 - (i.discountPercent || 0)/100) * 0.18), 0) || 0) / 2)}</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.35rem' }}>
+              <span style={{ color: '#64748b' }}>SGST (9%):</span>
+              <strong style={{ color: '#2563eb' }}>{formatCurrency((quotation.items?.reduce((sum, i) => sum + ((i.rate || i.mrp || 0) * (i.confirmedQty ?? i.quantity) * (1 - (i.discountPercent || 0)/100) * 0.18), 0) || 0) / 2)}</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', paddingTop: '0.4rem', borderTop: '1px solid #e2e8f0' }}>
+              <strong style={{ color: '#0f172a' }}>Grand Total (With GST):</strong>
+              <strong style={{ color: '#16a34a', fontSize: '1rem' }}>{formatCurrency((quotation.items?.reduce((sum, i) => sum + ((i.rate || i.mrp || 0) * (i.confirmedQty ?? i.quantity) * (1 - (i.discountPercent || 0)/100) * 1.18), 0) || 0))}</strong>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Quotation Confirmation Modal */}
       <Modal
@@ -627,19 +732,19 @@ export const QuotationDetails = () => {
                     <td style={{ fontWeight: 600 }}>{item.productName}</td>
                     <td>{item.originalQuantity}</td>
                     <td>
-                      <input 
-                        type="number" 
-                        className="form-control" 
-                        value={item.confirmedQuantity} 
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={item.confirmedQuantity}
                         onChange={(e) => handleConfirmedQtyChange(idx, e.target.value)}
                         style={{ padding: '0.25rem 0.4rem', width: '80px', fontWeight: 600 }}
                       />
                     </td>
                     <td>
-                      <input 
-                        type="number" 
-                        className="form-control" 
-                        value={item.extraQuantity} 
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={item.extraQuantity}
                         onChange={(e) => handleExtraQtyChange(idx, e.target.value)}
                         style={{ padding: '0.25rem 0.4rem', width: '80px', color: '#d97706' }}
                       />
@@ -665,7 +770,7 @@ export const QuotationDetails = () => {
 
           {extraItems.map((item, idx) => (
             <div key={idx} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <input 
+              <input
                 type="text"
                 className="form-control"
                 placeholder="Product name / accessory"
@@ -673,7 +778,7 @@ export const QuotationDetails = () => {
                 onChange={(e) => handleExtraItemChange(idx, 'adHocName', e.target.value)}
                 style={{ flex: 2, fontSize: '0.8rem' }}
               />
-              <input 
+              <input
                 type="number"
                 className="form-control"
                 placeholder="MRP (₹)"
@@ -681,7 +786,7 @@ export const QuotationDetails = () => {
                 onChange={(e) => handleExtraItemChange(idx, 'adHocMrp', e.target.value)}
                 style={{ width: '90px', fontSize: '0.8rem' }}
               />
-              <input 
+              <input
                 type="number"
                 className="form-control"
                 placeholder="Qty"
@@ -716,17 +821,17 @@ export const QuotationDetails = () => {
           title={`Update Quotation Status — #${quotation.quotationNumber}`}
           footer={
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', width: '100%' }}>
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
+              <button
+                type="button"
+                className="btn btn-secondary"
                 onClick={() => setStatusModal(prev => ({ ...prev, isOpen: false }))}
                 style={{ borderRadius: '8px', fontSize: '0.825rem' }}
               >
                 Cancel
               </button>
-              <button 
-                type="button" 
-                className="btn btn-primary" 
+              <button
+                type="button"
+                className="btn btn-primary"
                 onClick={handleSaveStatusChange}
                 disabled={statusModal.saving}
                 style={{ borderRadius: '8px', fontSize: '0.825rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}

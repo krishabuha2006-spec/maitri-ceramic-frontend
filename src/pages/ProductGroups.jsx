@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   FolderTree, Plus, Search, Edit3, Trash2, ToggleLeft, ToggleRight, 
   CheckCircle2, AlertCircle, RefreshCw, X, Save, ArrowLeft, Layers,
-  Tag, ChevronRight
+  Tag, ChevronRight, Tags
 } from 'lucide-react';
 import { 
   getProductGroups, 
@@ -12,6 +12,7 @@ import {
   deleteProductGroup, 
   deactivateProductGroup 
 } from '../services/productService';
+import { getCategories } from '../services/categoryService';
 import { usePermissions } from '../utils/permissions';
 import StatusBadge from '../components/StatusBadge';
 import Pagination from '../components/Pagination';
@@ -31,26 +32,44 @@ export const DEFAULT_PRODUCT_TYPES = [
   {
     groupName: 'Water Closet',
     category: 'Sanitaryware',
-    subTypes: ['Wall Hung WC', 'Floor Mounted WC', 'Smart Water Closet', 'In-Tank WC', 'Single Unit W+W'],
-    description: 'European closets, rimless vortex flushing, wall hung and floor standing toilets'
+    subTypes: ['Wall Hung WC', 'Floor Mounted WC', 'Smart Water Closet', 'In-Tank WC', 'Single Unit W+W', 'One Piece Toilet', 'Couple Closet'],
+    description: 'European water closets, rimless vortex flushing, wall hung and floor standing toilets'
   },
   {
     groupName: 'Wash Basin',
     category: 'Sanitaryware',
-    subTypes: ['Table Top Basin', 'Wall Hung Basin', 'Under Counter Basin', 'Semi-Recessed Basin', 'Pedestal Basin'],
+    subTypes: ['Table Top Basin', 'Wall Hung Basin', 'Under Counter Basin', 'Semi-Recessed Basin', 'Pedestal Basin', 'Integrated Vanity Basin'],
     description: 'Ceramic wash basins for vanity and counter setups'
+  },
+  {
+    groupName: 'Urinal & Pan',
+    category: 'Sanitaryware',
+    subTypes: ['Sensor Urinal', 'Wall Hung Urinal', 'Squatting Pan / Orissa Pan', 'Half Stall Urinal'],
+    description: 'Urinals, squatting pans and sensor flushing bowls'
+  },
+  {
+    groupName: 'Cistern & Flush Plate',
+    category: 'Sanitaryware',
+    subTypes: ['Concealed Cistern', 'Dual Flush Plate', 'Pneumatic Flush Tank', 'Exposed Plastic Cistern'],
+    description: 'Concealed flushing cisterns and decorative dual flush plates'
   },
   {
     groupName: 'Floor Tiles',
     category: 'Tiles',
-    subTypes: ['Glazed Vitrified Tiles (GVT)', 'Polished Glazed Vitrified (PGVT)', 'Full Body Vitrified', 'Double Charge', 'Parking & Outdoor Tiles'],
+    subTypes: ['Glazed Vitrified Tiles (GVT)', 'Polished Glazed Vitrified (PGVT)', 'Full Body Vitrified', 'Double Charge', 'Parking & Outdoor Tiles', 'Matte Porcelain'],
     description: 'Large format porcelain floor slabs and vitrified tiles'
   },
   {
     groupName: 'Wall Tiles',
     category: 'Tiles',
-    subTypes: ['Digital Ceramic Wall', 'Subway / Metro Tiles', 'High Gloss Kitchen Wall', 'Elevation & Stone Textured', 'Bookmatch Marble Look'],
+    subTypes: ['Digital Ceramic Wall', 'Subway / Metro Tiles', 'High Gloss Kitchen Wall', 'Elevation & Stone Textured', 'Bookmatch Marble Look', 'Highlighter Tile'],
     description: 'Glossy, matte, and textured wall tiles'
+  },
+  {
+    groupName: 'Large Format Slabs',
+    category: 'Tiles',
+    subTypes: ['800x1600 mm Slab', '1200x1800 mm Slab', '1200x2400 mm Slab', 'Countertop Kitchen Slab'],
+    description: 'Ultra slim and heavy duty large ceramic slabs'
   },
   {
     groupName: 'Basin Mixer',
@@ -59,10 +78,22 @@ export const DEFAULT_PRODUCT_TYPES = [
     description: 'Precision hot and cold water basin mixer taps'
   },
   {
+    groupName: 'Sink Mixer / Kitchen',
+    category: 'Faucets',
+    subTypes: ['Swivel Spout Sink Mixer', 'Pull-out Spray Tap', 'Wall Mounted Sink Cock', 'Deck Mounted Sink Cock'],
+    description: 'Kitchen sink mixers and pull-out spout taps'
+  },
+  {
     groupName: 'Bath & Shower Diverter',
     category: 'Showers',
     subTypes: ['Thermostat 2 Way', 'Thermostat 3 Way', 'Manual 2 Way Diverter', 'Manual 3 Way', 'Exposed Thermostatic Column', 'Concealed Diverter Body'],
     description: 'Thermostatic and manual water mixing systems for luxury showers'
+  },
+  {
+    groupName: 'Overhead & Hand Showers',
+    category: 'Showers',
+    subTypes: ['Rain Shower Head', 'Multi-Function Shower', 'Cascade Waterfall Shower', 'Hand Shower Sliding Rail Set'],
+    description: 'Ceiling and wall mounted rain showers and sliding hand sprays'
   },
   {
     groupName: 'Bathtubs & Whirlpool',
@@ -73,7 +104,7 @@ export const DEFAULT_PRODUCT_TYPES = [
   {
     groupName: 'Allied & Accessories',
     category: 'Allied',
-    subTypes: ['Health Faucet', 'Angle Valve', 'Concealed Stop Cock', 'Waste Coupling Click-Clack', 'Bottle Trap', 'Towel Rack'],
+    subTypes: ['Health Faucet', 'Angle Valve', 'Concealed Stop Cock', 'Waste Coupling Click-Clack', 'Bottle Trap', 'Towel Rack', 'Soap Dispenser', 'Robe Hook'],
     description: 'Plumbing fittings, angle valves, health faucets and bathroom accessories'
   }
 ];
@@ -81,6 +112,7 @@ export const DEFAULT_PRODUCT_TYPES = [
 export const ProductGroups = () => {
   const { canCreate, canEdit, canDelete } = usePermissions('product-groups');
   const [types, setTypes] = useState([]);
+  const [categoriesList, setCategoriesList] = useState(CATEGORIES);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -113,7 +145,15 @@ export const ProductGroups = () => {
   const loadProductTypes = async () => {
     setLoading(true);
     try {
-      const data = await getProductGroups();
+      const [data, cats] = await Promise.all([
+        getProductGroups().catch(() => []),
+        getCategories().catch(() => [])
+      ]);
+
+      if (Array.isArray(cats) && cats.length > 0) {
+        setCategoriesList(cats.map(c => c.categoryName).filter(Boolean));
+      }
+
       const list = Array.isArray(data) ? data : (data?.data || []);
       
       // If server returned empty, merge default pre-seeded types for an instant rich experience
@@ -337,7 +377,7 @@ export const ProductGroups = () => {
                     style={{ height: '40px', borderRadius: '8px', fontSize: '0.85rem' }}
                     required
                   >
-                    {CATEGORIES.map(cat => (
+                    {categoriesList.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
@@ -509,17 +549,36 @@ export const ProductGroups = () => {
               </p>
             </div>
 
-            {canCreate && (
-              <button
-                type="button"
-                onClick={handleAddNew}
-                className="btn btn-primary"
-                style={{ borderRadius: '9px', padding: '0.55rem 1.15rem', fontWeight: 700, fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+            <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center' }}>
+              <Link
+                to="/categories"
+                className="btn btn-secondary"
+                style={{
+                  borderRadius: '9px',
+                  padding: '0.55rem 0.95rem',
+                  fontWeight: 600,
+                  fontSize: '0.825rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem'
+                }}
               >
-                <Plus size={16} />
-                <span>Add Product Type</span>
-              </button>
-            )}
+                <Tags size={15} />
+                <span>Category Master</span>
+              </Link>
+
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={handleAddNew}
+                  className="btn btn-primary"
+                  style={{ borderRadius: '9px', padding: '0.55rem 1.15rem', fontWeight: 700, fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                >
+                  <Plus size={16} />
+                  <span>Add Product Type</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Table Card */}
@@ -546,7 +605,7 @@ export const ProductGroups = () => {
                   style={{ width: '160px', height: '38px', borderRadius: '8px', fontSize: '0.825rem' }}
                 >
                   <option value="">All Categories</option>
-                  {CATEGORIES.map(cat => (
+                  {categoriesList.map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>

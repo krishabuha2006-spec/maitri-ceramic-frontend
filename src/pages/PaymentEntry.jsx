@@ -40,7 +40,7 @@ export const PaymentEntry = () => {
     date: new Date().toISOString().split('T')[0],
     customerId: '',
     customerName: '',
-    paymentModeId: '6aa7c9ec612a410d893bcbc0', // Default Bank Transfer
+    paymentModeId: '',
     totalAmount: 0,
     referenceNumber: '',
     bankCashAccount: 'HDFC Bank - Current A/C 50200012345678',
@@ -70,8 +70,14 @@ export const PaymentEntry = () => {
         setInvoices(invs);
         setPaymentModes(modes);
 
-        if (modes.length > 0 && !formData.paymentModeId) {
-          setFormData(prev => ({ ...prev, paymentModeId: modes[0]._id || modes[0].id }));
+        if (modes.length > 0) {
+          setFormData(prev => {
+            const hasExisting = modes.some(m => String(m._id || m.id) === String(prev.paymentModeId));
+            return {
+              ...prev,
+              paymentModeId: hasExisting ? prev.paymentModeId : (modes[0]._id || modes[0].id)
+            };
+          });
         }
 
         if (customerIdParam) {

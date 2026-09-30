@@ -535,7 +535,7 @@ export const QuotationFormats = () => {
                         </span>
                       )}
                       {f.showDiscount && (
-                        <span style={{ fontSize: '0.725rem', fontWeight: 700, backgroundColor: '#fef3c7', color: '#d97706', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid #fde68a' }}>
+                        <span style={{ fontSize: '0.725rem', fontWeight: 700, backgroundColor: '#fefce8', color: '#854d0e', padding: '0.15rem 0.45rem', borderRadius: '4px', border: '1px solid #fef08a' }}>
                           Discount
                         </span>
                       )}

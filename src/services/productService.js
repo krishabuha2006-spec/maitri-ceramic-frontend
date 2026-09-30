@@ -15,6 +15,7 @@ export const normalizeProduct = (p) => {
   const uId = p.unit?._id || (isMongoId(p.unit) ? p.unit : p.unitId) || null;
 
   return {
+    ...p,
     _id: p._id || p.id,
     id: p._id || p.id,
     companyId: compId,
@@ -22,10 +23,24 @@ export const normalizeProduct = (p) => {
     productGroupId: grpId,
     unitId: uId,
     sku: p.companySkuCode || p.sku || p.companySku || p.vendorSkuCode || 'SKU-NONE',
+    companySkuCode: p.companySkuCode || p.sku || p.companySku || '',
+    vendorSkuCode: p.vendorSkuCode || p.vendorSku || '',
     productName: p.productName || p.name || 'Unnamed Product',
     company: p.company?.companyName || p.companyName || (typeof p.company === 'string' && !isMongoId(p.company) ? p.company : ''),
     vendor: p.vendor?.vendorName || p.vendorName || (typeof p.vendor === 'string' && !isMongoId(p.vendor) ? p.vendor : ''),
-    productGroup: p.productGroup?.groupName || (typeof p.productGroup === 'string' && !isMongoId(p.productGroup) ? p.productGroup : 'General'),
+    productGroup: p.productGroup?.groupName || (typeof p.productGroup === 'string' && !isMongoId(p.productGroup) && p.productGroup.toLowerCase() !== 'general' ? p.productGroup : ''),
+    category: p.category || (p.productGroup?.category) || 'Sanitaryware',
+    productType: (p.productType && p.productType.toLowerCase() !== 'general' ? p.productType : '') || (p.productGroup?.groupName && p.productGroup.groupName.toLowerCase() !== 'general' ? p.productGroup.groupName : ''),
+    productSubType: p.productSubType || '',
+    rangeOrSize: p.rangeOrSize || (p.category === 'Tiles' ? p.size : p.range) || '',
+    range: p.range || '',
+    size: p.size || '',
+    colourName: p.colourName || p.color || 'White',
+    finish: p.finish || 'Glossy',
+    fullDescription: p.fullDescription || p.description || '',
+    piecesPerBox: p.piecesPerBox !== undefined && p.piecesPerBox !== null ? p.piecesPerBox : '',
+    sqftPerBox: p.sqftPerBox !== undefined && p.sqftPerBox !== null ? p.sqftPerBox : '',
+    weightPerBox: p.weightPerBox !== undefined && p.weightPerBox !== null ? p.weightPerBox : '',
     hsnCode: p.hsnCode || '69072100',
     vendorSku: p.vendorSkuCode || p.vendorSku || '',
     companySku: p.companySkuCode || p.companySku || '',
@@ -141,64 +156,111 @@ import { getVendors } from './vendorService';
  */
 const resolveMasterIds = async (productData) => {
   let compId = isMongoId(productData.companyId) ? productData.companyId : (isMongoId(productData.company) ? productData.company : null);
-  if (!compId) {
-    const comps = await getCompanies();
-    const found = comps.find(c =>
-      (c.companyName || c.name || '').toLowerCase() === (productData.company || '').toLowerCase() ||
-      c.id === productData.company ||
-      c._id === productData.company
-    );
-    if (found && isMongoId(found._id || found.id)) {
-      compId = found._id || found.id;
-    } else if (comps.length > 0 && isMongoId(comps[0]._id || comps[0].id)) {
-      compId = comps[0]._id || comps[0].id;
+  const rawCompName = String(productData.companyName || productData.company || productData.brand || '').trim();
+  if (!compId && rawCompName) {
+    try {
+      const comps = await getCompanies();
+      const list = Array.isArray(comps) ? comps : (comps?.data || []);
+      const found = list.find(c =>
+        (c.companyName || c.name || '').toLowerCase().trim() === rawCompName.toLowerCase() ||
+        c.id === rawCompName ||
+        c._id === rawCompName
+      );
+      if (found && isMongoId(found._id || found.id)) {
+        compId = found._id || found.id;
+      } else {
+        // Auto create company on the fly if not exists
+        const createdComp = await createCompany({
+          companyName: rawCompName,
+          companyType: 'BRAND_MANUFACTURER',
+          isActive: true
+        }).catch(() => null);
+        if (createdComp && isMongoId(createdComp._id || createdComp.id)) {
+          compId = createdComp._id || createdComp.id;
+        }
+      }
+    } catch {
+      // Ignore lookup error
     }
   }
 
   let grpId = isMongoId(productData.productGroupId) ? productData.productGroupId : (isMongoId(productData.productGroup) ? productData.productGroup : null);
-  if (!grpId) {
-    const grps = await getProductGroups();
-    const found = grps.find(g =>
-      (g.groupName || g.name || '').toLowerCase() === (productData.productGroup || '').toLowerCase() ||
-      g.id === productData.productGroup ||
-      g._id === productData.productGroup
-    );
-    if (found && isMongoId(found._id || found.id)) {
-      grpId = found._id || found.id;
-    } else if (grps.length > 0 && isMongoId(grps[0]._id || grps[0].id)) {
-      grpId = grps[0]._id || grps[0].id;
+  const rawGrpName = String(productData.groupName || productData.productGroup || productData.productType || '').trim();
+  if (!grpId && rawGrpName) {
+    try {
+      const grps = await getProductGroups();
+      const list = Array.isArray(grps) ? grps : (grps?.data || []);
+      const target = rawGrpName.toLowerCase();
+      const found = list.find(g =>
+        (g.groupName || g.name || g.typeName || '').toLowerCase().trim() === target ||
+        g.id === rawGrpName ||
+        g._id === rawGrpName
+      );
+      if (found && isMongoId(found._id || found.id)) {
+        grpId = found._id || found.id;
+      } else {
+        // Auto create group on the fly if not exists
+        const createdGrp = await createProductGroup({
+          groupName: rawGrpName,
+          category: productData.category || 'Sanitaryware',
+          isActive: true
+        }).catch(() => null);
+        if (createdGrp && isMongoId(createdGrp._id || createdGrp.id)) {
+          grpId = createdGrp._id || createdGrp.id;
+        }
+      }
+    } catch {
+      // Ignore lookup error
     }
   }
 
   let unitId = isMongoId(productData.unitId) ? productData.unitId : (isMongoId(productData.unit) ? productData.unit : null);
+  const rawUnitName = String(productData.unitName || productData.unit || 'PCS').trim();
   if (!unitId) {
-    const units = await getUnits();
-    const found = units.find(u =>
-      (u.unitCode || u.unitName || '').toLowerCase() === (productData.unit || '').toLowerCase() ||
-      u.id === productData.unit ||
-      u._id === productData.unit
-    );
-    if (found && isMongoId(found._id || found.id)) {
-      unitId = found._id || found.id;
-    } else if (units.length > 0 && isMongoId(units[0]._id || units[0].id)) {
-      unitId = units[0]._id || units[0].id;
+    try {
+      const units = await getUnits();
+      const list = Array.isArray(units) ? units : (units?.data || []);
+      const targetUnit = rawUnitName.toLowerCase();
+      const found = list.find(u =>
+        (u.unitCode || u.unitName || '').toLowerCase().trim() === targetUnit ||
+        u.id === rawUnitName ||
+        u._id === rawUnitName
+      );
+      if (found && isMongoId(found._id || found.id)) {
+        unitId = found._id || found.id;
+      } else if (list.length > 0 && isMongoId(list[0]._id || list[0].id)) {
+        unitId = list[0]._id || list[0].id;
+      }
+    } catch {
+      // Ignore lookup error
     }
   }
 
   let vendId = isMongoId(productData.vendorId) ? productData.vendorId : (isMongoId(productData.vendor) ? productData.vendor : null);
-  if (!vendId && (productData.vendor || productData.vendorName)) {
-    const vendors = await getVendors();
-    const found = vendors.find(v =>
-      (v.vendorName || v.name || '').toLowerCase() === (productData.vendor || productData.vendorName || '').toLowerCase() ||
-      v.id === productData.vendor ||
-      v._id === productData.vendor
-    );
-    if (found && isMongoId(found._id || found.id)) {
-      vendId = found._id || found.id;
+  const rawVenName = String(productData.vendorName || productData.vendor || '').trim();
+  if (!vendId && rawVenName) {
+    try {
+      const vendors = await getVendors();
+      const list = Array.isArray(vendors) ? vendors : (vendors?.data || []);
+      const found = list.find(v =>
+        (v.vendorName || v.name || '').toLowerCase() === rawVenName.toLowerCase() ||
+        v.id === rawVenName ||
+        v._id === rawVenName
+      );
+      if (found && isMongoId(found._id || found.id)) {
+        vendId = found._id || found.id;
+      }
+    } catch {
+      // Ignore lookup error
     }
   }
 
-  return { compId, grpId, unitId, vendId };
+  return {
+    compId: isMongoId(compId) ? compId : null,
+    grpId: isMongoId(grpId) ? grpId : null,
+    unitId: isMongoId(unitId) ? unitId : null,
+    vendId: isMongoId(vendId) ? vendId : null
+  };
 };
 
 /**
@@ -208,7 +270,7 @@ export const createProduct = async (productData) => {
   const pName = productData.productName || productData.name || 'Unnamed Product';
   const skuCode = productData.sku || productData.companySkuCode || productData.companySku || `SKU-${Date.now()}`;
   const rawImage = productData.image || productData.productImage || '';
-  const isOversized = typeof rawImage === 'string' && rawImage.startsWith('data:') && rawImage.length > 150000;
+  const isOversized = typeof rawImage === 'string' && rawImage.startsWith('data:') && rawImage.length > 5000000;
   const networkImage = isOversized ? '' : rawImage;
 
   const { compId, grpId, unitId, vendId } = await resolveMasterIds(productData);
@@ -218,6 +280,19 @@ export const createProduct = async (productData) => {
     companySkuCode: skuCode,
     vendorSkuCode: productData.vendorSku || productData.vendorSkuCode || '',
     hsnCode: productData.hsnCode || '69072100',
+    category: productData.category || 'Sanitaryware',
+    productType: productData.productType || productData.productGroup || null,
+    productSubType: productData.productSubType || null,
+    rangeOrSize: productData.rangeOrSize || null,
+    range: productData.range || null,
+    size: productData.size || null,
+    colourName: productData.colourName || null,
+    finish: productData.finish || null,
+    fullDescription: productData.fullDescription || productData.description || null,
+    piecesPerBox: productData.piecesPerBox !== undefined && productData.piecesPerBox !== '' && productData.piecesPerBox !== null ? Number(productData.piecesPerBox) : null,
+    sqftPerBox: productData.sqftPerBox !== undefined && productData.sqftPerBox !== '' && productData.sqftPerBox !== null ? Number(productData.sqftPerBox) : null,
+    weightPerBox: productData.weightPerBox !== undefined && productData.weightPerBox !== '' && productData.weightPerBox !== null ? Number(productData.weightPerBox) : null,
+    productImage: networkImage || null,
     mrp: Number(productData.mrp || 0),
     purchaseRate: Number(productData.purchaseRate || 0),
     costRate: Number(productData.costRate || productData.purchaseRate || 0),
@@ -225,20 +300,22 @@ export const createProduct = async (productData) => {
     saleDiscount: Number(productData.saleDiscount || 0),
     reorderAlertQty: Number(productData.reorderAlertQty || productData.reorderLevel || 10),
     gstPct: Number(productData.gstPercent ?? productData.gstPct ?? 18),
+    igstPct: Number(productData.igstPercent ?? productData.igstPct ?? productData.gstPercent ?? 18),
+    cgstPct: Number(productData.cgstPercent ?? productData.cgstPct ?? ((productData.gstPercent || 18) / 2)),
+    sgstPct: Number(productData.sgstPercent ?? productData.sgstPct ?? ((productData.gstPercent || 18) / 2)),
     status: productData.status || 'Active',
-    description: productData.description || '',
+    description: productData.fullDescription || productData.description || '',
     openingStock: Number(productData.openingStock || 0),
-    openingStockValue: Number(productData.openingStockValue || 0)
+    openingStockValue: Number(productData.openingStockValue || 0),
+    company: compId,
+    companyName: productData.companyName || productData.company || productData.brand || null,
+    productGroup: grpId,
+    groupName: productData.groupName || productData.productGroup || productData.productType || null,
+    unit: unitId,
+    unitName: productData.unitName || productData.unit || 'PCS',
+    vendor: vendId,
+    vendorName: productData.vendorName || productData.vendor || null
   };
-
-  if (compId) livePayload.company = compId;
-  if (grpId) livePayload.productGroup = grpId;
-  if (unitId) livePayload.unit = unitId;
-  if (vendId) livePayload.vendor = vendId;
-
-  if (networkImage) {
-    livePayload.productImage = networkImage;
-  }
 
   try {
     const res = await api.post('/products', livePayload);
@@ -257,7 +334,7 @@ export const updateProduct = async (id, productData) => {
   const pName = productData.productName || productData.name || 'Unnamed Product';
   const skuCode = productData.sku || productData.companySkuCode || productData.companySku || `SKU-${Date.now()}`;
   const rawImage = productData.image || productData.productImage || '';
-  const isOversized = typeof rawImage === 'string' && rawImage.startsWith('data:') && rawImage.length > 150000;
+  const isOversized = typeof rawImage === 'string' && rawImage.startsWith('data:') && rawImage.length > 5000000;
   const networkImage = isOversized ? '' : rawImage;
 
   const { compId, grpId, unitId, vendId } = await resolveMasterIds(productData);
@@ -267,6 +344,19 @@ export const updateProduct = async (id, productData) => {
     companySkuCode: skuCode,
     vendorSkuCode: productData.vendorSku || productData.vendorSkuCode || '',
     hsnCode: productData.hsnCode || '69072100',
+    category: productData.category || 'Sanitaryware',
+    productType: productData.productType || productData.productGroup || null,
+    productSubType: productData.productSubType || null,
+    rangeOrSize: productData.rangeOrSize || null,
+    range: productData.range || null,
+    size: productData.size || null,
+    colourName: productData.colourName || null,
+    finish: productData.finish || null,
+    fullDescription: productData.fullDescription || productData.description || null,
+    piecesPerBox: productData.piecesPerBox !== undefined && productData.piecesPerBox !== '' && productData.piecesPerBox !== null ? Number(productData.piecesPerBox) : null,
+    sqftPerBox: productData.sqftPerBox !== undefined && productData.sqftPerBox !== '' && productData.sqftPerBox !== null ? Number(productData.sqftPerBox) : null,
+    weightPerBox: productData.weightPerBox !== undefined && productData.weightPerBox !== '' && productData.weightPerBox !== null ? Number(productData.weightPerBox) : null,
+    productImage: networkImage || null,
     mrp: Number(productData.mrp || 0),
     purchaseRate: Number(productData.purchaseRate || 0),
     costRate: Number(productData.costRate || productData.purchaseRate || 0),
@@ -274,15 +364,20 @@ export const updateProduct = async (id, productData) => {
     saleDiscount: Number(productData.saleDiscount || 0),
     reorderAlertQty: Number(productData.reorderAlertQty || productData.reorderLevel || 10),
     gstPct: Number(productData.gstPercent ?? productData.gstPct ?? 18),
+    igstPct: Number(productData.igstPercent ?? productData.igstPct ?? productData.gstPercent ?? 18),
+    cgstPct: Number(productData.cgstPercent ?? productData.cgstPct ?? ((productData.gstPercent || 18) / 2)),
+    sgstPct: Number(productData.sgstPercent ?? productData.sgstPct ?? ((productData.gstPercent || 18) / 2)),
     status: productData.status || 'Active',
-    description: productData.description || ''
+    description: productData.fullDescription || productData.description || '',
+    company: compId,
+    companyName: productData.companyName || productData.company || productData.brand || null,
+    productGroup: grpId,
+    groupName: productData.groupName || productData.productGroup || productData.productType || null,
+    unit: unitId,
+    unitName: productData.unitName || productData.unit || 'PCS',
+    vendor: vendId,
+    vendorName: productData.vendorName || productData.vendor || null
   };
-
-  if (compId) livePayload.company = compId;
-  if (grpId) livePayload.productGroup = grpId;
-  if (unitId) livePayload.unit = unitId;
-  if (vendId) livePayload.vendor = vendId;
-  if (networkImage) livePayload.productImage = networkImage;
 
   try {
     const res = await api.put(`/products/${id}`, livePayload);
@@ -317,6 +412,32 @@ export const deleteProduct = async (id) => {
     return res.data;
   } catch (err) {
     const serverMsg = err?.response?.data?.message || err?.message || 'Failed to delete product on backend.';
+    throw new Error(serverMsg);
+  }
+};
+
+/**
+ * POST /products/bulk-delete - Delete multiple products by IDs
+ */
+export const bulkDeleteProducts = async (productIds = []) => {
+  try {
+    const res = await api.post('/products/bulk-delete', { productIds });
+    return res.data;
+  } catch (err) {
+    const serverMsg = err?.response?.data?.message || err?.message || 'Failed to bulk delete products.';
+    throw new Error(serverMsg);
+  }
+};
+
+/**
+ * DELETE /products/delete-all - Delete ALL products from database
+ */
+export const deleteAllProducts = async () => {
+  try {
+    const res = await api.delete('/products/delete-all');
+    return res.data;
+  } catch (err) {
+    const serverMsg = err?.response?.data?.message || err?.message || 'Failed to delete all products.';
     throw new Error(serverMsg);
   }
 };
@@ -370,6 +491,22 @@ export const getProductQuotationUsage = async (id) => {
   } catch (err) {
     return { quotations: [], count: 0 };
   }
+};
+
+/**
+ * POST /products/upload-image - Upload product image to Cloudinary
+ */
+export const uploadProductImage = async (file) => {
+  const formData = new FormData();
+  formData.append('image', file);
+
+  const res = await api.post('/products/upload-image', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  });
+
+  return res.data?.data || res.data;
 };
 
 // ==========================================

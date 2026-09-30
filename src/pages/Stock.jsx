@@ -28,7 +28,10 @@ import {
   ShieldCheck,
   TrendingDown,
   TrendingUp,
-  Info
+  Info,
+  Building2,
+  Layers,
+  AlertCircle
 } from 'lucide-react';
 
 export const Stock = () => {
@@ -282,117 +285,133 @@ export const Stock = () => {
         </div>
       </div>
 
-      {/* Low Stock Alert Banner */}
-      {lowStock.length > 0 && (
+      {/* Top Inventory KPI Stats Cards */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+        gap: '1rem',
+        marginBottom: '1.5rem'
+      }}>
+        {/* Total Products & Units */}
         <div style={{
-          backgroundColor: '#fef2f2',
-          border: '1px solid #fca5a5',
+          backgroundColor: '#ffffff',
           borderRadius: '12px',
-          padding: '0.9rem 1.25rem',
-          marginBottom: '1.25rem',
+          border: '1px solid #e2e8f0',
+          padding: '1.15rem 1.25rem',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '0.75rem',
-          boxShadow: '0 2px 6px rgba(239, 68, 68, 0.08)'
+          gap: '1rem'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ backgroundColor: '#fee2e2', padding: '0.5rem', borderRadius: '8px', color: '#dc2626' }}>
-              <AlertTriangle size={22} />
+          <div style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Boxes size={22} />
+          </div>
+          <div>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Total Products
             </div>
-            <div>
-              <div style={{ fontWeight: 800, color: '#991b1b', fontSize: '0.925rem' }}>
-                ⚠️ Low Stock Alert: {lowStock.length} Product{lowStock.length > 1 ? 's' : ''} require immediate replenishment!
-              </div>
-              <div style={{ fontSize: '0.775rem', color: '#b91c1c' }}>
-                Stock quantity has dipped below minimum reorder alert threshold.
-              </div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+              {products.length}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.15rem' }}>
+              {products.reduce((acc, p) => acc + Number(p.currentStock !== undefined ? p.currentStock : (p.openingStock || 0)), 0).toLocaleString()} Total Units in Stock
             </div>
           </div>
-          <button
-            type="button"
-            className="btn btn-sm"
-            onClick={() => setActiveTab('lowStock')}
-            style={{
-              backgroundColor: '#dc2626',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '7px',
-              padding: '0.4rem 0.85rem',
-              fontWeight: 700,
-              fontSize: '0.8rem',
-              cursor: 'pointer'
-            }}
-          >
-            Review Low Stock List ({lowStock.length}) →
-          </button>
-        </div>
-      )}
-
-      {/* Company-Wise Product & Stock Breakdown Cards */}
-      <div style={{ marginBottom: '1.25rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
-          <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            📊 Company / Brand Inventory Distribution
-          </span>
-          {companyFilter !== 'ALL' && (
-            <button
-              type="button"
-              onClick={() => setCompanyFilter('ALL')}
-              style={{ border: 'none', background: 'none', color: '#2563eb', fontSize: '0.775rem', fontWeight: 700, cursor: 'pointer' }}
-            >
-              Clear Company Filter (Showing All)
-            </button>
-          )}
         </div>
 
+        {/* Low Stock Alerts (Urgent) */}
+        <div 
+          onClick={() => setActiveTab('lowStock')}
+          style={{
+            backgroundColor: lowStock.length > 0 ? '#fef2f2' : '#ffffff',
+            borderRadius: '12px',
+            border: lowStock.length > 0 ? '1px solid #fca5a5' : '1px solid #e2e8f0',
+            padding: '1.15rem 1.25rem',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <div style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: lowStock.length > 0 ? '#fee2e2' : '#f8fafc', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <AlertTriangle size={22} />
+          </div>
+          <div>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: lowStock.length > 0 ? '#991b1b' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span>Low Stock Alerts</span>
+              {lowStock.length > 0 && (
+                <span style={{ width: '18px', height: '18px', borderRadius: '50%', backgroundColor: '#ef4444', color: '#fff', fontSize: '0.65rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {lowStock.length}
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: lowStock.length > 0 ? '#dc2626' : '#0f172a', lineHeight: 1.2 }}>
+              {lowStock.length}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: lowStock.length > 0 ? '#b91c1c' : '#64748b', marginTop: '0.15rem' }}>
+              {lowStock.length > 0 ? 'Requires stock purchase replenishment' : 'All stock levels healthy'}
+            </div>
+          </div>
+        </div>
+
+        {/* Purchase Shortfalls */}
+        <div 
+          onClick={() => setActiveTab('purchaseAlerts')}
+          style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '12px',
+            border: '1px solid #e2e8f0',
+            padding: '1.15rem 1.25rem',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem',
+            cursor: 'pointer'
+          }}
+        >
+          <div style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: '#fff7ed', color: '#ea580c', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <TrendingDown size={22} />
+          </div>
+          <div>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Purchase Alerts
+            </div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+              {purchaseAlerts.length}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.15rem' }}>
+              Pending order shortage items
+            </div>
+          </div>
+        </div>
+
+        {/* Brands / Companies */}
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: '0.85rem'
+          backgroundColor: '#ffffff',
+          borderRadius: '12px',
+          border: '1px solid #e2e8f0',
+          padding: '1.15rem 1.25rem',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1rem'
         }}>
-          {companyStats.slice(0, 6).map((cs, idx) => {
-            const isSelected = companyFilter === cs.name;
-            return (
-              <div
-                key={idx}
-                onClick={() => setCompanyFilter(isSelected ? 'ALL' : cs.name)}
-                style={{
-                  backgroundColor: isSelected ? '#eff6ff' : '#ffffff',
-                  border: isSelected ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                  borderRadius: '10px',
-                  padding: '0.85rem 1rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  boxShadow: isSelected ? '0 4px 12px rgba(37, 99, 235, 0.15)' : '0 1px 3px rgba(0,0,0,0.02)'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                  <span style={{ fontWeight: 800, fontSize: '0.875rem', color: isSelected ? '#1d4ed8' : '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {cs.name}
-                  </span>
-                  {cs.lowStockCount > 0 && (
-                    <span style={{
-                      backgroundColor: '#fee2e2',
-                      color: '#dc2626',
-                      fontSize: '0.65rem',
-                      fontWeight: 800,
-                      padding: '0.1rem 0.4rem',
-                      borderRadius: '10px'
-                    }}>
-                      {cs.lowStockCount} Low
-                    </span>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
-                  <span>{cs.totalProducts} Products</span>
-                  <span style={{ fontWeight: 700, color: '#334155' }}>{cs.totalStock} In Stock</span>
-                </div>
-              </div>
-            );
-          })}
+          <div style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: '#f5f3ff', color: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Building2 size={22} />
+          </div>
+          <div>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Brand Portfolios
+            </div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+              {companyStats.length}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.15rem' }}>
+              Company brands in catalog
+            </div>
+          </div>
         </div>
       </div>
 
@@ -413,8 +432,29 @@ export const Stock = () => {
         <button
           className={`tab-btn ${activeTab === 'lowStock' ? 'active' : ''}`}
           onClick={() => setActiveTab('lowStock')}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
         >
-          Low Stock Alerts ({lowStock.length})
+          <span>Low Stock Alerts</span>
+          {lowStock.length > 0 ? (
+            <span style={{
+              minWidth: '20px',
+              height: '20px',
+              padding: '0 5px',
+              borderRadius: '50%',
+              backgroundColor: '#ef4444',
+              color: '#ffffff',
+              fontSize: '0.72rem',
+              fontWeight: 800,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              lineHeight: 1
+            }}>
+              {lowStock.length}
+            </span>
+          ) : (
+            <span style={{ opacity: 0.7 }}>(0)</span>
+          )}
         </button>
         <button
           className={`tab-btn ${activeTab === 'purchaseAlerts' ? 'active' : ''}`}
@@ -424,7 +464,7 @@ export const Stock = () => {
         </button>
       </div>
 
-      {/* Filter / Search Bar */}
+      {/* Filter / Search Bar with Brand Dropdown */}
       <div style={{
         backgroundColor: '#ffffff',
         borderRadius: '10px',
@@ -437,16 +477,55 @@ export const Stock = () => {
         flexWrap: 'wrap',
         gap: '0.75rem'
       }}>
-        <div style={{ position: 'relative', width: '320px' }}>
-          <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-          <input
-            type="text"
-            className="form-control"
-            placeholder="Search SKU, product name, reference..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ paddingLeft: '2.25rem', height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
-          />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', flex: 1 }}>
+          <div style={{ position: 'relative', width: '300px' }}>
+            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input
+              type="text"
+              className="form-control"
+              placeholder="Search SKU, product name, reference..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ paddingLeft: '2.25rem', height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0 }}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Company / Brand Filter Dropdown */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Building2 size={15} style={{ color: '#64748b' }} />
+            <select
+              className="form-control"
+              value={companyFilter}
+              onChange={(e) => setCompanyFilter(e.target.value)}
+              style={{ height: '38px', borderRadius: '8px', fontSize: '0.825rem', minWidth: '160px', width: 'auto' }}
+            >
+              <option value="ALL">All Brands / Companies</option>
+              {companyStats.map((cs, idx) => (
+                <option key={idx} value={cs.name}>
+                  {cs.name} ({cs.totalProducts})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {companyFilter !== 'ALL' && (
+            <button
+              type="button"
+              onClick={() => setCompanyFilter('ALL')}
+              style={{ border: 'none', background: 'none', color: '#2563eb', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
+            >
+              <X size={13} /> Reset Brand
+            </button>
+          )}
         </div>
 
         {activeTab === 'movements' && (
@@ -476,7 +555,7 @@ export const Stock = () => {
                   <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>SKU</th>
                   <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Product Description</th>
                   <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Company</th>
-                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Group</th>
+                  <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569' }}>Product Type</th>
                   <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Actual Stock</th>
                   <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Mgmt Stock</th>
                   <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#475569', textAlign: 'center', whiteSpace: 'nowrap' }}>Available</th>
@@ -507,7 +586,7 @@ export const Stock = () => {
                           {p.company || '-'}
                         </td>
                         <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: '#475569' }}>
-                          {p.productGroup || '-'}
+                          {p.productType || p.productGroup || '-'}
                         </td>
                         <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.825rem', fontWeight: 700, color: actual < 50 ? '#dc2626' : '#0f172a', textAlign: 'center' }}>
                           {actual} {p.unit || 'Sq.Ft'}

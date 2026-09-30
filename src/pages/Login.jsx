@@ -16,7 +16,7 @@ export const Login = () => {
   const [validationErrors, setValidationErrors] = useState({});
 
   if (!authLoading && currentUser) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/customers" replace />;
   }
 
   // Form Validation Logic
@@ -70,7 +70,7 @@ export const Login = () => {
 
       const res = await loginWithBackend(payload);
       if (res && res.success) {
-        navigate('/');
+        navigate('/customers');
       } else {
         setError(res?.message || 'Authentication failed. Please check your credentials.');
       }

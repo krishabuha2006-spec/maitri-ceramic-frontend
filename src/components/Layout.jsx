@@ -31,6 +31,7 @@ const titleMap = {
 export const Layout = () => {
   const location = useLocation();
   const currentPath = location.pathname;
+  const isDashboard = currentPath === '/';
 
   let pageTitle = titleMap[currentPath];
   if (!pageTitle) {
@@ -46,7 +47,7 @@ export const Layout = () => {
     <div className="app-container">
       <Header pageTitle={pageTitle} />
       <div className="main-content">
-        <main className="content-body">
+        <main className={`content-body ${isDashboard ? 'content-body-flush' : ''}`} style={isDashboard ? { padding: 0 } : undefined}>
           <Outlet />
         </main>
       </div>

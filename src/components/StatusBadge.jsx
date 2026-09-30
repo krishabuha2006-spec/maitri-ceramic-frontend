@@ -102,15 +102,15 @@ export const StatusBadge = ({ status }) => {
     );
   }
 
-  // Negotiation (Warm amber pill)
+  // Negotiation (Light gentle amber/yellow pill)
   if (isNegotiation) {
     return (
       <span
         style={{
           ...baseBadgeStyle,
-          backgroundColor: '#fffbeb',
-          border: '1px solid #fde68a',
-          color: '#b45309'
+          backgroundColor: '#fefce8',
+          border: '1px solid #fef08a',
+          color: '#854d0e'
         }}
       >
         NEGOTIATION

@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// Live backend URL configured via environment variable with fallback
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://maitri-cermic.vercel.app/api';
+// Live backend URL configured via environment variable with same-domain fallback
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
